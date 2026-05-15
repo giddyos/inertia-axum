@@ -4,7 +4,7 @@
 
 use super::{
     html_response_context, Inertia, IntoPageProps, Location, Redirect, RequestContext, VARY,
-    X_INERTIA, X_INERTIA_LOCATION,
+    X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_REDIRECT,
 };
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::{self, uri::Reference, Method};
@@ -151,13 +151,14 @@ fn add_vary_header<'r>(response: Response<'r>) -> Response<'r> {
         .finalize()
 }
 
-fn validated_uri_reference(url: String) -> Result<String, http::Status> {
+fn validated_uri_reference(url: String) -> Result<(String, bool), http::Status> {
     let uri: Reference<'static> = url.try_into().map_err(|_e| {
         error!("Invalid URI used for redirect.");
         http::Status::InternalServerError
     })?;
+    let has_fragment = uri.fragment().is_some();
 
-    Ok(uri.to_string())
+    Ok((uri.to_string(), has_fragment))
 }
 
 fn is_write_method(method: Method) -> bool {
@@ -223,12 +224,18 @@ impl<'r, 'o: 'r, R: IntoPageProps> Responder<'r, 'o> for Inertia<R> {
 impl<'r, 'o: 'r> Responder<'r, 'o> for Location {
     #[inline(always)]
     fn respond_to(self, request: &'r Request<'_>) -> response::Result<'o> {
-        let url = validated_uri_reference(self.url)?;
+        let (url, has_fragment) = validated_uri_reference(self.url)?;
 
         if request_context(request).is_inertia() {
+            let header = if has_fragment {
+                X_INERTIA_REDIRECT
+            } else {
+                X_INERTIA_LOCATION
+            };
+
             Response::build()
                 .status(http::Status::Conflict)
-                .raw_header(X_INERTIA_LOCATION, url)
+                .raw_header(header, url)
                 .raw_header_adjoin(VARY, X_INERTIA)
                 .ok()
         } else if is_write_method(request.method()) {
@@ -246,7 +253,7 @@ impl<'r, 'o: 'r> Responder<'r, 'o> for Location {
 impl<'r, 'o: 'r> Responder<'r, 'o> for Redirect {
     #[inline(always)]
     fn respond_to(self, request: &'r Request<'_>) -> response::Result<'o> {
-        let url = validated_uri_reference(self.url)?;
+        let (url, _has_fragment) = validated_uri_reference(self.url)?;
 
         if is_write_method(request.method()) {
             RocketRedirect::to(url).respond_to(request)
@@ -534,6 +541,11 @@ mod tests {
         Inertia::location("/bad\nlocation")
     }
 
+    #[get("/external-fragment")]
+    fn external_fragment() -> Location {
+        Inertia::location("/outside#fragment")
+    }
+
     #[get("/go")]
     fn get_redirect() -> Redirect {
         Inertia::redirect("/target")
@@ -600,6 +612,7 @@ mod tests {
                     scrolling,
                     external,
                     external_post,
+                    external_fragment,
                     bad_external,
                     get_redirect,
                     bad_redirect,
@@ -1398,6 +1411,25 @@ mod tests {
             resp.headers().get_one(X_INERTIA_LOCATION),
             Some("https://example.com/outside")
         );
+        assert_eq!(resp.headers().get_one(VARY), Some(X_INERTIA));
+    }
+
+    #[test]
+    fn fragment_location_response_uses_inertia_redirect_header_for_inertia_requests() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/external-fragment")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Conflict);
+        assert_eq!(
+            resp.headers().get_one(X_INERTIA_REDIRECT),
+            Some("/outside#fragment")
+        );
+        assert_eq!(resp.headers().get_one(X_INERTIA_LOCATION), None);
         assert_eq!(resp.headers().get_one(VARY), Some(X_INERTIA));
     }
 

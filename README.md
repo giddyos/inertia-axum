@@ -293,7 +293,7 @@ Shared props are shallow-merged into page props for HTML first loads and JSON In
 
 ## Redirect Helpers
 
-Use `Inertia::location(url)` for external redirects from Inertia visits. Inertia requests receive a `409 Conflict` response with `X-Inertia-Location`, and direct browser requests fall back to method-aware normal redirects.
+Use `Inertia::location(url)` for external redirects from Inertia visits. Inertia requests receive a `409 Conflict` response with `X-Inertia-Location`, or `X-Inertia-Redirect` when the destination contains a fragment. Direct browser requests fall back to method-aware normal redirects.
 
 Rocket routes can return the helper directly:
 

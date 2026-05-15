@@ -2,7 +2,7 @@
 
 use super::{
     html_response_context, Inertia, IntoPageProps, Location, Page, Redirect, RequestContext, VARY,
-    X_INERTIA, X_INERTIA_LOCATION,
+    X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_REDIRECT,
 };
 use ::axum::extract::{FromRequestParts, OriginalUri};
 use ::axum::http::header::{InvalidHeaderValue, LOCATION};
@@ -52,15 +52,17 @@ fn is_write_method(method: &Method) -> bool {
     )
 }
 
-fn validate_uri_reference(url: &str) -> Result<(), InertiaError> {
-    UriRef::parse(url)
-        .map(|_uri| ())
-        .map_err(InertiaError::invalid_uri)
+fn location_header(url: &str) -> Result<HeaderValue, InertiaError> {
+    let (header, _has_fragment) = location_header_with_fragment(url)?;
+    Ok(header)
 }
 
-fn location_header(url: &str) -> Result<HeaderValue, InertiaError> {
-    validate_uri_reference(url)?;
-    HeaderValue::from_str(url).map_err(InertiaError::invalid_header)
+fn location_header_with_fragment(url: &str) -> Result<(HeaderValue, bool), InertiaError> {
+    let uri = UriRef::parse(url).map_err(InertiaError::invalid_uri)?;
+    let has_fragment = uri.fragment().is_some();
+    HeaderValue::from_str(url)
+        .map_err(InertiaError::invalid_header)
+        .map(|header| (header, has_fragment))
 }
 
 fn local_uri(uri: &Uri) -> String {
@@ -88,9 +90,13 @@ fn redirect_response(status: StatusCode, url: &str) -> Result<Response, InertiaE
 
 fn conflict_response(url: &str) -> Result<Response, InertiaError> {
     let mut response = StatusCode::CONFLICT.into_response();
-    response
-        .headers_mut()
-        .insert(X_INERTIA_LOCATION, location_header(url)?);
+    let (location, has_fragment) = location_header_with_fragment(url)?;
+    let header = if has_fragment {
+        X_INERTIA_REDIRECT
+    } else {
+        X_INERTIA_LOCATION
+    };
+    response.headers_mut().insert(header, location);
     add_vary_header(&mut response);
     Ok(response)
 }
@@ -396,7 +402,8 @@ impl InertiaRequest {
 
     /// Converts an external Inertia location visit into an Axum response.
     ///
-    /// Inertia requests receive `409 Conflict` with `X-Inertia-Location`.
+    /// Inertia requests receive `409 Conflict` with `X-Inertia-Location`,
+    /// or `X-Inertia-Redirect` for fragment destinations.
     /// Direct browser requests fall back to a method-aware redirect.
     pub fn location(&self, location: Location) -> Result<Response, InertiaError> {
         if self.context.is_inertia() {
@@ -1562,6 +1569,31 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("../outside?from=axum#fragment")
         );
+    }
+
+    #[tokio::test]
+    async fn fragment_location_uses_inertia_redirect_for_inertia_requests() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/relative-external")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response
+                .headers()
+                .get(X_INERTIA_REDIRECT)
+                .and_then(|value| value.to_str().ok()),
+            Some("../outside?from=axum#fragment")
+        );
+        assert_eq!(response.headers().get(X_INERTIA_LOCATION), None);
     }
 
     #[tokio::test]

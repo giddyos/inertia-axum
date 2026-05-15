@@ -1499,7 +1499,8 @@ impl Inertia<()> {
     /// Creates an external redirect response.
     ///
     /// Framework integrations should convert this into a `409 Conflict`
-    /// response with the destination URL in the `X-Inertia-Location` header.
+    /// response with the destination URL in the `X-Inertia-Location` header,
+    /// or `X-Inertia-Redirect` when the destination contains a fragment.
     pub fn location<U: Into<String>>(url: U) -> Location {
         Location::new(url)
     }
