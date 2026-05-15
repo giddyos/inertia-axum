@@ -40,10 +40,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: examples/rocket-svelte/svelte-app/package-lock.json
+          cache-dependency-path: |
+            examples/rocket-svelte/svelte-app/package-lock.json
+            examples/axum-svelte/svelte-app/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
         working-directory: examples/rocket-svelte/svelte-app
       - run: npm run build
         working-directory: examples/rocket-svelte/svelte-app
+      - run: npm ci
+        working-directory: examples/axum-svelte/svelte-app
+      - run: npm run build
+        working-directory: examples/axum-svelte/svelte-app
       - run: cargo test --manifest-path examples/Cargo.toml

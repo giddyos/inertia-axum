@@ -1,0 +1,31 @@
+# Axum Svelte
+
+Small Axum + Svelte 5 + Inertia example.
+
+## Build Frontend Assets
+
+```sh
+cd svelte-app
+npm install
+npm run build
+```
+
+## Start The Server
+
+```sh
+cargo run --manifest-path examples/Cargo.toml -p axum-svelte
+```
+
+Then open http://127.0.0.1:3002/hello.
+
+An Inertia JSON request with the matching asset version returns the page object:
+
+```sh
+VERSION=$(jq -r '."src/main.js" | ([.file] + (.css // [])) | join("|")' \
+  examples/axum-svelte/public/build/.vite/manifest.json)
+
+curl -H 'X-Inertia: true' -H "X-Inertia-Version: ${VERSION}" \
+  http://127.0.0.1:3002/hello
+```
+
+The version is derived from the built script and stylesheet asset names.
