@@ -851,6 +851,7 @@ impl Page<Value> {
             .as_object_mut()
             .expect("props was normalized to an object");
         ensure_errors_prop(props);
+        let route_roots = props.keys().cloned().collect::<BTreeSet<_>>();
 
         for (key, value) in shared_props {
             let key = key.into();
@@ -862,6 +863,10 @@ impl Page<Value> {
                 continue;
             };
             let root = (*root).to_owned();
+
+            if route_roots.contains(&root) {
+                continue;
+            }
 
             if insert_shared_prop_path(props, &path, value) && !self.shared_props.contains(&root) {
                 self.shared_props.push(root);

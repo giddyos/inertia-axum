@@ -144,7 +144,7 @@ let shared_props = SharedProps::new()
 let rocket = rocket::build().manage(shared_props);
 ```
 
-Shared props are shallow-merged into page props for HTML first loads and JSON Inertia responses. Route props win on key collisions. Keys may be top-level or dotted, where `auth.user` becomes `props.auth.user`; inserted top-level keys are listed in `sharedProps`. Keep shared props small and namespace them, since they are merged after partial-reload filtering and remain included on partial reload responses.
+Shared props are shallow-merged into page props for HTML first loads and JSON Inertia responses. Route props win on key collisions, including when a route-defined root such as `auth` collides with dotted shared keys such as `auth.user`. Keys may be top-level or dotted, where `auth.user` becomes `props.auth.user`; inserted top-level keys are listed in `sharedProps`. Keep shared props small and namespace them, since they are merged after partial-reload filtering and remain included on partial reload responses.
 
 ## Redirect Helpers
 

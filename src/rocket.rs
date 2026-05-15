@@ -421,6 +421,20 @@ mod tests {
         Inertia::response("foo", Props { n: 42 })
     }
 
+    #[get("/route-auth")]
+    fn route_auth() -> Inertia<serde_json::Value> {
+        Inertia::response(
+            "route-auth",
+            serde_json::json!({
+                "auth": {
+                    "user": {
+                        "name": "Route"
+                    }
+                }
+            }),
+        )
+    }
+
     #[get("/empty")]
     fn empty() -> Inertia<()> {
         Inertia::response("empty", ())
@@ -559,6 +573,7 @@ mod tests {
                 "/",
                 routes![
                     foo,
+                    route_auth,
                     empty,
                     url_override,
                     unsafe_props,
@@ -792,6 +807,31 @@ mod tests {
         assert_eq!(
             page["sharedProps"],
             serde_json::json!(["appName", "n", "auth", "csrfToken"])
+        );
+    }
+
+    #[test]
+    fn shared_dotted_props_do_not_merge_into_route_owned_roots() {
+        let client = Client::tracked(rocket_with_shared_props()).unwrap();
+
+        let resp = client
+            .get("/route-auth")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["props"]["auth"]["user"]["name"], "Route");
+        assert_eq!(page["props"]["appName"], "Demo");
+        assert_eq!(page["props"]["n"], 99);
+        assert_eq!(page["props"]["csrfToken"], serde_json::Value::Null);
+        assert_eq!(
+            page["sharedProps"],
+            serde_json::json!(["appName", "n", "csrfToken"])
         );
     }
 
