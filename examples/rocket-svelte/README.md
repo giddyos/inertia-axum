@@ -7,16 +7,19 @@ reloads from the Svelte client.
 
 ## Build Frontend Assets
 
+From the repository root:
+
 ```sh
-cd svelte-app
+cd examples/rocket-svelte/svelte-app
 npm install
 npm run build
+cd ../../..
 ```
 
 ## Start The Server
 
 ```sh
-cargo run
+cargo run --manifest-path examples/Cargo.toml -p rocket-svelte
 ```
 
 Then open http://127.0.0.1:8000/hello.

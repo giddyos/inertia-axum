@@ -7,10 +7,13 @@ reloads from the Svelte client.
 
 ## Build Frontend Assets
 
+From the repository root:
+
 ```sh
-cd svelte-app
+cd examples/axum-svelte/svelte-app
 npm install
 npm run build
+cd ../../..
 ```
 
 ## Start The Server
