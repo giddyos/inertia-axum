@@ -331,6 +331,30 @@ fn ensure_errors_prop(props: &mut Map<String, Value>) {
         .or_insert_with(|| Value::Object(Map::new()));
 }
 
+fn insert_shared_prop_path(props: &mut Map<String, Value>, path: &[&str], value: Value) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+
+    if path.len() == 1 {
+        if props.contains_key(path[0]) {
+            return false;
+        }
+
+        props.insert(path[0].to_owned(), value);
+        return true;
+    }
+
+    let entry = props
+        .entry(path[0].to_owned())
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Value::Object(nested) = entry else {
+        return false;
+    };
+
+    insert_shared_prop_path(nested, &path[1..], value)
+}
+
 fn string_set(values: &[String]) -> BTreeSet<&str> {
     values.iter().map(String::as_str).collect()
 }
@@ -804,6 +828,47 @@ impl<T> Page<T> {
     /// Returns the asset version, if present.
     pub fn asset_version(&self) -> Option<&str> {
         self.version.as_deref()
+    }
+}
+
+impl Page<Value> {
+    /// Merges shared props into the page object.
+    ///
+    /// Existing page props take precedence when keys collide. Dotted keys are
+    /// expanded into nested objects, and inserted top-level keys are added to
+    /// the page object's `sharedProps` metadata.
+    pub fn with_shared_props<I, K>(mut self, shared_props: I) -> Self
+    where
+        I: IntoIterator<Item = (K, Value)>,
+        K: Into<String>,
+    {
+        if !self.props.is_object() {
+            self.props = Value::Object(Map::new());
+        }
+
+        let props = self
+            .props
+            .as_object_mut()
+            .expect("props was normalized to an object");
+        ensure_errors_prop(props);
+
+        for (key, value) in shared_props {
+            let key = key.into();
+            let path = key
+                .split('.')
+                .filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>();
+            let Some(root) = path.first() else {
+                continue;
+            };
+            let root = (*root).to_owned();
+
+            if insert_shared_prop_path(props, &path, value) && !self.shared_props.contains(&root) {
+                self.shared_props.push(root);
+            }
+        }
+
+        self
     }
 }
 
