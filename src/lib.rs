@@ -762,6 +762,8 @@ pub struct Page<T> {
     scroll_props: BTreeMap<String, ScrollProps>,
     #[serde(skip_serializing_if = "empty_map")]
     deferred_props: BTreeMap<String, Vec<String>>,
+    #[serde(skip)]
+    route_props: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rescued_props: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -798,6 +800,7 @@ impl<T> Page<T> {
             match_props_on: metadata.match_props_on,
             scroll_props: metadata.scroll_props,
             deferred_props: metadata.deferred_props,
+            route_props: Vec::new(),
             rescued_props: metadata.rescued_props,
             shared_props: metadata.shared_props,
             once_props: metadata.once_props,
@@ -851,7 +854,11 @@ impl Page<Value> {
             .as_object_mut()
             .expect("props was normalized to an object");
         ensure_errors_prop(props);
-        let route_roots = props.keys().cloned().collect::<BTreeSet<_>>();
+        let route_roots = if self.route_props.is_empty() {
+            props.keys().cloned().collect::<BTreeSet<_>>()
+        } else {
+            self.route_props.iter().cloned().collect()
+        };
 
         for (key, value) in shared_props {
             let key = key.into();
@@ -1241,11 +1248,18 @@ impl<T: Serialize> Inertia<T> {
         let component = self.component;
         let metadata = self.metadata;
         let mut props = serde_json::to_value(self.props)?;
+        let route_props = props
+            .as_object()
+            .map(|props| props.keys().cloned().collect())
+            .unwrap_or_default();
 
         request.filter_props(&component, &mut props, &metadata);
         let metadata = metadata.for_response(request, &component, props.as_object());
 
-        Ok(Page::from_parts(component, props, url, version, metadata))
+        let mut page = Page::from_parts(component, props, url, version, metadata);
+        page.route_props = route_props;
+
+        Ok(page)
     }
 }
 

@@ -836,6 +836,33 @@ mod tests {
     }
 
     #[test]
+    fn shared_dotted_props_do_not_replace_filtered_route_owned_roots() {
+        let client = Client::tracked(rocket_with_shared_props()).unwrap();
+
+        let resp = client
+            .get("/route-auth")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "route-auth"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "missing"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert!(page["props"].get("auth").is_none());
+        assert_eq!(page["props"]["appName"], "Demo");
+        assert_eq!(page["props"]["n"], 99);
+        assert_eq!(page["props"]["csrfToken"], serde_json::Value::Null);
+        assert_eq!(
+            page["sharedProps"],
+            serde_json::json!(["appName", "n", "csrfToken"])
+        );
+    }
+
+    #[test]
     fn json_response_includes_query_string() {
         let client = Client::tracked(rocket()).unwrap();
 
