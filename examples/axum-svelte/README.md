@@ -2,6 +2,9 @@
 
 Small Axum + Svelte 5 + Inertia example.
 
+The page demonstrates shared props, deferred props, optional props, and partial
+reloads from the Svelte client.
+
 ## Build Frontend Assets
 
 ```sh
