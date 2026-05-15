@@ -3,7 +3,7 @@
 //! Rocket integration for `inertia_rs`.
 
 use super::{
-    html_response_context, Inertia, IntoPageProps, Location, Redirect, RequestContext, VARY,
+    html_response_context, Inertia, IntoPageProps, Location, Page, Redirect, RequestContext, VARY,
     X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_REDIRECT,
 };
 use rocket::fairing::{Fairing, Info, Kind};
@@ -121,9 +121,14 @@ impl SharedProps {
         self.providers.is_empty()
     }
 
-    fn resolve(&self, request: &Request<'_>) -> Result<Vec<(String, Value)>, serde_json::Error> {
+    fn resolve(
+        &self,
+        request: &Request<'_>,
+        page: &Page<Value>,
+    ) -> Result<Vec<(String, Value)>, serde_json::Error> {
         self.providers
             .iter()
+            .filter(|(key, _provider)| !page.owns_prop_root(key))
             .map(|(key, provider)| provider(request).map(|value| (key.clone(), value)))
             .collect()
     }
@@ -193,11 +198,10 @@ impl<'r, 'o: 'r, R: IntoPageProps> Responder<'r, 'o> for Inertia<R> {
             .map_err(|_e| http::Status::InternalServerError)?;
 
         if let Some(shared_props) = request.rocket().state::<SharedProps>() {
-            inertia_response = inertia_response.with_shared_props(
-                shared_props
-                    .resolve(request)
-                    .map_err(|_e| http::Status::InternalServerError)?,
-            );
+            let resolved_shared_props = shared_props
+                .resolve(request, &inertia_response)
+                .map_err(|_e| http::Status::InternalServerError)?;
+            inertia_response = inertia_response.with_shared_props(resolved_shared_props);
         }
 
         if context.is_inertia() {
@@ -406,6 +410,7 @@ mod tests {
         local::blocking::Client,
         patch, post, put,
     };
+    use std::collections::BTreeMap;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -908,6 +913,39 @@ mod tests {
             page["sharedProps"],
             serde_json::json!(["appName", "n", "csrfToken"])
         );
+    }
+
+    #[test]
+    fn colliding_shared_props_are_not_resolved() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let shared_props = SharedProps::new()
+            .value("appName", "Demo")
+            .prop("auth.user", {
+                let calls = Arc::clone(&calls);
+                move |_request| {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    let mut value = BTreeMap::new();
+                    value.insert((1, 2), 3);
+                    value
+                }
+            });
+        let client = Client::tracked(rocket().manage(shared_props)).unwrap();
+
+        let resp = client
+            .get("/route-auth")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(page["props"]["auth"]["user"]["name"], "Route");
+        assert_eq!(page["props"]["appName"], "Demo");
+        assert_eq!(page["sharedProps"], serde_json::json!(["appName"]));
     }
 
     #[test]

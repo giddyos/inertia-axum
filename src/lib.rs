@@ -1288,7 +1288,7 @@ impl<T> Page<T> {
 }
 
 impl Page<Value> {
-    #[cfg(feature = "axum")]
+    #[cfg(any(feature = "axum", feature = "rocket"))]
     pub(crate) fn owns_prop_root(&self, prop: &str) -> bool {
         let root = prop_root(prop);
 

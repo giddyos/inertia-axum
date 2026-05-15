@@ -336,9 +336,7 @@ impl InertiaRequest {
     ///
     /// `InertiaRequest` captures extensions at extraction time. Values inserted
     /// by earlier layers are available here; values inserted by later
-    /// extractors depend on handler argument order. The extension snapshot is
-    /// retained for shared-prop providers, so this returns `None` when no
-    /// [`SharedProps`] extension is registered.
+    /// extractors depend on handler argument order.
     pub fn extension<T>(&self) -> Option<&T>
     where
         T: Send + Sync + 'static,
@@ -438,11 +436,9 @@ where
             .get::<InertiaVersion>()
             .map(|version| version.0.clone());
         let shared_props = parts.extensions.get::<SharedProps>().cloned();
-        let extensions = shared_props.as_ref().map(|_shared_props| {
-            let mut extensions = parts.extensions.clone();
-            extensions.remove::<SharedProps>();
-            Arc::new(extensions)
-        });
+        let mut extensions = parts.extensions.clone();
+        extensions.remove::<SharedProps>();
+        let extensions = Some(Arc::new(extensions));
 
         Ok(Self {
             context,
@@ -711,6 +707,14 @@ mod tests {
         request.redirect(Inertia::redirect("?next=target#fragment"))
     }
 
+    async fn extension_value(request: InertiaRequest) -> String {
+        request
+            .extension::<User>()
+            .map(|user| user.name)
+            .unwrap_or("missing")
+            .to_owned()
+    }
+
     async fn bad_redirect(request: InertiaRequest) -> Result<Response, InertiaError> {
         request.redirect(Inertia::redirect("bad location"))
     }
@@ -728,6 +732,7 @@ mod tests {
             .route("/bad-location", get(bad_location))
             .route("/go", get(redirect).post(redirect))
             .route("/relative-go", get(relative_redirect))
+            .route("/extension-value", get(extension_value))
             .route("/bad-go", get(bad_redirect))
             .layer(VersionLayer::new("1"))
     }
@@ -1193,6 +1198,25 @@ mod tests {
         assert_eq!(page["props"]["appName"], "Demo");
         assert!(page["props"].get("csrfToken").is_none());
         assert_eq!(page["sharedProps"], json!(["appName"]));
+    }
+
+    #[tokio::test]
+    async fn request_extensions_are_available_without_shared_props() {
+        let response = app()
+            .layer(Extension(User { name: "Ada" }))
+            .oneshot(
+                Request::builder()
+                    .uri("/extension-value")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = ::axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
+        assert_eq!(&body[..], b"Ada");
     }
 
     #[tokio::test]
