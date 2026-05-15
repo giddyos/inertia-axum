@@ -16,8 +16,9 @@ Inertia lets you build server-driven applications that render client-side pages 
 - JSON Inertia responses with `X-Inertia: true`.
 - Asset version checks with `X-Inertia-Version`.
 - `409 Conflict` responses with `X-Inertia-Location` for stale assets.
+- Inertia v3 page-object metadata and response filtering for partial reloads, merge props, deferred prop keys, once props, history flags, and infinite-scroll metadata.
 
-The broader Inertia v3 protocol surface, including partial reloads, deferred props, merge props, once props, shared props, and SSR, is planned but not fully implemented yet.
+Shared application state helpers, redirect helpers, lazy or async prop resolvers, SSR, and non-Rocket framework integrations are planned but not fully implemented yet.
 
 The minimum supported Rust version is 1.88.
 
@@ -93,6 +94,40 @@ Your root HTML template receives `data_page`, a JSON-serialized Inertia page obj
 
 The repository includes a Rocket + Svelte 5 + Vite example under `examples/rocket-svelte`.
 
+## Inertia v3 Protocol Helpers
+
+The simple API remains the shortest path for standard pages:
+
+```rust
+Inertia::response("Users/Index", props)
+```
+
+For v3 page metadata, chain explicit helpers on the response or use the `Inertia::page(...).props(...)` builder. Deferred props are listed in `deferredProps` and omitted until an Inertia partial reload explicitly requests them; this crate does not yet provide lazy async prop resolvers. `share()` only marks `sharedProps` metadata and does not register global shared application state.
+
+```rust
+Inertia::response("Users/Index", props)
+    .always("auth")
+    .merge("users")
+    .defer("stats")
+    .once("plans")
+    .encrypt_history()
+```
+
+```rust
+Inertia::page("Users/Index")
+    .always("auth")
+    .defer("stats")
+    .props(props)
+```
+
+The root crate also exposes framework-neutral protocol types:
+
+```rust
+use inertia_rs::{Page, PageMetadata, RequestContext};
+```
+
+Rocket responses use these types internally. `RequestContext` parses Inertia headers such as `X-Inertia-Partial-Data`, `X-Inertia-Partial-Except`, `X-Inertia-Reset`, and `X-Inertia-Except-Once-Props`.
+
 ## Request Helpers
 
 Rocket handlers can inspect Inertia headers through the `InertiaHeaders` request guard:
@@ -113,5 +148,5 @@ fn debug(headers: InertiaHeaders) -> String {
 The raw protocol header constants are also public:
 
 ```rust
-use inertia_rs::{X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_VERSION};
+use inertia_rs::headers::{X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_VERSION};
 ```

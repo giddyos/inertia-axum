@@ -2,7 +2,7 @@
 
 //! Rocket integration for `inertia_rs`.
 
-use super::{Inertia, VARY, X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_VERSION};
+use super::{Inertia, RequestContext, VARY, X_INERTIA, X_INERTIA_LOCATION};
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::{self, Method};
 use rocket::request::{FromRequest, Outcome, Request};
@@ -14,31 +14,10 @@ use serde::Serialize;
 use std::sync::Arc;
 use tracing::trace;
 
-#[derive(Serialize)]
-struct InertiaResponse<T> {
-    component: String,
-    props: T,
-    url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<InertiaVersion>,
-}
-
 const BASE_ROUTE: &str = "/inertia-rs";
 
-trait InertiaRequest {
-    fn inertia_request(&self) -> bool;
-
-    fn inertia_version(&self) -> Option<String>;
-}
-
-impl<'a> InertiaRequest for Request<'a> {
-    fn inertia_request(&self) -> bool {
-        self.headers().get_one(X_INERTIA).is_some()
-    }
-
-    fn inertia_version(&self) -> Option<String> {
-        self.headers().get_one(X_INERTIA_VERSION).map(|s| s.into())
-    }
+fn request_context(request: &Request<'_>) -> RequestContext {
+    RequestContext::from_header_fn(|name| request.headers().get_one(name))
 }
 
 /// Parsed Inertia headers for use as a Rocket request guard.
@@ -46,19 +25,23 @@ impl<'a> InertiaRequest for Request<'a> {
 /// This guard always succeeds. It lets route handlers branch on whether a
 /// request came from the Inertia client without manually reading raw headers.
 pub struct InertiaHeaders {
-    is_inertia: bool,
-    version: Option<String>,
+    context: RequestContext,
 }
 
 impl InertiaHeaders {
     /// Returns `true` when the request includes the `X-Inertia` header.
     pub fn is_inertia(&self) -> bool {
-        self.is_inertia
+        self.context.is_inertia()
     }
 
     /// Returns the request's `X-Inertia-Version` header value.
     pub fn version(&self) -> Option<&str> {
-        self.version.as_deref()
+        self.context.version()
+    }
+
+    /// Returns the parsed request context.
+    pub fn context(&self) -> &RequestContext {
+        &self.context
     }
 }
 
@@ -68,8 +51,7 @@ impl<'r> FromRequest<'r> for InertiaHeaders {
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         Outcome::Success(Self {
-            is_inertia: request.inertia_request(),
-            version: request.inertia_version(),
+            context: request_context(request),
         })
     }
 }
@@ -84,15 +66,6 @@ impl HtmlResponseContext {
     /// Returns the JSON-serialized Inertia page object.
     pub fn data_page(&self) -> &str {
         &self.data_page
-    }
-}
-
-#[derive(Serialize, Clone)]
-struct InertiaVersion(String);
-
-impl AsRef<str> for InertiaVersion {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
     }
 }
 
@@ -127,17 +100,21 @@ fn add_vary_header<'r>(response: Response<'r>) -> Response<'r> {
 impl<'r, 'o: 'r, R: Serialize> Responder<'r, 'o> for Inertia<R> {
     #[inline(always)]
     fn respond_to(self, request: &'r Request<'_>) -> response::Result<'o> {
-        let url = self.url.unwrap_or_else(|| request.uri().to_string());
-        let version = request.local_cache(|| None);
-
-        let inertia_response = InertiaResponse {
-            component: self.component,
-            props: self.props,
-            url,
-            version: version.clone(),
+        let url = self
+            .url()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| request.uri().to_string());
+        let version = request.local_cache(|| None::<String>).clone();
+        let context = if request.method() == Method::Get {
+            request_context(request)
+        } else {
+            request_context(request).without_partial_reload()
         };
+        let inertia_response = self
+            .into_page(url, version, &context)
+            .map_err(|_e| http::Status::InternalServerError)?;
 
-        if request.inertia_request() {
+        if context.is_inertia() {
             Response::build()
                 .merge(Json(inertia_response).respond_to(request)?)
                 .raw_header(X_INERTIA, "true")
@@ -200,7 +177,10 @@ impl<'r, 'o: 'r> Responder<'r, 'o> for VersionConflictResponse {
 }
 
 fn is_local_location(location: &str) -> bool {
-    location.starts_with('/') && !location.starts_with("//")
+    location.starts_with('/')
+        && !location.starts_with("//")
+        && !location.starts_with("/\\")
+        && !location.chars().any(|c| c.is_ascii_control())
 }
 
 #[get("/version-conflict?<location>")]
@@ -232,19 +212,20 @@ impl Fairing for VersionFairing<'static> {
     }
 
     async fn on_request(&self, request: &mut Request<'_>, _: &mut Data<'_>) {
-        let current_version = InertiaVersion(self.version.clone());
-        request.local_cache(|| Some(current_version));
+        request.local_cache(|| Some(self.version.clone()));
 
-        if request.method() == Method::Get && request.inertia_request() {
-            let request_version = request.inertia_version();
+        let context = request_context(request);
+
+        if request.method() == Method::Get && context.is_inertia() {
+            let request_version = context.version();
 
             trace!(
                 "request version {:?} / asset version {}",
-                &request_version,
+                request_version,
                 &self.version
             );
 
-            if request_version.as_ref() != Some(&self.version) {
+            if request_version != Some(self.version.as_str()) {
                 let uri = uri!(
                     "/inertia-rs",
                     version_conflict(location = request.uri().to_string())
@@ -261,6 +242,11 @@ impl Fairing for VersionFairing<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        ScrollProps, X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
+        X_INERTIA_PARTIAL_COMPONENT, X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT,
+        X_INERTIA_RESET, X_INERTIA_VERSION,
+    };
     use rocket::{
         http::{Header, Status},
         local::blocking::Client,
@@ -274,6 +260,14 @@ mod tests {
     #[derive(Serialize)]
     struct TextProps {
         text: String,
+    }
+
+    #[derive(Serialize)]
+    struct AdvancedProps {
+        users: Vec<&'static str>,
+        stats: i32,
+        plans: Vec<&'static str>,
+        notifications: Vec<&'static str>,
     }
 
     #[get("/foo")]
@@ -296,6 +290,52 @@ mod tests {
         )
     }
 
+    #[get("/advanced")]
+    fn advanced() -> Inertia<AdvancedProps> {
+        Inertia::response(
+            "advanced",
+            AdvancedProps {
+                users: vec!["Ada", "Grace"],
+                stats: 42,
+                plans: vec!["basic"],
+                notifications: vec!["welcome"],
+            },
+        )
+        .encrypt_history()
+        .clear_history()
+        .preserve_fragment()
+        .always("users")
+        .merge("users")
+        .prepend("notifications")
+        .defer("stats")
+        .once("plans")
+        .share("users")
+    }
+
+    #[rocket::post("/write")]
+    fn write() -> Inertia<AdvancedProps> {
+        Inertia::response(
+            "write",
+            AdvancedProps {
+                users: vec!["Ada", "Grace"],
+                stats: 42,
+                plans: vec!["basic"],
+                notifications: vec!["welcome"],
+            },
+        )
+    }
+
+    #[get("/scrolling")]
+    fn scrolling() -> Inertia<serde_json::Value> {
+        Inertia::page("scrolling")
+            .scroll("posts", ScrollProps::new("page", 1).next_page(2))
+            .props(serde_json::json!({
+                "posts": {
+                    "data": [1, 2]
+                }
+            }))
+    }
+
     #[get("/headers")]
     fn headers(headers: InertiaHeaders) -> String {
         format!(
@@ -305,11 +345,31 @@ mod tests {
         )
     }
 
+    #[get("/context")]
+    fn context(headers: InertiaHeaders) -> String {
+        format!(
+            "{}:{}",
+            headers.context().partial_component().unwrap_or("none"),
+            headers.context().partial_data().join("|")
+        )
+    }
+
     const CURRENT_VERSION: &str = "1";
 
     fn rocket() -> rocket::Rocket<rocket::Build> {
         rocket::build()
-            .mount("/", routes![foo, url_override, unsafe_props, headers])
+            .mount(
+                "/",
+                routes![
+                    foo,
+                    url_override,
+                    unsafe_props,
+                    advanced,
+                    write,
+                    scrolling,
+                    headers
+                ],
+            )
             .attach(VersionFairing::new(CURRENT_VERSION, |request, ctx| {
                 serde_json::to_string(ctx).unwrap().respond_to(request)
             }))
@@ -413,6 +473,26 @@ mod tests {
     }
 
     #[test]
+    fn html_response_embeds_v3_metadata() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client.get("/advanced").dispatch();
+        let body = resp.into_string().unwrap();
+        let ctx: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let data_page = ctx["data_page"].as_str().unwrap();
+        let page: serde_json::Value = serde_json::from_str(data_page).unwrap();
+
+        assert_eq!(page["encryptHistory"], true);
+        assert_eq!(page["mergeProps"], serde_json::json!(["users"]));
+        assert_eq!(
+            page["deferredProps"],
+            serde_json::json!({ "default": ["stats"] })
+        );
+        assert_eq!(page["props"]["users"], serde_json::json!(["Ada", "Grace"]));
+        assert!(page["props"].get("stats").is_none());
+    }
+
+    #[test]
     fn json_response_includes_query_string() {
         let client = Client::tracked(rocket()).unwrap();
 
@@ -485,6 +565,30 @@ mod tests {
     }
 
     #[test]
+    fn version_conflict_rejects_backslash_location() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/inertia-rs/version-conflict?location=/%5Cexample.com")
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::BadRequest);
+        assert_eq!(resp.headers().get_one(X_INERTIA_LOCATION), None);
+    }
+
+    #[test]
+    fn version_conflict_rejects_control_character_location() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/inertia-rs/version-conflict?location=/%0Aexample.com")
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::BadRequest);
+        assert_eq!(resp.headers().get_one(X_INERTIA_LOCATION), None);
+    }
+
+    #[test]
     fn inertia_headers_guard_reads_headers() {
         let client = Client::tracked(rocket_without_fairing()).unwrap();
 
@@ -498,12 +602,236 @@ mod tests {
     }
 
     #[test]
+    fn inertia_headers_guard_exposes_request_context() {
+        let client = Client::tracked(rocket::build().mount("/", routes![context])).unwrap();
+
+        let resp = client
+            .get("/context")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "advanced"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "users,stats"))
+            .dispatch();
+
+        assert_eq!(resp.into_string().unwrap(), "advanced:users|stats");
+    }
+
+    #[test]
     fn inertia_headers_guard_handles_regular_requests() {
         let client = Client::tracked(rocket_without_fairing()).unwrap();
 
         let resp = client.get("/headers").dispatch();
 
         assert_eq!(resp.into_string().unwrap(), "false:none");
+    }
+
+    #[test]
+    fn rocket_json_response_serializes_v3_metadata_and_omits_deferred_props() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/advanced")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        assert_eq!(resp.headers().get_one(X_INERTIA), Some("true"));
+        assert_eq!(resp.headers().get_one(VARY), Some(X_INERTIA));
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["encryptHistory"], true);
+        assert_eq!(page["clearHistory"], true);
+        assert_eq!(page["preserveFragment"], true);
+        assert_eq!(page["mergeProps"], serde_json::json!(["users"]));
+        assert_eq!(page["prependProps"], serde_json::json!(["notifications"]));
+        assert_eq!(
+            page["deferredProps"],
+            serde_json::json!({ "default": ["stats"] })
+        );
+        assert_eq!(page["sharedProps"], serde_json::json!(["users"]));
+        assert_eq!(
+            page["onceProps"]["plans"],
+            serde_json::json!({ "prop": "plans", "expiresAt": null })
+        );
+        assert_eq!(page["props"]["errors"], serde_json::json!({}));
+        assert_eq!(page["props"]["users"], serde_json::json!(["Ada", "Grace"]));
+        assert!(page["props"].get("stats").is_none());
+    }
+
+    #[test]
+    fn rocket_partial_reload_includes_only_requested_props() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/advanced")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "advanced"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "stats"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(
+            page["props"],
+            serde_json::json!({
+                "errors": {},
+                "stats": 42,
+                "users": ["Ada", "Grace"]
+            })
+        );
+    }
+
+    #[test]
+    fn rocket_partial_except_takes_precedence_over_partial_data() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/advanced")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "advanced"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "stats"))
+            .header(Header::new(X_INERTIA_PARTIAL_EXCEPT, "notifications"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["props"]["errors"], serde_json::json!({}));
+        assert_eq!(page["props"]["users"], serde_json::json!(["Ada", "Grace"]));
+        assert_eq!(page["props"]["plans"], serde_json::json!(["basic"]));
+        assert!(page["props"].get("notifications").is_none());
+        assert_eq!(page["props"]["stats"], 42);
+    }
+
+    #[test]
+    fn rocket_partial_reload_ignores_component_mismatch() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/advanced")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "different"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "stats"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["props"]["errors"], serde_json::json!({}));
+        assert_eq!(page["props"]["users"], serde_json::json!(["Ada", "Grace"]));
+        assert_eq!(page["props"]["plans"], serde_json::json!(["basic"]));
+        assert!(page["props"].get("stats").is_none());
+    }
+
+    #[test]
+    fn rocket_non_get_response_ignores_partial_reload_filtering() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .post("/write")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "write"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "users"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["props"]["errors"], serde_json::json!({}));
+        assert_eq!(page["props"]["users"], serde_json::json!(["Ada", "Grace"]));
+        assert_eq!(page["props"]["stats"], 42);
+        assert_eq!(page["props"]["plans"], serde_json::json!(["basic"]));
+        assert_eq!(
+            page["props"]["notifications"],
+            serde_json::json!(["welcome"])
+        );
+    }
+
+    #[test]
+    fn rocket_reset_omits_merge_and_scroll_metadata_for_reset_props() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/scrolling")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "scrolling"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "posts"))
+            .header(Header::new(X_INERTIA_RESET, "posts"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["props"]["posts"]["data"], serde_json::json!([1, 2]));
+        assert!(page.get("mergeProps").is_none());
+        assert!(page.get("prependProps").is_none());
+        assert!(page.get("scrollProps").is_none());
+    }
+
+    #[test]
+    fn rocket_infinite_scroll_prepend_intent_sets_prepend_metadata() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/scrolling")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_PARTIAL_COMPONENT, "scrolling"))
+            .header(Header::new(X_INERTIA_PARTIAL_DATA, "posts"))
+            .header(Header::new(
+                X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
+                "prepend",
+            ))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(page["prependProps"], serde_json::json!(["posts.data"]));
+        assert!(page.get("mergeProps").is_none());
+        assert_eq!(page["scrollProps"]["posts"]["nextPage"], 2);
+    }
+
+    #[test]
+    fn rocket_once_props_already_on_client_are_omitted() {
+        let client = Client::tracked(rocket()).unwrap();
+
+        let resp = client
+            .get("/advanced")
+            .header(Header::new(X_INERTIA, "true"))
+            .header(Header::new(X_INERTIA_VERSION, CURRENT_VERSION))
+            .header(Header::new(X_INERTIA_EXCEPT_ONCE_PROPS, "plans"))
+            .dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let body = resp.into_string().unwrap();
+        let page: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert!(page["props"].get("plans").is_none());
+        assert_eq!(
+            page["onceProps"]["plans"],
+            serde_json::json!({ "prop": "plans", "expiresAt": null })
+        );
     }
 
     #[test]
