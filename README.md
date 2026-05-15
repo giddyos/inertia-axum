@@ -52,7 +52,7 @@ For Rocket applications:
 
 ```toml
 [dependencies]
-inertia_rs = { version = "0.3.0", default-features = false, features = ["rocket"] }
+inertia_rs = { version = "0.4.0", default-features = false, features = ["rocket"] }
 rocket = { version = "0.5.1", features = ["json"] }
 
 [dependencies.rocket_dyn_templates]
@@ -64,7 +64,7 @@ For Axum applications:
 
 ```toml
 [dependencies]
-inertia_rs = { version = "0.3.0", default-features = false, features = ["axum"] }
+inertia_rs = { version = "0.4.0", default-features = false, features = ["axum"] }
 axum = "0.8.9"
 ```
 

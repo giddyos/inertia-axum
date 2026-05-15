@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.4.0 - 2026-05-15
+
 ### Added
 
 - Rocket 0.5.1, Svelte 5, and Vite example updates.
