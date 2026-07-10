@@ -23,8 +23,10 @@
 pub mod axum;
 
 use serde::Serialize;
+use serde_json::ser::{Formatter, Serializer};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{self, Write};
 
 /// Request header set by Inertia XHR visits.
 pub const X_REQUESTED_WITH: &str = "X-Requested-With";
@@ -111,28 +113,50 @@ impl HtmlResponseContext {
     }
 }
 
-fn escape_json_for_html_script(json: &str) -> String {
-    json.chars()
-        .fold(String::with_capacity(json.len()), |mut escaped, c| {
-            match c {
-                '<' => escaped.push_str("\\u003C"),
-                '>' => escaped.push_str("\\u003E"),
-                '&' => escaped.push_str("\\u0026"),
-                '\u{2028}' => escaped.push_str("\\u2028"),
-                '\u{2029}' => escaped.push_str("\\u2029"),
-                _ => escaped.push(c),
-            }
+#[derive(Default)]
+struct ScriptSafeFormatter;
 
-            escaped
-        })
+impl Formatter for ScriptSafeFormatter {
+    fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        let mut start = 0;
+
+        for (index, character) in fragment.char_indices() {
+            let replacement: Option<&[u8]> = match character {
+                '<' => Some(b"\\u003C"),
+                '>' => Some(b"\\u003E"),
+                '&' => Some(b"\\u0026"),
+                '\u{2028}' => Some(b"\\u2028"),
+                '\u{2029}' => Some(b"\\u2029"),
+                _ => None,
+            };
+
+            let Some(replacement) = replacement else {
+                continue;
+            };
+
+            writer.write_all(&fragment.as_bytes()[start..index])?;
+            writer.write_all(replacement)?;
+            start = index + character.len_utf8();
+        }
+
+        writer.write_all(&fragment.as_bytes()[start..])
+    }
+}
+
+fn to_script_safe_json<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
+    let mut bytes = Vec::with_capacity(1024);
+    let mut serializer = Serializer::with_formatter(&mut bytes, ScriptSafeFormatter);
+    value.serialize(&mut serializer)?;
+    Ok(String::from_utf8(bytes).expect("serde_json serializers always emit valid UTF-8"))
 }
 
 pub(crate) fn html_response_context<T: Serialize>(
     page: &T,
 ) -> Result<HtmlResponseContext, serde_json::Error> {
-    serde_json::to_string(page)
-        .map(|json| escape_json_for_html_script(&json))
-        .map(HtmlResponseContext::new)
+    to_script_safe_json(page).map(HtmlResponseContext::new)
 }
 
 fn is_false(value: &bool) -> bool {
