@@ -9,6 +9,12 @@ partial-reload inclusion decision
    ↓
 resolved props + consumed metadata
    ↓
+PageDraft
+   ↓
+route-local shared props
+   ↓
+global shared props
+   ↓
 Page
    ├── JSON response
    └── script-safe HTML data-page

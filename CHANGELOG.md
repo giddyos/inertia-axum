@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 - Added capacity-aware lazy prop construction.
 - Replaced the version middleware's boxed future with a concrete future.
 - Deferred dynamic version providers until a route extracts `InertiaRequest`.
+- Removed `InertiaRequest::extension`; shared providers use a narrow request
+  view and extraction no longer snapshots all Axum extensions.
+- Added route-local shared values through `shared_value` and
+  `serialize_shared`.
 - Serialize HTML `data-page` JSON in one script-safe pass.
 
 ### Added
