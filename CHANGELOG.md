@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.5.0 - 2026-07-10
+
+### Changed
+
+- Moved public crate entry points into a modular source layout while preserving
+  existing public paths.
+- Unified eager and lazy prop inclusion decisions and removed temporary
+  per-prop selection sets.
+- Removed cloned materialized prop keys during partial-reload filtering.
+- Deduplicated metadata at insertion time and consume metadata while building
+  the response instead of cloning it.
+- Added capacity-aware lazy prop construction.
+- Replaced the version middleware's boxed future with a concrete future.
+- Serialize HTML `data-page` JSON in one script-safe pass.
+
+### Added
+
+- Workspace-wide benchmark targets and a recorded request-context baseline.
+- Workspace-aware CI, benchmark compilation, and frontend example build.
+
 ### Changed
 
 - Made the Axum integration unconditional and removed framework-selection
