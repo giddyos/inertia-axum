@@ -15,3 +15,6 @@ filtering, metadata consumption rather than response-path cloning, capacity
 aware lazy props, and a concrete version middleware future. The unavoidable
 remaining allocations include owned protocol header values, serialized JSON,
 and page-object strings.
+
+Dynamic version providers are now deferred for non-Inertia middleware paths,
+so routes that never extract `InertiaRequest` do not invoke them.

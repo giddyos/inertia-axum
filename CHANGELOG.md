@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
   the response instead of cloning it.
 - Added capacity-aware lazy prop construction.
 - Replaced the version middleware's boxed future with a concrete future.
+- Deferred dynamic version providers until a route extracts `InertiaRequest`.
 - Serialize HTML `data-page` JSON in one script-safe pass.
 
 ### Added

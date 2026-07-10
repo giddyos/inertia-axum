@@ -205,6 +205,15 @@ impl InertiaVersion {
     }
 }
 
+#[derive(Clone)]
+struct InertiaVersionSource(VersionProvider);
+
+impl InertiaVersionSource {
+    fn resolve(&self) -> InertiaVersion {
+        InertiaVersion::new((self.0)())
+    }
+}
+
 /// Shared Inertia props resolved for every Axum page response.
 ///
 /// Register this as an Axum extension layer with [`axum::Extension`]. Shared
@@ -459,7 +468,13 @@ where
         let version = parts
             .extensions
             .get::<InertiaVersion>()
-            .map(|version| version.0.clone());
+            .map(|version| version.0.clone())
+            .or_else(|| {
+                parts
+                    .extensions
+                    .get::<InertiaVersionSource>()
+                    .map(|source| source.resolve().0)
+            });
         let shared_props = parts.extensions.get::<SharedProps>().cloned();
         let mut extensions = parts.extensions.clone();
         extensions.remove::<SharedProps>();
@@ -546,24 +561,30 @@ where
     }
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
-        let version = (self.version_provider)();
-        let request_version = header(request.headers(), super::X_INERTIA_VERSION);
+        let should_check =
+            request.method() == Method::GET && header(request.headers(), X_INERTIA).is_some();
 
-        if request.method() == Method::GET
-            && header(request.headers(), X_INERTIA).is_some()
-            && request_version != Some(version.as_str())
-        {
-            let response = conflict_response(&original_uri_from_extensions(&request))
-                .unwrap_or_else(internal_error_response);
+        if should_check {
+            let version = (self.version_provider)();
+            let request_version = header(request.headers(), super::X_INERTIA_VERSION);
 
-            return VersionFuture::Ready {
-                result: Some(Ok(response)),
-            };
+            if request_version != Some(version.as_str()) {
+                let response = conflict_response(&original_uri_from_extensions(&request))
+                    .unwrap_or_else(internal_error_response);
+
+                return VersionFuture::Ready {
+                    result: Some(Ok(response)),
+                };
+            }
+
+            request
+                .extensions_mut()
+                .insert(InertiaVersion::new(version));
+        } else {
+            request
+                .extensions_mut()
+                .insert(InertiaVersionSource(self.version_provider.clone()));
         }
-
-        request
-            .extensions_mut()
-            .insert(InertiaVersion::new(version));
 
         VersionFuture::Inner {
             future: self.inner.call(request),
