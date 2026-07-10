@@ -2,8 +2,8 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::Extension;
 use axum::Router;
-use axum_inertia_rs::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use axum_inertia_rs::{Inertia, InertiaProps};
+use axum_inertia::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
+use axum_inertia::{Inertia, InertiaProps};
 
 async fn hello(request: InertiaRequest) -> Result<Response, InertiaError> {
     request.render(

@@ -6,6 +6,6 @@ workspace = "../"
 publish = false
 
 [dependencies]
-axum-inertia-rs = { path = "../..", features = ["rocket"] }
+axum-inertia = { path = "../..", features = ["rocket"] }
 rocket = { version = "0.5.1", features = ["json"] }
 serde = { version = "1", features = ["derive"] }

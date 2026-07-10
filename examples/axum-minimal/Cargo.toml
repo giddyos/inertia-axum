@@ -7,5 +7,5 @@ publish = false
 
 [dependencies]
 axum = "0.8.9"
-axum-inertia-rs = { path = "../..", default-features = false, features = ["axum"] }
+axum-inertia = { path = "../..", default-features = false, features = ["axum"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }

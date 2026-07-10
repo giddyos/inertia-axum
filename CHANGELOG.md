@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Rebranded the project and repository as `axum-inertia` and the Cargo package as `axum-inertia-rs`.
+- Rebranded the project and repository as `axum-inertia` and the Cargo package as `axum-inertia`.
 
 ## 0.4.0 - 2026-05-15
 

@@ -1,6 +1,6 @@
 #![allow(clippy::type_complexity)]
 
-//! Rocket integration for `axum_inertia_rs`.
+//! Rocket integration for `axum_inertia`.
 
 use super::{
     html_response_context, Inertia, IntoPageProps, Location, Page, Redirect, RequestContext, VARY,
@@ -71,7 +71,7 @@ impl InertiaHeaders {
 /// reload options.
 ///
 /// ```rust
-/// use axum_inertia_rs::rocket::SharedProps;
+/// use axum_inertia::rocket::SharedProps;
 ///
 /// let shared_props = SharedProps::new()
 ///     .value("appName", "My App")
