@@ -1,8 +1,6 @@
-# Inertia.rs
+# axum-inertia
 
-[![Current Crates.io Version](https://img.shields.io/crates/v/inertia_rs)](https://crates.io/crates/inertia_rs)
-[![Build Status](https://github.com/stuarth/inertia-rs/workflows/CI/badge.svg)](https://github.com/stuarth/inertia-rs/actions)
-[![docs.rs](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/inertia_rs/)
+[![CI](https://github.com/giddyos/axum-inertia/actions/workflows/ci.yaml/badge.svg)](https://github.com/giddyos/axum-inertia/actions/workflows/ci.yaml)
 
 [Inertia.js](https://inertiajs.com/) adapter support for Rust web
 applications. The crate provides built-in Rocket and Axum integrations on top
@@ -12,7 +10,7 @@ Inertia lets you build server-driven applications that render client-side pages 
 
 ## Status
 
-`inertia_rs` currently supports the core Inertia response flow for Rocket and
+axum-inertia currently supports the core Inertia response flow for Rocket and
 Axum:
 
 - HTML first-page responses.
@@ -52,7 +50,7 @@ For Rocket applications:
 
 ```toml
 [dependencies]
-inertia_rs = { version = "0.4.0", default-features = false, features = ["rocket"] }
+axum-inertia-rs = { git = "https://github.com/giddyos/axum-inertia", default-features = false, features = ["rocket"] }
 rocket = { version = "0.5.1", features = ["json"] }
 
 [dependencies.rocket_dyn_templates]
@@ -64,7 +62,7 @@ For Axum applications:
 
 ```toml
 [dependencies]
-inertia_rs = { version = "0.4.0", default-features = false, features = ["axum"] }
+axum-inertia-rs = { git = "https://github.com/giddyos/axum-inertia", default-features = false, features = ["axum"] }
 axum = "0.8.9"
 ```
 
@@ -88,8 +86,8 @@ Rust route:
 #[macro_use]
 extern crate rocket;
 
-use inertia_rs::rocket::VersionFairing;
-use inertia_rs::Inertia;
+use axum_inertia_rs::rocket::VersionFairing;
+use axum_inertia_rs::Inertia;
 use rocket::response::Responder;
 use rocket_dyn_templates::Template;
 
@@ -169,8 +167,8 @@ example.
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
-use inertia_rs::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use inertia_rs::Inertia;
+use axum_inertia_rs::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
+use axum_inertia_rs::Inertia;
 
 #[derive(serde::Serialize)]
 struct Hello {
@@ -232,7 +230,7 @@ Inertia::page("Users/Index")
 ```
 
 ```rust
-use inertia_rs::{Inertia, InertiaProps};
+use axum_inertia_rs::{Inertia, InertiaProps};
 
 let props = InertiaProps::new()
     .value("user", user)
@@ -250,7 +248,7 @@ For immediate rendering paths that borrow local values, use
 The root crate also exposes framework-neutral protocol types:
 
 ```rust
-use inertia_rs::{Page, PageMetadata, RequestContext};
+use axum_inertia_rs::{Page, PageMetadata, RequestContext};
 ```
 
 Rocket and Axum responses use these types internally. `RequestContext` parses Inertia headers such as `X-Inertia-Partial-Data`, `X-Inertia-Partial-Except`, `X-Inertia-Reset`, and `X-Inertia-Except-Once-Props`.
@@ -260,7 +258,7 @@ Rocket and Axum responses use these types internally. `RequestContext` parses In
 For Rocket, register `rocket::SharedProps` as managed state to merge common application data into every page response.
 
 ```rust
-use inertia_rs::rocket::SharedProps;
+use axum_inertia_rs::rocket::SharedProps;
 
 let shared_props = SharedProps::new()
     .value("appName", "My App")
@@ -275,7 +273,7 @@ Axum apps can register `axum::SharedProps` through an `Extension` layer. Provide
 
 ```rust
 use axum::{Extension, Router};
-use inertia_rs::axum::SharedProps;
+use axum_inertia_rs::axum::SharedProps;
 
 let shared_props = SharedProps::new()
     .value("appName", "My App")
@@ -299,7 +297,7 @@ Rocket routes can return the helper directly:
 
 ```rust
 #[get("/billing")]
-fn billing() -> inertia_rs::Location {
+fn billing() -> axum_inertia_rs::Location {
     Inertia::location("https://billing.example.com")
 }
 ```
@@ -308,8 +306,8 @@ Axum routes convert it through `InertiaRequest`:
 
 ```rust
 use axum::response::Response;
-use inertia_rs::axum::{InertiaError, InertiaRequest};
-use inertia_rs::Inertia;
+use axum_inertia_rs::axum::{InertiaError, InertiaRequest};
+use axum_inertia_rs::Inertia;
 
 async fn billing(request: InertiaRequest) -> Result<Response, InertiaError> {
     request.location(Inertia::location("https://billing.example.com"))
@@ -323,15 +321,15 @@ Use `Inertia::redirect(url)` for application redirects that should be method-awa
 
 ```rust
 #[post("/users")]
-fn create_user() -> inertia_rs::Redirect {
+fn create_user() -> axum_inertia_rs::Redirect {
     Inertia::redirect("/users")
 }
 ```
 
 ```rust
 use axum::response::Response;
-use inertia_rs::axum::{InertiaError, InertiaRequest};
-use inertia_rs::Inertia;
+use axum_inertia_rs::axum::{InertiaError, InertiaRequest};
+use axum_inertia_rs::Inertia;
 
 async fn create_user(request: InertiaRequest) -> Result<Response, InertiaError> {
     request.redirect(Inertia::redirect("/users"))
@@ -344,7 +342,7 @@ Rocket handlers can inspect Inertia headers through the `InertiaHeaders`
 request guard:
 
 ```rust
-use inertia_rs::rocket::InertiaHeaders;
+use axum_inertia_rs::rocket::InertiaHeaders;
 
 #[get("/debug")]
 fn debug(headers: InertiaHeaders) -> String {
@@ -359,7 +357,7 @@ fn debug(headers: InertiaHeaders) -> String {
 Axum handlers use the `InertiaRequest` extractor for the same request context:
 
 ```rust
-use inertia_rs::axum::InertiaRequest;
+use axum_inertia_rs::axum::InertiaRequest;
 
 async fn debug(request: InertiaRequest) -> String {
     format!(
@@ -373,5 +371,5 @@ async fn debug(request: InertiaRequest) -> String {
 The raw protocol header constants are also public:
 
 ```rust
-use inertia_rs::headers::{X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_VERSION};
+use axum_inertia_rs::headers::{X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_VERSION};
 ```

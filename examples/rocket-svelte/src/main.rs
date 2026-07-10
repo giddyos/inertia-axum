@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
-use inertia_rs::{
+use axum_inertia_rs::{
     rocket::{SharedProps, VersionFairing},
     Inertia, InertiaProps,
 };

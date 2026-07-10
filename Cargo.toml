@@ -1,11 +1,11 @@
 [package]
-name = "inertia_rs"
+name = "axum-inertia-rs"
 version = "0.4.0"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
-homepage = "https://github.com/stuarth/inertia-rs"
-repository = "https://github.com/stuarth/inertia-rs"
+homepage = "https://github.com/giddyos/axum-inertia"
+repository = "https://github.com/giddyos/axum-inertia"
 description = "Inertia.js for Rust"
 keywords = ["inertia", "web", "framework", "rocket", "axum"]
 categories = ["web-programming"]
