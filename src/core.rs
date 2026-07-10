@@ -224,7 +224,7 @@ fn push_unique_string(values: &mut Vec<String>, value: String) {
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
-struct HeaderList {
+pub(crate) struct HeaderList {
     raw: Option<Box<str>>,
 }
 
