@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate rocket;
 
-use inertia_rs::rocket::{SharedProps, VersionFairing};
-use inertia_rs::Inertia;
+use axum_inertia_rs::rocket::{SharedProps, VersionFairing};
+use axum_inertia_rs::Inertia;
 use rocket::response::content::RawHtml;
 use rocket::response::Responder;
 

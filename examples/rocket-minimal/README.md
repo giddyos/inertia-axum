@@ -1,6 +1,6 @@
 # Rocket Minimal Example
 
-Minimal Rocket integration example for `inertia_rs`.
+Minimal Rocket integration example for `axum-inertia-rs`.
 
 Run it with:
 

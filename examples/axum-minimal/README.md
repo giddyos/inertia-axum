@@ -1,6 +1,6 @@
 # Axum Minimal Example
 
-Minimal Axum integration example for `inertia_rs`.
+Minimal Axum integration example for `axum-inertia-rs`.
 
 Run it with:
 

@@ -1,4 +1,4 @@
-//! Axum integration for `inertia_rs`.
+//! Axum integration for `axum_inertia_rs`.
 
 use super::{
     html_response_context, Inertia, IntoPageProps, Location, Page, Redirect, RequestContext, VARY,
@@ -194,7 +194,7 @@ impl InertiaVersion {
 ///
 /// ```rust,no_run
 /// use axum::{Extension, Router};
-/// use inertia_rs::axum::{SharedProps, VersionLayer};
+/// use axum_inertia_rs::axum::{SharedProps, VersionLayer};
 ///
 /// let shared_props = SharedProps::new()
 ///     .value("appName", "My App")
