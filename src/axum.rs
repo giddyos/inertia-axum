@@ -21,7 +21,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{Layer, Service};
+use tower_layer::Layer;
+use tower_service::Service;
 use tracing::error;
 
 pub use super::HtmlResponseContext;

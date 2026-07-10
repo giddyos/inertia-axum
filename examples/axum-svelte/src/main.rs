@@ -103,9 +103,12 @@ async fn hello(request: InertiaRequest) -> Result<Response, InertiaError> {
                 }),
         ),
         |context| {
-            let style = assets.style_path.as_deref().map_or_else(String::new, |path| {
-                format!(r#"<link rel="stylesheet" href="/public/build/{path}" />"#)
-            });
+            let style = assets
+                .style_path
+                .as_deref()
+                .map_or_else(String::new, |path| {
+                    format!(r#"<link rel="stylesheet" href="/public/build/{path}" />"#)
+                });
 
             Html(format!(
                 r#"<!doctype html>
@@ -138,15 +141,13 @@ async fn main() {
         .route("/hello", get(hello))
         .nest_service("/public", ServeDir::new(public_dir))
         .layer(Extension(
-            SharedProps::new()
-                .value("appName", "Axum Svelte")
-                .value(
-                    "auth.user",
-                    serde_json::json!({
-                        "name": "Grace Hopper",
-                        "role": "Example user",
-                    }),
-                ),
+            SharedProps::new().value("appName", "Axum Svelte").value(
+                "auth.user",
+                serde_json::json!({
+                    "name": "Grace Hopper",
+                    "role": "Example user",
+                }),
+            ),
         ))
         .layer(Extension(assets.clone()))
         .layer(VersionLayer::new(assets.version.clone()));
