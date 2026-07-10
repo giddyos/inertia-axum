@@ -1,107 +1,10 @@
-use ::axum::http::header::HeaderName;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-/// Request header set by Inertia XHR visits.
-pub const X_REQUESTED_WITH: &str = "X-Requested-With";
-
-/// Request header containing accepted response content types.
-pub const ACCEPT: &str = "Accept";
-
-/// Request and response header used to mark Inertia protocol requests.
-pub const X_INERTIA: &str = "X-Inertia";
-
-/// Request header containing the client's current asset version.
-pub const X_INERTIA_VERSION: &str = "X-Inertia-Version";
-
-/// Typed form of [`X_INERTIA`] for response header insertion.
-pub const X_INERTIA_HEADER: HeaderName = HeaderName::from_static("x-inertia");
-
-/// Typed form of [`X_INERTIA_VERSION`] for request header lookup.
-pub const X_INERTIA_VERSION_HEADER: HeaderName = HeaderName::from_static("x-inertia-version");
-
-/// Request header containing the component targeted by a partial reload.
-pub const X_INERTIA_PARTIAL_COMPONENT: &str = "X-Inertia-Partial-Component";
-
-/// Request header listing props to include in a partial reload.
-pub const X_INERTIA_PARTIAL_DATA: &str = "X-Inertia-Partial-Data";
-
-/// Request header listing props to exclude from a partial reload.
-pub const X_INERTIA_PARTIAL_EXCEPT: &str = "X-Inertia-Partial-Except";
-
-/// Request header listing props to reset on navigation.
-pub const X_INERTIA_RESET: &str = "X-Inertia-Reset";
-
-/// Request header identifying a validation error bag.
-pub const X_INERTIA_ERROR_BAG: &str = "X-Inertia-Error-Bag";
-
-/// Request header used by Inertia's infinite scroll protocol.
-pub const X_INERTIA_INFINITE_SCROLL_MERGE_INTENT: &str = "X-Inertia-Infinite-Scroll-Merge-Intent";
-
-/// Request header listing once-prop keys the client already has.
-pub const X_INERTIA_EXCEPT_ONCE_PROPS: &str = "X-Inertia-Except-Once-Props";
-
-/// Response header used with `409 Conflict` to force a full-page visit.
-pub const X_INERTIA_LOCATION: &str = "X-Inertia-Location";
-
-/// Typed form of [`X_INERTIA_LOCATION`] for response header insertion.
-pub const X_INERTIA_LOCATION_HEADER: HeaderName = HeaderName::from_static("x-inertia-location");
-
-/// Response header used with fragment redirects.
-pub const X_INERTIA_REDIRECT: &str = "X-Inertia-Redirect";
-
-/// Typed form of [`X_INERTIA_REDIRECT`] for response header insertion.
-pub const X_INERTIA_REDIRECT_HEADER: HeaderName = HeaderName::from_static("x-inertia-redirect");
-
-/// Response header used to separate HTML and JSON variants in caches.
-pub const VARY: &str = "Vary";
-
-/// Request header set to `prefetch` for Inertia prefetch requests.
-pub const PURPOSE: &str = "Purpose";
-
-/// Request header set to `no-cache` for Inertia reload requests.
-pub const CACHE_CONTROL: &str = "Cache-Control";
-
-/// Inertia protocol header constants.
-///
-/// Constants are also re-exported at the crate root for the existing API.
-#[allow(unused_imports)]
-pub mod headers {
-    pub use super::{
-        ACCEPT, CACHE_CONTROL, PURPOSE, VARY, X_INERTIA, X_INERTIA_ERROR_BAG,
-        X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_HEADER, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
-        X_INERTIA_LOCATION, X_INERTIA_LOCATION_HEADER, X_INERTIA_PARTIAL_COMPONENT,
-        X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT, X_INERTIA_REDIRECT,
-        X_INERTIA_REDIRECT_HEADER, X_INERTIA_RESET, X_INERTIA_VERSION, X_INERTIA_VERSION_HEADER,
-        X_REQUESTED_WITH,
-    };
-}
-
-/// Context passed to framework HTML response renderers.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct HtmlResponseContext {
-    data_page: String,
-}
-
-impl HtmlResponseContext {
-    /// Creates a context from a serialized page object string.
-    ///
-    /// Framework integrations construct this with script-safe JSON. If you
-    /// create it manually, make sure the value is safe for its target HTML
-    /// context.
-    pub fn new<D: Into<String>>(data_page: D) -> Self {
-        Self {
-            data_page: data_page.into(),
-        }
-    }
-
-    /// Returns the JSON-serialized Inertia page object.
-    pub fn data_page(&self) -> &str {
-        &self.data_page
-    }
-}
+use crate::headers::*;
+use crate::redirect::{Location, Redirect};
 
 fn is_false(value: &bool) -> bool {
     !value
@@ -1632,42 +1535,6 @@ impl Inertia<()> {
     /// requests so the follow-up request is a `GET`.
     pub fn redirect<U: Into<String>>(url: U) -> Redirect {
         Redirect::new(url)
-    }
-}
-
-/// A server-initiated external location visit.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Location {
-    url: String,
-}
-
-impl Location {
-    /// Creates an external location redirect to `url`.
-    pub fn new<U: Into<String>>(url: U) -> Self {
-        Self { url: url.into() }
-    }
-
-    /// Returns the destination URL.
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-}
-
-/// A method-aware redirect response.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Redirect {
-    url: String,
-}
-
-impl Redirect {
-    /// Creates a redirect response to `url`.
-    pub fn new<U: Into<String>>(url: U) -> Self {
-        Self { url: url.into() }
-    }
-
-    /// Returns the redirect destination URL.
-    pub fn url(&self) -> &str {
-        &self.url
     }
 }
 

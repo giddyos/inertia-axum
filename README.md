@@ -152,4 +152,5 @@ async fn debug(request: InertiaRequest) -> String {
 }
 ```
 
-Raw protocol header constants are available from `inertia_axum::headers`.
+Raw protocol header constants are available from the crate root, for example
+`inertia_axum::X_INERTIA` and `inertia_axum::X_INERTIA_VERSION`.
