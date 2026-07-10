@@ -4,4 +4,5 @@ mod context;
 mod header_list;
 mod selection;
 
-pub use crate::page::builder::RequestContext;
+pub use context::RequestContext;
+pub(crate) use selection::{EffectiveRequest, SelectionMode, SelectionPlan};
