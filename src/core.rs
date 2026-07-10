@@ -223,14 +223,48 @@ fn push_unique_string(values: &mut Vec<String>, value: String) {
     }
 }
 
-fn parse_header_list(value: Option<&str>) -> Vec<String> {
-    value
-        .into_iter()
-        .flat_map(|value| value.split(','))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
+#[derive(Clone, Default, PartialEq, Eq)]
+struct HeaderList {
+    raw: Option<Box<str>>,
+}
+
+impl HeaderList {
+    fn parse(value: Option<&str>) -> Self {
+        let Some(value) = value else {
+            return Self::default();
+        };
+
+        if value.split(',').map(str::trim).all(str::is_empty) {
+            return Self::default();
+        }
+
+        Self {
+            raw: Some(value.into()),
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.raw
+            .as_deref()
+            .into_iter()
+            .flat_map(|value| value.split(','))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    fn contains(&self, expected: &str) -> bool {
+        self.iter().any(|value| value == expected)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.iter().next().is_none()
+    }
+}
+
+impl std::fmt::Debug for HeaderList {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_list().entries(self.iter()).finish()
+    }
 }
 
 fn contains_no_cache(value: &str) -> bool {
@@ -249,12 +283,12 @@ pub struct RequestContext {
     is_inertia: bool,
     version: Option<String>,
     partial_component: Option<String>,
-    partial_data: Vec<String>,
-    partial_except: Vec<String>,
-    reset: Vec<String>,
+    partial_data: HeaderList,
+    partial_except: HeaderList,
+    reset: HeaderList,
     error_bag: Option<String>,
     infinite_scroll_merge_intent: Option<String>,
-    except_once_props: Vec<String>,
+    except_once_props: HeaderList,
     is_prefetch: bool,
     is_reload: bool,
 }
@@ -273,13 +307,13 @@ impl RequestContext {
             is_inertia: header(X_INERTIA).is_some(),
             version: header(X_INERTIA_VERSION).map(ToOwned::to_owned),
             partial_component: header(X_INERTIA_PARTIAL_COMPONENT).map(ToOwned::to_owned),
-            partial_data: parse_header_list(header(X_INERTIA_PARTIAL_DATA)),
-            partial_except: parse_header_list(header(X_INERTIA_PARTIAL_EXCEPT)),
-            reset: parse_header_list(header(X_INERTIA_RESET)),
+            partial_data: HeaderList::parse(header(X_INERTIA_PARTIAL_DATA)),
+            partial_except: HeaderList::parse(header(X_INERTIA_PARTIAL_EXCEPT)),
+            reset: HeaderList::parse(header(X_INERTIA_RESET)),
             error_bag: header(X_INERTIA_ERROR_BAG).map(ToOwned::to_owned),
             infinite_scroll_merge_intent: header(X_INERTIA_INFINITE_SCROLL_MERGE_INTENT)
                 .map(ToOwned::to_owned),
-            except_once_props: parse_header_list(header(X_INERTIA_EXCEPT_ONCE_PROPS)),
+            except_once_props: HeaderList::parse(header(X_INERTIA_EXCEPT_ONCE_PROPS)),
             is_prefetch: header(PURPOSE)
                 .map(|purpose| purpose.eq_ignore_ascii_case("prefetch"))
                 .unwrap_or(false),
@@ -305,18 +339,33 @@ impl RequestContext {
     }
 
     /// Returns the props requested through `X-Inertia-Partial-Data`.
-    pub fn partial_data(&self) -> &[String] {
-        &self.partial_data
+    pub fn partial_data(&self) -> Vec<String> {
+        self.partial_data.iter().map(ToOwned::to_owned).collect()
+    }
+
+    /// Iterates partial-data prop names without allocating.
+    pub fn partial_data_iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.partial_data.iter()
     }
 
     /// Returns the props excluded through `X-Inertia-Partial-Except`.
-    pub fn partial_except(&self) -> &[String] {
-        &self.partial_except
+    pub fn partial_except(&self) -> Vec<String> {
+        self.partial_except.iter().map(ToOwned::to_owned).collect()
+    }
+
+    /// Iterates partial-except prop names without allocating.
+    pub fn partial_except_iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.partial_except.iter()
     }
 
     /// Returns the props requested for reset on navigation.
-    pub fn reset(&self) -> &[String] {
-        &self.reset
+    pub fn reset(&self) -> Vec<String> {
+        self.reset.iter().map(ToOwned::to_owned).collect()
+    }
+
+    /// Iterates reset prop names without allocating.
+    pub fn reset_iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.reset.iter()
     }
 
     /// Returns the validation error bag name, if present.
@@ -330,8 +379,16 @@ impl RequestContext {
     }
 
     /// Returns once-prop keys the client already has.
-    pub fn except_once_props(&self) -> &[String] {
-        &self.except_once_props
+    pub fn except_once_props(&self) -> Vec<String> {
+        self.except_once_props
+            .iter()
+            .map(ToOwned::to_owned)
+            .collect()
+    }
+
+    /// Iterates once-prop keys without allocating.
+    pub fn except_once_props_iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.except_once_props.iter()
     }
 
     /// Returns `true` when the request purpose is `prefetch`.
@@ -356,9 +413,9 @@ impl RequestContext {
     /// exclusions are preserved because they are independent of partial reloads.
     pub fn without_partial_reload(mut self) -> Self {
         self.partial_component = None;
-        self.partial_data.clear();
-        self.partial_except.clear();
-        self.reset.clear();
+        self.partial_data = HeaderList::default();
+        self.partial_except = HeaderList::default();
+        self.reset = HeaderList::default();
         self.infinite_scroll_merge_intent = None;
         self
     }
@@ -401,8 +458,7 @@ impl RequestContext {
         }
 
         let partial_matches = self.partial_reload_matches(component);
-        let explicitly_requested =
-            partial_matches && self.partial_data.iter().any(|key| key == prop);
+        let explicitly_requested = partial_matches && self.partial_data.contains(prop);
 
         if metadata
             .deferred_props
@@ -414,13 +470,11 @@ impl RequestContext {
             return false;
         }
 
-        if metadata.once_props.iter().any(|(key, once)| {
-            once.prop() == prop
-                && self
-                    .except_once_props
-                    .iter()
-                    .any(|excluded| excluded == key)
-        }) && !explicitly_requested
+        if metadata
+            .once_props
+            .iter()
+            .any(|(key, once)| once.prop() == prop && self.except_once_props.contains(key))
+            && !explicitly_requested
         {
             return false;
         }
@@ -428,9 +482,9 @@ impl RequestContext {
         let included = if !partial_matches {
             true
         } else if !self.partial_except.is_empty() {
-            !self.partial_except.iter().any(|key| key == prop)
+            !self.partial_except.contains(prop)
         } else if !self.partial_data.is_empty() {
-            self.partial_data.iter().any(|key| key == prop)
+            self.partial_data.contains(prop)
         } else {
             true
         };
@@ -471,10 +525,6 @@ fn insert_shared_prop_path(props: &mut Map<String, Value>, path: &[&str], value:
     };
 
     insert_shared_prop_path(nested, &path[1..], value)
-}
-
-fn string_set(values: &[String]) -> BTreeSet<&str> {
-    values.iter().map(String::as_str).collect()
 }
 
 /// Additional Inertia v3 page-object metadata.
@@ -693,7 +743,7 @@ impl PageMetadata {
         let partial_matches = context.partial_reload_matches(component);
         let once_props = &self.once_props;
         let reset_props = if partial_matches {
-            string_set(context.reset())
+            context.reset_iter().collect()
         } else {
             BTreeSet::new()
         };
@@ -704,8 +754,7 @@ impl PageMetadata {
                     && !once_props.iter().any(|(key, once)| {
                         once.prop() == prop
                             && context
-                                .except_once_props()
-                                .iter()
+                                .except_once_props_iter()
                                 .any(|excluded| excluded == key)
                     })
             });
