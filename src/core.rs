@@ -22,6 +22,7 @@
 #[path = "axum.rs"]
 pub mod axum;
 
+use ::axum::http::header::HeaderName;
 use serde::Serialize;
 use serde_json::ser::{Formatter, Serializer};
 use serde_json::{Map, Value};
@@ -39,6 +40,12 @@ pub const X_INERTIA: &str = "X-Inertia";
 
 /// Request header containing the client's current asset version.
 pub const X_INERTIA_VERSION: &str = "X-Inertia-Version";
+
+/// Typed form of [`X_INERTIA`] for response header insertion.
+pub const X_INERTIA_HEADER: HeaderName = HeaderName::from_static("x-inertia");
+
+/// Typed form of [`X_INERTIA_VERSION`] for request header lookup.
+pub const X_INERTIA_VERSION_HEADER: HeaderName = HeaderName::from_static("x-inertia-version");
 
 /// Request header containing the component targeted by a partial reload.
 pub const X_INERTIA_PARTIAL_COMPONENT: &str = "X-Inertia-Partial-Component";
@@ -64,8 +71,14 @@ pub const X_INERTIA_EXCEPT_ONCE_PROPS: &str = "X-Inertia-Except-Once-Props";
 /// Response header used with `409 Conflict` to force a full-page visit.
 pub const X_INERTIA_LOCATION: &str = "X-Inertia-Location";
 
+/// Typed form of [`X_INERTIA_LOCATION`] for response header insertion.
+pub const X_INERTIA_LOCATION_HEADER: HeaderName = HeaderName::from_static("x-inertia-location");
+
 /// Response header used with fragment redirects.
 pub const X_INERTIA_REDIRECT: &str = "X-Inertia-Redirect";
+
+/// Typed form of [`X_INERTIA_REDIRECT`] for response header insertion.
+pub const X_INERTIA_REDIRECT_HEADER: HeaderName = HeaderName::from_static("x-inertia-redirect");
 
 /// Response header used to separate HTML and JSON variants in caches.
 pub const VARY: &str = "Vary";
@@ -83,9 +96,11 @@ pub const CACHE_CONTROL: &str = "Cache-Control";
 pub mod headers {
     pub use super::{
         ACCEPT, CACHE_CONTROL, PURPOSE, VARY, X_INERTIA, X_INERTIA_ERROR_BAG,
-        X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT, X_INERTIA_LOCATION,
-        X_INERTIA_PARTIAL_COMPONENT, X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT,
-        X_INERTIA_REDIRECT, X_INERTIA_RESET, X_INERTIA_VERSION, X_REQUESTED_WITH,
+        X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_HEADER, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
+        X_INERTIA_LOCATION, X_INERTIA_LOCATION_HEADER, X_INERTIA_PARTIAL_COMPONENT,
+        X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT, X_INERTIA_REDIRECT,
+        X_INERTIA_REDIRECT_HEADER, X_INERTIA_RESET, X_INERTIA_VERSION, X_INERTIA_VERSION_HEADER,
+        X_REQUESTED_WITH,
     };
 }
 

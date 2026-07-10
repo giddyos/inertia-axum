@@ -2,10 +2,12 @@
 
 use super::{
     html_response_context, Inertia, IntoPageProps, Location, Page, Redirect, RequestContext, VARY,
-    X_INERTIA, X_INERTIA_LOCATION, X_INERTIA_REDIRECT,
+    X_INERTIA, X_INERTIA_HEADER, X_INERTIA_LOCATION_HEADER, X_INERTIA_REDIRECT_HEADER,
 };
+#[cfg(test)]
+use super::{X_INERTIA_LOCATION, X_INERTIA_REDIRECT};
 use ::axum::extract::{FromRequestParts, OriginalUri};
-use ::axum::http::header::{InvalidHeaderValue, LOCATION};
+use ::axum::http::header::{InvalidHeaderValue, LOCATION, VARY as VARY_HEADER};
 use ::axum::http::request::Parts;
 use ::axum::http::uri::Uri;
 use ::axum::http::{Extensions, HeaderMap, HeaderValue, Method, Request, StatusCode};
@@ -80,9 +82,20 @@ fn request_context(headers: &HeaderMap) -> RequestContext {
 }
 
 fn add_vary_header(response: &mut Response) {
-    response
-        .headers_mut()
-        .append(VARY, HeaderValue::from_static(X_INERTIA));
+    let has_inertia = response
+        .headers()
+        .get_all(VARY_HEADER)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .any(|value| value.eq_ignore_ascii_case(X_INERTIA));
+
+    if !has_inertia {
+        response
+            .headers_mut()
+            .append(VARY, HeaderValue::from_static(X_INERTIA));
+    }
 }
 
 fn is_write_method(method: &Method) -> bool {
@@ -132,9 +145,9 @@ fn conflict_response(url: &str) -> Result<Response, InertiaError> {
     let mut response = StatusCode::CONFLICT.into_response();
     let (location, has_fragment) = location_header_with_fragment(url)?;
     let header = if has_fragment {
-        X_INERTIA_REDIRECT
+        X_INERTIA_REDIRECT_HEADER
     } else {
-        X_INERTIA_LOCATION
+        X_INERTIA_LOCATION_HEADER
     };
     response.headers_mut().insert(header, location);
     add_vary_header(&mut response);
@@ -452,7 +465,7 @@ impl InertiaRequest {
             let mut response = Json(page).into_response();
             response
                 .headers_mut()
-                .insert(X_INERTIA, HeaderValue::from_static("true"));
+                .insert(X_INERTIA_HEADER, HeaderValue::from_static("true"));
             add_vary_header(&mut response);
             Ok(response)
         } else {
