@@ -1,6 +1,6 @@
 use super::support::*;
 use axum::http::Method;
-use axum_inertia::{
+use inertia_axum::{
     X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_PARTIAL_COMPONENT, X_INERTIA_PARTIAL_DATA,
 };
 
@@ -68,5 +68,5 @@ async fn once_props_support_exclusion_explicit_reload_and_expiration() {
 #[test]
 fn scoped_props_can_borrow_route_data() {
     let route_data = String::from("Ada");
-    let _props = axum_inertia::ScopedInertiaProps::new().lazy("user", || route_data.as_str());
+    let _props = inertia_axum::ScopedInertiaProps::new().lazy("user", || route_data.as_str());
 }

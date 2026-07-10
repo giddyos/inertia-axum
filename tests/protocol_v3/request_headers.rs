@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     http::{Method, Request},
 };
-use axum_inertia::{
+use inertia_axum::{
     RequestContext, X_INERTIA, X_INERTIA_ERROR_BAG, X_INERTIA_EXCEPT_ONCE_PROPS,
     X_INERTIA_INFINITE_SCROLL_MERGE_INTENT, X_INERTIA_PARTIAL_COMPONENT, X_INERTIA_PARTIAL_DATA,
     X_INERTIA_PARTIAL_EXCEPT, X_INERTIA_RESET, X_INERTIA_VERSION,

@@ -1,6 +1,6 @@
 use super::support::*;
 use axum::{http::Method, Extension};
-use axum_inertia::axum::SharedProps;
+use inertia_axum::axum::SharedProps;
 use serde_json::json;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},

@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     http::{Method, Request},
 };
-use axum_inertia::{X_INERTIA, X_INERTIA_VERSION};
+use inertia_axum::{X_INERTIA, X_INERTIA_VERSION};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,

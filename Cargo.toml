@@ -1,11 +1,11 @@
 [package]
-name = "axum-inertia"
+name = "inertia-axum"
 version = "0.4.0"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
-homepage = "https://github.com/giddyos/axum-inertia"
-repository = "https://github.com/giddyos/axum-inertia"
+homepage = "https://github.com/giddyos/inertia-axum"
+repository = "https://github.com/giddyos/inertia-axum"
 description = "Inertia.js adapter for Axum"
 keywords = ["inertia", "web", "framework", "axum"]
 categories = ["web-programming"]

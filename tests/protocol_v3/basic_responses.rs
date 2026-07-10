@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     http::{Method, Request},
 };
-use axum_inertia::X_INERTIA;
+use inertia_axum::X_INERTIA;
 
 #[tokio::test]
 async fn initial_visit_returns_html_page() {

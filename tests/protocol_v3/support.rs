@@ -6,7 +6,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use axum_inertia::{
+use inertia_axum::{
     axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer},
     Inertia, InertiaProps, OnceProp, ScrollProps, X_INERTIA, X_INERTIA_VERSION,
 };
@@ -124,7 +124,7 @@ pub async fn call(app: Router, request: Request<Body>) -> CapturedResponse {
     capture(app.oneshot(request).await.unwrap()).await
 }
 
-fn shell(context: axum_inertia::HtmlResponseContext) -> Html<String> {
+fn shell(context: inertia_axum::HtmlResponseContext) -> Html<String> {
     Html(format!("<!doctype html><html><body><script data-page=\"app\" type=\"application/json\">{}</script><div id=\"app\"></div></body></html>", context.data_page()))
 }
 

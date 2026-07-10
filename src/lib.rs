@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```rust
-//! use axum_inertia::Inertia;
+//! use inertia_axum::Inertia;
 //!
 //! #[derive(serde::Serialize)]
 //! struct Props {

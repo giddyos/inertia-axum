@@ -1,6 +1,6 @@
-# axum-inertia
+# inertia-axum
 
-[![CI](https://github.com/giddyos/axum-inertia/actions/workflows/ci.yaml/badge.svg)](https://github.com/giddyos/axum-inertia/actions/workflows/ci.yaml)
+[![CI](https://github.com/giddyos/inertia-axum/actions/workflows/ci.yaml/badge.svg)](https://github.com/giddyos/inertia-axum/actions/workflows/ci.yaml)
 
 [Inertia.js](https://inertiajs.com/) adapter support for Axum applications.
 The crate provides Inertia protocol models, request extraction, page rendering,
@@ -8,7 +8,7 @@ shared props, asset version handling, and redirect helpers for Axum.
 
 ## Status
 
-axum-inertia supports the core Inertia response flow for Axum:
+inertia-axum supports the core Inertia response flow for Axum:
 
 - HTML first-page responses and JSON Inertia responses.
 - Asset version checks and stale-visit handling.
@@ -27,7 +27,7 @@ tests and current limitations.
 
 ```toml
 [dependencies]
-axum-inertia = { git = "https://github.com/giddyos/axum-inertia" }
+inertia-axum = { git = "https://github.com/giddyos/inertia-axum" }
 axum = "0.8.9"
 ```
 
@@ -49,8 +49,8 @@ through `InertiaRequest::render`.
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
-use axum_inertia::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use axum_inertia::Inertia;
+use inertia_axum::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
+use inertia_axum::Inertia;
 
 #[derive(serde::Serialize)]
 struct Hello {
@@ -79,7 +79,7 @@ provider fast and read a cached value rather than doing blocking I/O there.
 ## Inertia v3 Helpers
 
 ```rust
-use axum_inertia::{Inertia, InertiaProps};
+use inertia_axum::{Inertia, InertiaProps};
 
 let props = InertiaProps::new()
     .value("user", user)
@@ -103,7 +103,7 @@ extracted `InertiaRequest` and can read values inserted by other Axum layers.
 
 ```rust
 use axum::{Extension, Router};
-use axum_inertia::axum::SharedProps;
+use inertia_axum::axum::SharedProps;
 
 let shared_props = SharedProps::new()
     .value("appName", "My App")
@@ -141,7 +141,7 @@ Other` for `POST`, `PUT`, `PATCH`, and `DELETE`.
 ## Request Helpers
 
 ```rust
-use axum_inertia::axum::InertiaRequest;
+use inertia_axum::axum::InertiaRequest;
 
 async fn debug(request: InertiaRequest) -> String {
     format!(
@@ -152,4 +152,4 @@ async fn debug(request: InertiaRequest) -> String {
 }
 ```
 
-Raw protocol header constants are available from `axum_inertia::headers`.
+Raw protocol header constants are available from `inertia_axum::headers`.

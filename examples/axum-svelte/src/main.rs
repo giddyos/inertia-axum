@@ -1,8 +1,8 @@
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
-use axum_inertia::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use axum_inertia::{Inertia, InertiaProps};
+use inertia_axum::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
+use inertia_axum::{Inertia, InertiaProps};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fs;
