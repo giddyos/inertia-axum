@@ -1454,6 +1454,7 @@ pub struct InertiaPageBuilder {
     component: String,
     url: Option<String>,
     metadata: PageMetadata,
+    local_shared: Vec<(String, Value)>,
 }
 
 impl InertiaPageBuilder {
@@ -1568,7 +1569,28 @@ impl InertiaPageBuilder {
             props,
             url: self.url,
             metadata: self.metadata,
+            local_shared: self.local_shared,
         }
+    }
+
+    /// Adds a pre-serialized route-local shared value.
+    pub fn shared_value<K>(mut self, key: K, value: Value) -> Self
+    where
+        K: Into<String>,
+    {
+        self.local_shared.push((key.into(), value));
+        self
+    }
+
+    /// Serializes and adds a route-local shared value.
+    pub fn serialize_shared<K, V>(mut self, key: K, value: V) -> Result<Self, serde_json::Error>
+    where
+        K: Into<String>,
+        V: Serialize,
+    {
+        self.local_shared
+            .push((key.into(), serde_json::to_value(value)?));
+        Ok(self)
     }
 
     /// Overrides the page object's `url` field.
@@ -1585,6 +1607,7 @@ impl Inertia<()> {
             component: component.into(),
             url: None,
             metadata: PageMetadata::new(),
+            local_shared: Vec::new(),
         }
     }
 
@@ -1652,6 +1675,7 @@ pub struct Inertia<T> {
     props: T,
     url: Option<String>,
     metadata: PageMetadata,
+    local_shared: Vec<(String, Value)>,
 }
 
 impl<T> Inertia<T> {
@@ -1665,6 +1689,7 @@ impl<T> Inertia<T> {
             props,
             url: None,
             metadata: PageMetadata::new(),
+            local_shared: Vec::new(),
         }
     }
 
@@ -1797,6 +1822,26 @@ impl<T> Inertia<T> {
     pub fn metadata(&self) -> &PageMetadata {
         &self.metadata
     }
+
+    /// Adds a pre-serialized route-local shared value.
+    pub fn shared_value<K>(mut self, key: K, value: Value) -> Self
+    where
+        K: Into<String>,
+    {
+        self.local_shared.push((key.into(), value));
+        self
+    }
+
+    /// Serializes and adds a route-local shared value.
+    pub fn serialize_shared<K, V>(mut self, key: K, value: V) -> Result<Self, serde_json::Error>
+    where
+        K: Into<String>,
+        V: Serialize,
+    {
+        self.local_shared
+            .push((key.into(), serde_json::to_value(value)?));
+        Ok(self)
+    }
 }
 
 impl<T: IntoPageProps> Inertia<T> {
@@ -1818,8 +1863,7 @@ impl<T: IntoPageProps> Inertia<T> {
 
         let mut page = Page::from_parts(component, props, url, version, metadata);
         page.route_props = RouteProps(route_props);
-
-        Ok(page)
+        Ok(page.with_shared_props(self.local_shared))
     }
 }
 
@@ -1906,6 +1950,17 @@ mod tests {
             value["onceProps"]["plans"],
             json!({ "prop": "plans", "expiresAt": null })
         );
+    }
+
+    #[test]
+    fn route_local_shared_values_merge_before_global_values() {
+        let page = Inertia::response("Dashboard", serde_json::json!({}))
+            .shared_value("auth.user", serde_json::json!({"name": "Route"}))
+            .into_page("/dashboard", None, &RequestContext::default())
+            .unwrap()
+            .with_shared_props([("auth.user", serde_json::json!({"name": "Global"}))]);
+
+        assert_eq!(page.props()["auth"]["user"]["name"], "Route");
     }
 
     #[test]
