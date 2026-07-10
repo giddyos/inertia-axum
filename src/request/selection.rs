@@ -1,1 +1,1 @@
-//! Partial-reload selection implementation.
+//! selection implementation module.

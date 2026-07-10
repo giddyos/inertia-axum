@@ -1,3 +1,3 @@
 //! Redirect response models.
 
-pub use crate::core::{Location, Redirect};
+pub use crate::page::builder::{Location, Redirect};

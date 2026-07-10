@@ -1,1 +1,1 @@
-//! Concrete version future implementation.
+//! future implementation module.

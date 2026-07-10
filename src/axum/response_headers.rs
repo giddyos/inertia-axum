@@ -1,1 +1,1 @@
-//! Response header helpers.
+//! response_headers implementation module.

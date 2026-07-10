@@ -1,3 +1,9 @@
 //! Inertia page models and builders.
 
-pub use crate::core::{Inertia, InertiaPageBuilder, OnceProp, Page, PageMetadata, ScrollProps};
+pub mod builder;
+mod draft;
+mod metadata;
+mod model;
+
+pub(crate) use builder::PageDraft;
+pub use builder::{Inertia, InertiaPageBuilder, OnceProp, Page, PageMetadata, ScrollProps};

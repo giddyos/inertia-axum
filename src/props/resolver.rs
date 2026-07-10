@@ -1,1 +1,1 @@
-//! Private resolver implementation is colocated with lazy props.
+//! resolver implementation module.

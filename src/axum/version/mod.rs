@@ -1,2 +1,3 @@
-//! Version middleware re-exports.
-pub use crate::core::axum::{InertiaVersion, VersionLayer, VersionService};
+//! Asset-version middleware implementation module.
+
+mod future;

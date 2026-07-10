@@ -1,2 +1,1 @@
-//! Page metadata re-exports.
-pub use crate::core::{OnceProp, PageMetadata, ScrollProps};
+//! metadata implementation module.

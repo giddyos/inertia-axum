@@ -1,2 +1,1 @@
-//! Page model re-export.
-pub use crate::core::Page;
+//! model implementation module.

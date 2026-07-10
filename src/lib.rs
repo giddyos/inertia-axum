@@ -6,10 +6,8 @@
 
 #![forbid(unsafe_code)]
 
-#[path = "axum/mod.rs"]
 pub mod axum;
 
-mod core;
 mod headers;
 mod html;
 mod page;

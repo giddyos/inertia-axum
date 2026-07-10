@@ -1,3 +1,7 @@
 //! Eager and lazy page props.
 
-pub use crate::core::{InertiaProps, IntoPageProps, ScopedInertiaProps};
+mod eager;
+mod lazy;
+mod resolver;
+
+pub use crate::page::builder::{InertiaProps, IntoPageProps, ScopedInertiaProps};

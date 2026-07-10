@@ -1,1 +1,1 @@
-//! Shared-prop merge implementation.
+//! merge implementation module.
