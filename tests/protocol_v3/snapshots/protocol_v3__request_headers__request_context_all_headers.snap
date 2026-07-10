@@ -1,0 +1,27 @@
+---
+source: tests/protocol_v3/request_headers.rs
+expression: "ContextSnapshot\n{\n    is_inertia: context.is_inertia(), version: context.version(),\n    partial_component: context.partial_component(), partial_data:\n    context.partial_data(), partial_except: context.partial_except(), reset:\n    context.reset(), error_bag: context.error_bag(), merge_intent:\n    context.infinite_scroll_merge_intent(), except_once_props:\n    context.except_once_props(), prefetch: context.is_prefetch(), reload:\n    context.is_reload()\n}"
+---
+{
+  "isInertia": true,
+  "version": "asset-version-v3",
+  "partialComponent": "Events/Index",
+  "partialData": [
+    "events",
+    "filters"
+  ],
+  "partialExcept": [
+    "categories"
+  ],
+  "reset": [
+    "events"
+  ],
+  "errorBag": "createEvent",
+  "mergeIntent": "prepend",
+  "exceptOnceProps": [
+    "plans",
+    "permissions"
+  ],
+  "prefetch": true,
+  "reload": true
+}

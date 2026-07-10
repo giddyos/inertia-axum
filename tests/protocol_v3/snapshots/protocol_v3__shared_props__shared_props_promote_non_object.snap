@@ -1,0 +1,37 @@
+---
+source: tests/protocol_v3/shared_props.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Empty",
+      "props": {
+        "appName": "Demo",
+        "errors": {},
+        "user": {
+          "name": "Shared"
+        }
+      },
+      "sharedProps": [
+        "user",
+        "appName"
+      ],
+      "url": "/empty",
+      "version": "asset-version-v3"
+    }
+  }
+}

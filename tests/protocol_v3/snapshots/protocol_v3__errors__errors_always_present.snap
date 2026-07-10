@@ -1,0 +1,34 @@
+---
+source: tests/protocol_v3/errors.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Errors",
+      "props": {
+        "errors": {
+          "email": "Invalid"
+        },
+        "users": [
+          "Ada"
+        ]
+      },
+      "url": "/errors",
+      "version": "asset-version-v3"
+    }
+  }
+}

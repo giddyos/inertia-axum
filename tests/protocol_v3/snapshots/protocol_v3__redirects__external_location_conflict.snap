@@ -1,0 +1,18 @@
+---
+source: tests/protocol_v3/redirects.rs
+expression: location
+---
+{
+  "status": 409,
+  "headers": {
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia-location": [
+      "https://example.com/outside"
+    ]
+  },
+  "body": {
+    "type": "empty"
+  }
+}

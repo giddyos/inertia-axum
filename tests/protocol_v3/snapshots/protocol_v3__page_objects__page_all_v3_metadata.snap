@@ -1,0 +1,92 @@
+---
+source: tests/protocol_v3/page_objects.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "clearHistory": true,
+      "component": "Feed/Index",
+      "deepMergeProps": [
+        "conversations"
+      ],
+      "deferredProps": {
+        "default": [
+          "analytics"
+        ],
+        "sidebar": [
+          "relatedPosts"
+        ]
+      },
+      "encryptHistory": true,
+      "matchPropsOn": [
+        "posts.id",
+        "notifications.id",
+        "conversations.data.id"
+      ],
+      "mergeProps": [
+        "posts",
+        "posts.data"
+      ],
+      "onceProps": {
+        "feature-catalog": {
+          "expiresAt": 1735689600000,
+          "prop": "features"
+        },
+        "plans": {
+          "expiresAt": null,
+          "prop": "plans"
+        }
+      },
+      "prependProps": [
+        "notifications"
+      ],
+      "preserveFragment": true,
+      "props": {
+        "auth": {
+          "user": "Ada"
+        },
+        "conversations": [],
+        "errors": {},
+        "features": [],
+        "notifications": [],
+        "permissions": true,
+        "plans": [],
+        "posts": {
+          "data": [
+            1
+          ]
+        }
+      },
+      "rescuedProps": [
+        "permissions"
+      ],
+      "scrollProps": {
+        "posts": {
+          "currentPage": 2,
+          "nextPage": 3,
+          "pageName": "page",
+          "previousPage": 1
+        }
+      },
+      "sharedProps": [
+        "auth"
+      ],
+      "url": "/advanced",
+      "version": "asset-version-v3"
+    }
+  }
+}

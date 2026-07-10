@@ -1,0 +1,30 @@
+---
+source: tests/protocol_v3/versioning.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Counter",
+      "props": {
+        "errors": {},
+        "ok": true
+      },
+      "url": "/handler-counter",
+      "version": "asset-version-v3"
+    }
+  }
+}

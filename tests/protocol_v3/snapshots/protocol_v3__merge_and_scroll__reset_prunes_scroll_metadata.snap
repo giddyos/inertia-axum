@@ -1,0 +1,46 @@
+---
+source: tests/protocol_v3/merge_and_scroll.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Scroll/Index",
+      "deepMergeProps": [
+        "otherDeep"
+      ],
+      "matchPropsOn": [
+        "other.id"
+      ],
+      "mergeProps": [
+        "other"
+      ],
+      "props": {
+        "errors": {},
+        "other": [],
+        "otherDeep": [],
+        "posts": {
+          "data": [
+            1,
+            2
+          ]
+        }
+      },
+      "url": "/scroll",
+      "version": "asset-version-v3"
+    }
+  }
+}

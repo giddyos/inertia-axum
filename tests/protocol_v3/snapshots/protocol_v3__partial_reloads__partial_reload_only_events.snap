@@ -1,0 +1,38 @@
+---
+source: tests/protocol_v3/partial_reloads.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Events/Index",
+      "props": {
+        "auth": {
+          "user": {
+            "name": "Ada"
+          }
+        },
+        "errors": {},
+        "events": [
+          1,
+          2
+        ]
+      },
+      "url": "/events",
+      "version": "asset-version-v3"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+---
+source: tests/protocol_v3/merge_and_scroll.rs
+expression: prepend
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Scroll/Index",
+      "deepMergeProps": [
+        "otherDeep"
+      ],
+      "matchPropsOn": [
+        "posts.id",
+        "other.id"
+      ],
+      "mergeProps": [
+        "other"
+      ],
+      "prependProps": [
+        "posts.data"
+      ],
+      "props": {
+        "errors": {},
+        "other": [],
+        "otherDeep": [],
+        "posts": {
+          "data": [
+            1,
+            2
+          ]
+        }
+      },
+      "scrollProps": {
+        "posts": {
+          "currentPage": 2,
+          "nextPage": 3,
+          "pageName": "page",
+          "previousPage": 1
+        }
+      },
+      "url": "/scroll",
+      "version": "asset-version-v3"
+    }
+  }
+}

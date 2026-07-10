@@ -1,0 +1,33 @@
+---
+source: tests/protocol_v3/errors.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Context",
+      "props": {
+        "errorBag": "createUser",
+        "errors": {},
+        "partialComponent": null,
+        "prefetch": false,
+        "reload": false
+      },
+      "url": "/context",
+      "version": "asset-version-v3"
+    }
+  }
+}

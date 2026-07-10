@@ -1,0 +1,18 @@
+---
+source: tests/protocol_v3/versioning.rs
+expression: response
+---
+{
+  "status": 409,
+  "headers": {
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia-location": [
+      "/handler-counter"
+    ]
+  },
+  "body": {
+    "type": "empty"
+  }
+}

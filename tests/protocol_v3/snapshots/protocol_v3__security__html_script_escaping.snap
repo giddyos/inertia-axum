@@ -1,0 +1,30 @@
+---
+source: tests/protocol_v3/security.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "text/html; charset=utf-8"
+    ],
+    "vary": [
+      "X-Inertia"
+    ]
+  },
+  "body": {
+    "type": "html",
+    "value": {
+      "page": {
+        "component": "Unsafe",
+        "props": {
+          "errors": {},
+          "text": "</script><script>alert(1)</script>&  "
+        },
+        "url": "/unsafe",
+        "version": "asset-version-v3"
+      },
+      "raw_data_page": "{\"component\":\"Unsafe\",\"props\":{\"errors\":{},\"text\":\"\\u003C/script\\u003E\\u003Cscript\\u003Ealert(1)\\u003C/script\\u003E\\u0026\\u2028\\u2029\"},\"url\":\"/unsafe\",\"version\":\"asset-version-v3\"}"
+    }
+  }
+}

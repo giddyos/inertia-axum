@@ -1,0 +1,61 @@
+---
+source: tests/protocol_v3/lazy_deferred_once.rs
+expression: excluded
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Dashboard",
+      "deferredProps": {
+        "default": [
+          "analytics",
+          "metrics"
+        ],
+        "sidebar": [
+          "relatedPosts"
+        ]
+      },
+      "onceProps": {
+        "deferredOnce": {
+          "expiresAt": null,
+          "prop": "deferredOnce"
+        },
+        "feature-catalog": {
+          "expiresAt": 1735689600000,
+          "prop": "features"
+        },
+        "optionalOnce": {
+          "expiresAt": null,
+          "prop": "optionalOnce"
+        },
+        "plans": {
+          "expiresAt": null,
+          "prop": "plans"
+        }
+      },
+      "props": {
+        "always": 1,
+        "errors": {},
+        "standard": "yes",
+        "user": {
+          "name": "Ada"
+        }
+      },
+      "url": "/lazy",
+      "version": "asset-version-v3"
+    }
+  }
+}

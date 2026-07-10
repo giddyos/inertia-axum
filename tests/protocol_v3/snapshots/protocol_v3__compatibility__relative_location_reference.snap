@@ -1,0 +1,18 @@
+---
+source: tests/protocol_v3/compatibility.rs
+expression: relative
+---
+{
+  "status": 409,
+  "headers": {
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia-redirect": [
+      "../outside?from=axum#fragment"
+    ]
+  },
+  "body": {
+    "type": "empty"
+  }
+}

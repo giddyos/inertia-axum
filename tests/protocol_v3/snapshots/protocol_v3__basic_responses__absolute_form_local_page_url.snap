@@ -1,0 +1,33 @@
+---
+source: tests/protocol_v3/basic_responses.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Users/Show",
+      "props": {
+        "errors": {},
+        "user": {
+          "id": 123,
+          "name": "Ada"
+        }
+      },
+      "url": "/users/123?tab=profile",
+      "version": "asset-version-v3"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+---
+source: tests/protocol_v3/page_objects.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "clearHistory": true,
+      "component": "Feed/Index",
+      "deferredProps": {
+        "default": [
+          "analytics"
+        ],
+        "sidebar": [
+          "relatedPosts"
+        ]
+      },
+      "encryptHistory": true,
+      "onceProps": {
+        "feature-catalog": {
+          "expiresAt": 1735689600000,
+          "prop": "features"
+        },
+        "plans": {
+          "expiresAt": null,
+          "prop": "plans"
+        }
+      },
+      "preserveFragment": true,
+      "props": {
+        "errors": {},
+        "permissions": true
+      },
+      "rescuedProps": [
+        "permissions"
+      ],
+      "sharedProps": [
+        "auth"
+      ],
+      "url": "/advanced",
+      "version": "asset-version-v3"
+    }
+  }
+}

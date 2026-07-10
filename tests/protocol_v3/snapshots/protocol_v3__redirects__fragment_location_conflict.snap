@@ -1,0 +1,18 @@
+---
+source: tests/protocol_v3/redirects.rs
+expression: fragment
+---
+{
+  "status": 409,
+  "headers": {
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia-redirect": [
+      "https://example.com/outside#details"
+    ]
+  },
+  "body": {
+    "type": "empty"
+  }
+}

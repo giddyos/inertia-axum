@@ -1,0 +1,44 @@
+---
+source: tests/protocol_v3/shared_props.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Users/Show",
+      "props": {
+        "appName": "Demo",
+        "auth": {
+          "csrf": "token",
+          "user": {
+            "name": "Ada"
+          }
+        },
+        "errors": {},
+        "user": {
+          "id": 123,
+          "name": "Ada"
+        }
+      },
+      "sharedProps": [
+        "appName",
+        "auth"
+      ],
+      "url": "/users/123",
+      "version": "asset-version-v3"
+    }
+  }
+}

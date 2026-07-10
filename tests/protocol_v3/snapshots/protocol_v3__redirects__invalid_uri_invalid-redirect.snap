@@ -1,0 +1,16 @@
+---
+source: tests/protocol_v3/redirects.rs
+expression: response
+---
+{
+  "status": 500,
+  "headers": {
+    "content-type": [
+      "text/plain; charset=utf-8"
+    ]
+  },
+  "body": {
+    "type": "text",
+    "value": "failed to build Inertia response"
+  }
+}

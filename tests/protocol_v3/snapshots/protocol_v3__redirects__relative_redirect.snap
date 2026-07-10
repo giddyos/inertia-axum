@@ -1,0 +1,18 @@
+---
+source: tests/protocol_v3/redirects.rs
+expression: relative
+---
+{
+  "status": 302,
+  "headers": {
+    "location": [
+      "?next=target#fragment"
+    ],
+    "vary": [
+      "X-Inertia"
+    ]
+  },
+  "body": {
+    "type": "empty"
+  }
+}

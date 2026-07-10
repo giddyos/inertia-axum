@@ -1,0 +1,33 @@
+---
+source: tests/protocol_v3/basic_responses.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "text/html; charset=utf-8"
+    ],
+    "vary": [
+      "X-Inertia"
+    ]
+  },
+  "body": {
+    "type": "html",
+    "value": {
+      "page": {
+        "component": "Users/Show",
+        "props": {
+          "errors": {},
+          "user": {
+            "id": 123,
+            "name": "Ada"
+          }
+        },
+        "url": "/users/123?tab=profile",
+        "version": "asset-version-v3"
+      },
+      "raw_data_page": "{\"component\":\"Users/Show\",\"props\":{\"errors\":{},\"user\":{\"id\":123,\"name\":\"Ada\"}},\"url\":\"/users/123?tab=profile\",\"version\":\"asset-version-v3\"}"
+    }
+  }
+}

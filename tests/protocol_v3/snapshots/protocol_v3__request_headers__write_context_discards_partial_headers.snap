@@ -1,0 +1,33 @@
+---
+source: tests/protocol_v3/request_headers.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Context",
+      "props": {
+        "errorBag": "bag",
+        "errors": {},
+        "partialComponent": "Events/Index",
+        "prefetch": true,
+        "reload": false
+      },
+      "url": "/context",
+      "version": "asset-version-v3"
+    }
+  }
+}

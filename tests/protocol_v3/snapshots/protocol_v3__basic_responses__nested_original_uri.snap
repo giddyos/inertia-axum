@@ -1,0 +1,30 @@
+---
+source: tests/protocol_v3/basic_responses.rs
+expression: response
+---
+{
+  "status": 200,
+  "headers": {
+    "content-type": [
+      "application/json"
+    ],
+    "vary": [
+      "X-Inertia"
+    ],
+    "x-inertia": [
+      "true"
+    ]
+  },
+  "body": {
+    "type": "json",
+    "value": {
+      "component": "Nested",
+      "props": {
+        "errors": {},
+        "ok": true
+      },
+      "url": "/nested/page?filter=active",
+      "version": "asset-version-v3"
+    }
+  }
+}
