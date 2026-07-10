@@ -19,7 +19,8 @@ async fn dashboard(
 }
 ```
 
-Global `SharedProps` providers now receive `SharedRequest`, which exposes the
+Global `SharedProps` providers now receive importable
+`inertia_axum::axum::SharedRequest`, which exposes the
 Inertia context, method, URI, and asset version. It intentionally does not
 expose arbitrary Axum extensions.
 
@@ -29,3 +30,7 @@ objects and snapshots are intentionally unchanged.
 
 `InertiaProps::with_capacity` is available when an application knows its likely
 number of lazy props. It is optional and does not change resolver behavior.
+
+`RequestContext::partial_data`, `partial_except`, `reset`, and
+`except_once_props` retain their allocating compatibility return values.
+Prefer their corresponding `*_iter` methods in hot paths.

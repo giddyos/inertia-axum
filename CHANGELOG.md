@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+> 0.5.0 completion work is not considered released until the final performance
+> report records same-machine Criterion results.
+
 ## 0.5.0 - 2026-07-10
 
 ### Changed
@@ -29,7 +32,7 @@ All notable changes to this project will be documented in this file.
 - Workspace-wide benchmark targets and a recorded request-context baseline.
 - Workspace-aware CI, benchmark compilation, and frontend example build.
 
-### Changed
+### Compatibility
 
 - Made the Axum integration unconditional and removed framework-selection
   feature flags.
