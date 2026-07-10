@@ -10,7 +10,7 @@ use ::axum::extract::{FromRequestParts, OriginalUri};
 use ::axum::http::header::{InvalidHeaderValue, LOCATION, VARY as VARY_HEADER};
 use ::axum::http::request::Parts;
 use ::axum::http::uri::Uri;
-use ::axum::http::{Extensions, HeaderMap, HeaderValue, Method, Request, StatusCode};
+use ::axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode};
 use ::axum::response::{IntoResponse, Response};
 use ::axum::Json;
 use fluent_uri::{ParseError, UriRef};
@@ -28,8 +28,9 @@ use tracing::error;
 
 pub use super::HtmlResponseContext;
 
-type SharedPropProvider =
-    Arc<dyn Fn(&InertiaRequest) -> Result<Option<Value>, serde_json::Error> + Send + Sync>;
+type SharedPropProvider = Arc<
+    dyn for<'a> Fn(&SharedRequest<'a>) -> Result<Option<Value>, serde_json::Error> + Send + Sync,
+>;
 type VersionProvider = Arc<dyn Fn() -> Arc<str> + Send + Sync>;
 
 #[derive(Clone)]
@@ -293,7 +294,7 @@ impl SharedProps {
         T: Send + Sync + Serialize + 'static,
     {
         let provider =
-            Arc::new(move |_request: &InertiaRequest| serde_json::to_value(&value).map(Some));
+            Arc::new(move |_request: &SharedRequest<'_>| serde_json::to_value(&value).map(Some));
         Arc::make_mut(&mut self.providers).push((key.into(), provider));
         self
     }
@@ -305,10 +306,10 @@ impl SharedProps {
     pub fn prop<K, F, T>(mut self, key: K, provider: F) -> Self
     where
         K: Into<Box<str>>,
-        F: Fn(&InertiaRequest) -> T + Send + Sync + 'static,
+        F: for<'a> Fn(&SharedRequest<'a>) -> T + Send + Sync + 'static,
         T: Serialize,
     {
-        let provider = Arc::new(move |request: &InertiaRequest| {
+        let provider = Arc::new(move |request: &SharedRequest<'_>| {
             serde_json::to_value(provider(request)).map(Some)
         });
 
@@ -323,10 +324,10 @@ impl SharedProps {
     pub fn prop_optional<K, F, T>(mut self, key: K, provider: F) -> Self
     where
         K: Into<Box<str>>,
-        F: Fn(&InertiaRequest) -> Option<T> + Send + Sync + 'static,
+        F: for<'a> Fn(&SharedRequest<'a>) -> Option<T> + Send + Sync + 'static,
         T: Serialize,
     {
-        let provider = Arc::new(move |request: &InertiaRequest| {
+        let provider = Arc::new(move |request: &SharedRequest<'_>| {
             provider(request).map(serde_json::to_value).transpose()
         });
 
@@ -341,7 +342,7 @@ impl SharedProps {
 
     fn merge_into(
         &self,
-        request: &InertiaRequest,
+        request: &SharedRequest<'_>,
         page: &mut PageDraft,
     ) -> Result<(), serde_json::Error> {
         for (key, provider) in self.providers.iter() {
@@ -358,15 +359,57 @@ impl SharedProps {
     }
 }
 
+/// Narrow request view available to global shared-prop providers.
+pub struct SharedRequest<'a> {
+    context: &'a RequestContext,
+    method: &'a Method,
+    uri: &'a str,
+    asset_version: Option<&'a str>,
+}
+
+impl<'a> SharedRequest<'a> {
+    fn new(
+        context: &'a RequestContext,
+        method: &'a Method,
+        uri: &'a str,
+        asset_version: Option<&'a str>,
+    ) -> Self {
+        Self {
+            context,
+            method,
+            uri,
+            asset_version,
+        }
+    }
+
+    /// Returns parsed Inertia request headers.
+    pub fn context(&self) -> &RequestContext {
+        self.context
+    }
+
+    /// Returns the request method.
+    pub fn method(&self) -> &Method {
+        self.method
+    }
+
+    /// Returns the local request URI.
+    pub fn uri(&self) -> &str {
+        self.uri
+    }
+
+    /// Returns the resolved asset version, if any.
+    pub fn asset_version(&self) -> Option<&str> {
+        self.asset_version
+    }
+}
+
 /// Axum request extractor for Inertia protocol state.
 ///
 /// Use this extractor in handlers that return Inertia page responses. Pair it
 /// with [`VersionLayer`] when page objects should include an asset version and
 /// stale Inertia visits should receive a `409 Conflict` response.
-#[derive(Clone)]
 pub struct InertiaRequest {
     context: RequestContext,
-    extensions: Option<Arc<Extensions>>,
     method: Method,
     shared_props: Option<SharedProps>,
     uri: String,
@@ -406,20 +449,6 @@ impl InertiaRequest {
         self.version.as_ref().map(InertiaVersion::as_str)
     }
 
-    /// Returns a request extension value inserted by an Axum layer.
-    ///
-    /// `InertiaRequest` captures extensions at extraction time. Values inserted
-    /// by earlier layers are available here; values inserted by later
-    /// extractors depend on handler argument order.
-    pub fn extension<T>(&self) -> Option<&T>
-    where
-        T: Send + Sync + 'static,
-    {
-        self.extensions
-            .as_ref()
-            .and_then(|extensions| extensions.get::<T>())
-    }
-
     /// Converts an [`Inertia`] value into an Axum response.
     ///
     /// Inertia requests receive a JSON page object with `X-Inertia: true`.
@@ -455,8 +484,8 @@ impl InertiaRequest {
 
         if let Some(shared_props) = &self.shared_props {
             if !shared_props.is_empty() {
-                let mut shared_request = self.clone();
-                shared_request.context = context.clone();
+                let shared_request =
+                    SharedRequest::new(&context, &self.method, &self.uri, self.asset_version());
                 shared_props.merge_into(&shared_request, &mut draft)?;
             }
         }
@@ -522,13 +551,8 @@ where
                     .map(InertiaVersionSource::resolve)
             });
         let shared_props = parts.extensions.get::<SharedProps>().cloned();
-        let mut extensions = parts.extensions.clone();
-        extensions.remove::<SharedProps>();
-        let extensions = Some(Arc::new(extensions));
-
         Ok(Self {
             context,
-            extensions,
             method: parts.method.clone(),
             shared_props,
             uri: parts
@@ -675,14 +699,6 @@ mod tests {
         text: String,
     }
 
-    #[derive(Clone)]
-    struct User {
-        name: &'static str,
-    }
-
-    #[derive(Clone)]
-    struct CsrfToken(String);
-
     async fn page(request: InertiaRequest) -> Result<Response, InertiaError> {
         request.render(
             Inertia::response(
@@ -826,14 +842,6 @@ mod tests {
         request.redirect(Inertia::redirect("?next=target#fragment"))
     }
 
-    async fn extension_value(request: InertiaRequest) -> String {
-        request
-            .extension::<User>()
-            .map(|user| user.name)
-            .unwrap_or("missing")
-            .to_owned()
-    }
-
     async fn bad_redirect(request: InertiaRequest) -> Result<Response, InertiaError> {
         request.redirect(Inertia::redirect("bad location"))
     }
@@ -861,7 +869,6 @@ mod tests {
                     .delete(redirect),
             )
             .route("/relative-go", get(relative_redirect))
-            .route("/extension-value", get(extension_value))
             .route("/bad-go", get(bad_redirect))
             .layer(VersionLayer::new("1"))
     }
@@ -870,20 +877,10 @@ mod tests {
         let shared_props = SharedProps::new()
             .value("appName", "Demo")
             .value("n", 99)
-            .prop("auth.user", |request| {
-                request
-                    .extension::<User>()
-                    .map(|user| json!({ "name": user.name }))
-            })
-            .prop("csrfToken", |request| {
-                request
-                    .extension::<CsrfToken>()
-                    .map(|token| token.0.clone())
-            });
+            .value("auth.user", json!({ "name": "Ada" }))
+            .value("csrfToken", "token-shared");
 
         app_with_shared_props_registry(shared_props)
-            .layer(Extension(User { name: "Ada" }))
-            .layer(Extension(CsrfToken("token-shared".into())))
     }
 
     fn app_with_shared_props_registry(shared_props: SharedProps) -> Router {
@@ -1454,14 +1451,9 @@ mod tests {
 
     #[tokio::test]
     async fn optional_shared_props_can_skip_missing_values() {
-        let shared_props =
-            SharedProps::new()
-                .value("appName", "Demo")
-                .prop_optional("csrfToken", |request| {
-                    request
-                        .extension::<CsrfToken>()
-                        .map(|token| token.0.clone())
-                });
+        let shared_props = SharedProps::new()
+            .value("appName", "Demo")
+            .prop_optional("csrfToken", |_request| Option::<String>::None);
         let response = app_with_shared_props_registry(shared_props)
             .oneshot(
                 Request::builder()
@@ -1481,25 +1473,6 @@ mod tests {
         assert_eq!(page["props"]["appName"], "Demo");
         assert!(page["props"].get("csrfToken").is_none());
         assert_eq!(page["sharedProps"], json!(["appName"]));
-    }
-
-    #[tokio::test]
-    async fn request_extensions_are_available_without_shared_props() {
-        let response = app()
-            .layer(Extension(User { name: "Ada" }))
-            .oneshot(
-                Request::builder()
-                    .uri("/extension-value")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        let body = ::axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-
-        assert_eq!(&body[..], b"Ada");
     }
 
     #[tokio::test]
@@ -1533,7 +1506,6 @@ mod tests {
         let request = request_context(&HeaderMap::new());
         let request = InertiaRequest {
             context: request,
-            extensions: Some(Arc::new(Extensions::new())),
             method: Method::GET,
             shared_props: Some(SharedProps::new()),
             uri: "/empty".into(),
@@ -1551,6 +1523,32 @@ mod tests {
 
         assert_eq!(page["props"], serde_json::Value::Null);
         assert!(page.get("sharedProps").is_none());
+    }
+
+    struct CloneProbe(Arc<AtomicUsize>);
+
+    impl Clone for CloneProbe {
+        fn clone(&self) -> Self {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Self(Arc::clone(&self.0))
+        }
+    }
+
+    #[tokio::test]
+    async fn inertia_extraction_does_not_clone_all_extensions() {
+        let clones = Arc::new(AtomicUsize::new(0));
+        let request = Request::builder()
+            .uri("/")
+            .extension(CloneProbe(Arc::clone(&clones)))
+            .body(())
+            .unwrap();
+        let (mut parts, _) = request.into_parts();
+
+        InertiaRequest::from_request_parts(&mut parts, &())
+            .await
+            .unwrap();
+
+        assert_eq!(clones.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

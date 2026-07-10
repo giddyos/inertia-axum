@@ -252,10 +252,11 @@ async fn context(request: InertiaRequest) -> Result<Response, InertiaError> {
     let c = request.context();
     request.render(Inertia::response("Context", json!({"errorBag":c.error_bag(),"prefetch":c.is_prefetch(),"reload":c.is_reload(),"partialComponent":c.partial_component()})), shell)
 }
-async fn counter(request: InertiaRequest) -> Result<Response, InertiaError> {
-    if let Some(counter) = request.extension::<Arc<AtomicUsize>>() {
-        counter.fetch_add(1, Ordering::SeqCst);
-    }
+async fn counter(
+    request: InertiaRequest,
+    axum::Extension(counter): axum::Extension<Arc<AtomicUsize>>,
+) -> Result<Response, InertiaError> {
+    counter.fetch_add(1, Ordering::SeqCst);
     request.render(Inertia::response("Counter", json!({"ok":true})), shell)
 }
 

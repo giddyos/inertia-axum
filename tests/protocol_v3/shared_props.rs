@@ -1,5 +1,5 @@
 use super::support::*;
-use axum::{http::Method, Extension};
+use axum::http::Method;
 use inertia_axum::axum::SharedProps;
 use serde_json::json;
 use std::sync::{
@@ -7,19 +7,13 @@ use std::sync::{
     Arc,
 };
 
-#[derive(Clone)]
-struct User {
-    name: &'static str,
-}
 #[tokio::test]
 async fn fixed_and_request_aware_shared_props_merge_and_dedupe_roots() {
     let shared = SharedProps::new()
         .value("appName", "Demo")
-        .prop("auth.user", |r| {
-            r.extension::<User>().map(|u| json!({"name":u.name}))
-        })
+        .value("auth.user", json!({"name":"Ada"}))
         .value("auth.csrf", "token");
-    let app = app_with_shared_props(shared).layer(Extension(User { name: "Ada" }));
+    let app = app_with_shared_props(shared);
     let response = call(app, inertia_request(Method::GET, "/users/123")).await;
     let p = response.page().unwrap();
     assert_eq!(p["props"]["auth"]["user"]["name"], "Ada");

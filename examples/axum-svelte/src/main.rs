@@ -77,14 +77,10 @@ fn example_stats(adapter: &'static str) -> serde_json::Value {
     })
 }
 
-async fn hello(request: InertiaRequest) -> Result<Response, InertiaError> {
-    // InertiaRequest keeps extension snapshots for shared-prop providers, so
-    // this example registers SharedProps even though the assets are separate.
-    let assets = request
-        .extension::<Arc<Assets>>()
-        .expect("assets extension is registered")
-        .clone();
-
+async fn hello(
+    request: InertiaRequest,
+    axum::Extension(assets): axum::Extension<Arc<Assets>>,
+) -> Result<Response, InertiaError> {
     request.render(
         Inertia::response(
             "Hello",
