@@ -1,10 +1,8 @@
-//! A small Rust adapter for the [Inertia.js](https://inertiajs.com/) protocol.
+//! An Axum adapter for the [Inertia.js](https://inertiajs.com/) protocol.
 //!
-//! The crate exposes framework-neutral protocol types plus framework
-//! integrations behind feature flags. The `rocket` feature is enabled by
-//! default and provides a Rocket
-//! [`Responder`](https://api.rocket.rs/v0.5/rocket/response/trait.Responder.html)
-//! implementation plus asset-versioning support.
+//! The crate provides the Inertia protocol models, request parsing, page
+//! construction, shared props, asset version handling, redirects, and Axum
+//! response integration.
 //!
 //! # Example
 //!
@@ -20,12 +18,7 @@
 //! assert_eq!(response.component(), "Users/Show");
 //! ```
 
-/// Rocket integration for Inertia responses and asset version checks.
-#[cfg(feature = "rocket")]
-pub mod rocket;
-
 /// Axum integration for Inertia responses and asset version checks.
-#[cfg(feature = "axum")]
 pub mod axum;
 
 use serde::Serialize;
@@ -116,7 +109,6 @@ impl HtmlResponseContext {
     }
 }
 
-#[cfg(any(feature = "rocket", feature = "axum"))]
 fn escape_json_for_html_script(json: &str) -> String {
     json.chars()
         .fold(String::with_capacity(json.len()), |mut escaped, c| {
@@ -133,7 +125,6 @@ fn escape_json_for_html_script(json: &str) -> String {
         })
 }
 
-#[cfg(any(feature = "rocket", feature = "axum"))]
 pub(crate) fn html_response_context<T: Serialize>(
     page: &T,
 ) -> Result<HtmlResponseContext, serde_json::Error> {
@@ -153,7 +144,7 @@ fn empty_map<K, V>(map: &BTreeMap<K, V>) -> bool {
 #[derive(Clone, Debug, Default)]
 struct RouteProps(Vec<String>);
 
-// Internal responder bookkeeping should not affect protocol-level Page equality.
+// Internal adapter bookkeeping should not affect protocol-level Page equality.
 impl PartialEq for RouteProps {
     fn eq(&self, _other: &Self) -> bool {
         true
@@ -1288,7 +1279,6 @@ impl<T> Page<T> {
 }
 
 impl Page<Value> {
-    #[cfg(any(feature = "axum", feature = "rocket"))]
     pub(crate) fn owns_prop_root(&self, prop: &str) -> bool {
         let root = prop_root(prop);
 

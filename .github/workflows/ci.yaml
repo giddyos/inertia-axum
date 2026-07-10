@@ -12,13 +12,11 @@ jobs:
         with:
           components: clippy, rustfmt
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-features --all-targets -- -D warnings
-      - run: cargo test --all-features
-      - run: cargo check --no-default-features
-      - run: cargo check --no-default-features --features rocket
-      - run: cargo check --no-default-features --features axum
-      - run: RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
-      - run: RUSTDOCFLAGS="-D warnings" cargo doc --no-default-features --no-deps
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all-targets
+      - run: cargo test --doc
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+      - run: cargo package
 
   msrv:
     name: MSRV
@@ -26,10 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88.0
-      - run: cargo check --all-features
-      - run: cargo check --no-default-features
-      - run: cargo check --no-default-features --features rocket
-      - run: cargo check --no-default-features --features axum
+      - run: cargo check --all-targets
 
   example:
     name: Example
@@ -41,13 +36,8 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: |
-            examples/rocket-svelte/svelte-app/package-lock.json
             examples/axum-svelte/svelte-app/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
-      - run: npm ci
-        working-directory: examples/rocket-svelte/svelte-app
-      - run: npm run build
-        working-directory: examples/rocket-svelte/svelte-app
       - run: npm ci
         working-directory: examples/axum-svelte/svelte-app
       - run: npm run build

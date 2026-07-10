@@ -2,7 +2,5 @@
 resolver = "2"
 members = [
     "axum-minimal",
-    "axum-svelte",
-    "rocket-minimal",
-    "rocket-svelte"
+    "axum-svelte"
 ]

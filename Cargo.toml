@@ -6,29 +6,20 @@ rust-version = "1.88"
 license = "MIT"
 homepage = "https://github.com/giddyos/axum-inertia"
 repository = "https://github.com/giddyos/axum-inertia"
-description = "Inertia.js for Rust"
-keywords = ["inertia", "web", "framework", "rocket", "axum"]
+description = "Inertia.js adapter for Axum"
+keywords = ["inertia", "web", "framework", "axum"]
 categories = ["web-programming"]
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "0.8.9", optional = true }
-fluent-uri = { version = "0.4.1", optional = true }
-rocket = { version = "0.5.1", features = ["json"], optional = true }
+axum = "0.8.9"
+fluent-uri = "0.4.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
-tower = { version = "0.5.3", features = ["util"], optional = true }
+tower = { version = "0.5.3", features = ["util"] }
 tracing = "0.1"
-
-[features]
-default = ["rocket"]
-axum = ["dep:axum", "dep:fluent-uri", "dep:tower"]
-rocket = ["dep:rocket"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
-
-[package.metadata.docs.rs]
-all-features = true

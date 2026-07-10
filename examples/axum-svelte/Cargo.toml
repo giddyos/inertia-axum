@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 axum = "0.8.9"
-axum-inertia = { path = "../..", default-features = false, features = ["axum"] }
+axum-inertia = { path = "../.." }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
