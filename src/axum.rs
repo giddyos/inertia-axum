@@ -549,8 +549,9 @@ where
 mod tests {
     use super::*;
     use crate::{
-        InertiaProps, X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_PARTIAL_COMPONENT,
-        X_INERTIA_PARTIAL_DATA, X_INERTIA_VERSION,
+        InertiaProps, ScrollProps, X_INERTIA_EXCEPT_ONCE_PROPS,
+        X_INERTIA_INFINITE_SCROLL_MERGE_INTENT, X_INERTIA_PARTIAL_COMPONENT,
+        X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT, X_INERTIA_RESET, X_INERTIA_VERSION,
     };
     use ::axum::body::Body;
     use ::axum::http::header::CONTENT_TYPE;
@@ -670,6 +671,31 @@ mod tests {
         )
     }
 
+    async fn empty(request: InertiaRequest) -> Result<Response, InertiaError> {
+        request.render(Inertia::response("empty", ()), |context| {
+            Html(context.data_page().to_owned())
+        })
+    }
+
+    async fn scrolling(request: InertiaRequest) -> Result<Response, InertiaError> {
+        request.render(
+            Inertia::page("scrolling")
+                .scroll("posts", ScrollProps::new("page", 1).next_page(2))
+                .props(json!({ "posts": { "data": [1, 2] } })),
+            |context| Html(context.data_page().to_owned()),
+        )
+    }
+
+    async fn history_page(request: InertiaRequest) -> Result<Response, InertiaError> {
+        request.render(
+            Inertia::response("history", ())
+                .encrypt_history()
+                .clear_history()
+                .preserve_fragment(),
+            |context| Html(context.data_page().to_owned()),
+        )
+    }
+
     async fn unsafe_page(request: InertiaRequest) -> Result<Response, InertiaError> {
         request.render(
             Inertia::response(
@@ -726,11 +752,21 @@ mod tests {
             .route("/builder", get(builder_page))
             .route("/route-auth", get(route_auth))
             .route("/lazy", get(lazy_page))
+            .route("/empty", get(empty))
+            .route("/scrolling", get(scrolling))
+            .route("/history", get(history_page))
             .route("/unsafe", get(unsafe_page))
             .route("/external", get(external).post(external))
             .route("/relative-external", get(relative_location))
             .route("/bad-location", get(bad_location))
-            .route("/go", get(redirect).post(redirect))
+            .route(
+                "/go",
+                get(redirect)
+                    .post(redirect)
+                    .put(redirect)
+                    .patch(redirect)
+                    .delete(redirect),
+            )
             .route("/relative-go", get(relative_redirect))
             .route("/extension-value", get(extension_value))
             .route("/bad-go", get(bad_redirect))
@@ -1100,6 +1136,160 @@ mod tests {
         assert_eq!(page["props"]["auth"]["user"]["name"], "Ada");
         assert_eq!(page["props"]["csrfToken"], "token-shared");
         assert_eq!(page["sharedProps"], json!(["appName", "auth", "csrfToken"]));
+    }
+
+    #[tokio::test]
+    async fn shared_props_promote_non_object_props_to_an_object() {
+        let response = app_with_shared_props_registry(SharedProps::new().value("appName", "Demo"))
+            .oneshot(
+                Request::builder()
+                    .uri("/empty")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = ::axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(page["props"]["errors"], json!({}));
+        assert_eq!(page["props"]["appName"], "Demo");
+        assert_eq!(page["sharedProps"], json!(["appName"]));
+    }
+
+    #[tokio::test]
+    async fn partial_except_takes_precedence_over_partial_data() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/foo")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .header(X_INERTIA_PARTIAL_COMPONENT, "foo")
+                    .header(X_INERTIA_PARTIAL_DATA, "n,stats")
+                    .header(X_INERTIA_PARTIAL_EXCEPT, "stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let page = body_json(response).await;
+
+        assert_eq!(page["props"]["n"], 42);
+        assert!(page["props"].get("stats").is_none());
+    }
+
+    #[tokio::test]
+    async fn partial_reload_component_mismatch_ignores_partial_filtering() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/foo")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .header(X_INERTIA_PARTIAL_COMPONENT, "other")
+                    .header(X_INERTIA_PARTIAL_DATA, "n")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let page = body_json(response).await;
+
+        assert_eq!(page["props"]["n"], 42);
+        assert!(page["props"].get("stats").is_none());
+        assert_eq!(page["props"]["notifications"], json!(["welcome"]));
+    }
+
+    #[tokio::test]
+    async fn reset_omits_merge_and_scroll_metadata_for_reset_props() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/scrolling")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .header(X_INERTIA_PARTIAL_COMPONENT, "scrolling")
+                    .header(X_INERTIA_PARTIAL_DATA, "posts")
+                    .header(X_INERTIA_RESET, "posts")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let page = body_json(response).await;
+
+        assert!(page.get("mergeProps").is_none());
+        assert!(page.get("prependProps").is_none());
+        assert!(page.get("scrollProps").is_none());
+    }
+
+    #[tokio::test]
+    async fn infinite_scroll_prepend_intent_sets_prepend_metadata() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/scrolling")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .header(X_INERTIA_PARTIAL_COMPONENT, "scrolling")
+                    .header(X_INERTIA_PARTIAL_DATA, "posts")
+                    .header(X_INERTIA_INFINITE_SCROLL_MERGE_INTENT, "prepend")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let page = body_json(response).await;
+
+        assert_eq!(page["prependProps"], json!(["posts.data"]));
+        assert_eq!(page["scrollProps"]["posts"]["nextPage"], 2);
+    }
+
+    #[tokio::test]
+    async fn matching_version_preserves_not_found_responses() {
+        let response = Router::new()
+            .layer(VersionLayer::new("1"))
+            .oneshot(
+                Request::builder()
+                    .uri("/missing")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn history_flags_are_preserved_through_axum_rendering() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/history")
+                    .header(X_INERTIA, "true")
+                    .header(X_INERTIA_VERSION, "1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let page = body_json(response).await;
+
+        assert_eq!(page["encryptHistory"], true);
+        assert_eq!(page["clearHistory"], true);
+        assert_eq!(page["preserveFragment"], true);
     }
 
     #[tokio::test]
@@ -1653,26 +1843,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_redirects_use_see_other_status() {
-        let response = app()
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/go")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+    async fn all_write_redirect_methods_use_see_other_status() {
+        for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            let response = app()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/go")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
 
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
-        assert_eq!(
-            response
-                .headers()
-                .get(LOCATION)
-                .and_then(|value| value.to_str().ok()),
-            Some("/target")
-        );
+            assert_eq!(response.status(), StatusCode::SEE_OTHER);
+            assert_eq!(
+                response
+                    .headers()
+                    .get(LOCATION)
+                    .and_then(|value| value.to_str().ok()),
+                Some("/target")
+            );
+        }
     }
 
     #[tokio::test]
