@@ -28,7 +28,22 @@ pub use super::HtmlResponseContext;
 
 type SharedPropProvider =
     Arc<dyn Fn(&InertiaRequest) -> Result<Option<Value>, serde_json::Error> + Send + Sync>;
-type VersionProvider = Arc<dyn Fn() -> String + Send + Sync>;
+type VersionProvider = Arc<dyn Fn() -> Arc<str> + Send + Sync>;
+
+#[derive(Clone)]
+enum VersionSource {
+    Static(Arc<str>),
+    Dynamic(VersionProvider),
+}
+
+impl VersionSource {
+    fn resolve(&self) -> Arc<str> {
+        match self {
+            Self::Static(version) => Arc::clone(version),
+            Self::Dynamic(provider) => provider(),
+        }
+    }
+}
 
 pin_project! {
     #[project = VersionFutureProj]
@@ -191,11 +206,11 @@ fn internal_error_response(error: InertiaError) -> Response {
 
 /// Current asset version inserted by [`VersionLayer`].
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InertiaVersion(String);
+pub struct InertiaVersion(Arc<str>);
 
 impl InertiaVersion {
     /// Creates an asset version value for request extensions.
-    pub fn new<V: Into<String>>(version: V) -> Self {
+    pub fn new<V: Into<Arc<str>>>(version: V) -> Self {
         Self(version.into())
     }
 
@@ -206,11 +221,11 @@ impl InertiaVersion {
 }
 
 #[derive(Clone)]
-struct InertiaVersionSource(VersionProvider);
+struct InertiaVersionSource(VersionSource);
 
 impl InertiaVersionSource {
     fn resolve(&self) -> InertiaVersion {
-        InertiaVersion::new((self.0)())
+        InertiaVersion::new(self.0.resolve())
     }
 }
 
@@ -242,7 +257,7 @@ impl InertiaVersionSource {
 /// ```
 #[derive(Clone, Default)]
 pub struct SharedProps {
-    providers: Vec<(String, SharedPropProvider)>,
+    providers: Arc<Vec<(Box<str>, SharedPropProvider)>>,
 }
 
 impl SharedProps {
@@ -251,13 +266,23 @@ impl SharedProps {
         Self::default()
     }
 
+    /// Creates an empty shared-prop registry with space for `capacity` entries.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            providers: Arc::new(Vec::with_capacity(capacity)),
+        }
+    }
+
     /// Registers a fixed serializable shared prop value.
-    pub fn value<K, T>(self, key: K, value: T) -> Self
+    pub fn value<K, T>(mut self, key: K, value: T) -> Self
     where
-        K: Into<String>,
-        T: Clone + Send + Sync + Serialize + 'static,
+        K: Into<Box<str>>,
+        T: Send + Sync + Serialize + 'static,
     {
-        self.prop(key, move |_request| value.clone())
+        let provider =
+            Arc::new(move |_request: &InertiaRequest| serde_json::to_value(&value).map(Some));
+        Arc::make_mut(&mut self.providers).push((key.into(), provider));
+        self
     }
 
     /// Registers a request-aware shared prop provider.
@@ -266,7 +291,7 @@ impl SharedProps {
     /// from request extensions, clone the value before returning it.
     pub fn prop<K, F, T>(mut self, key: K, provider: F) -> Self
     where
-        K: Into<String>,
+        K: Into<Box<str>>,
         F: Fn(&InertiaRequest) -> T + Send + Sync + 'static,
         T: Serialize,
     {
@@ -274,7 +299,7 @@ impl SharedProps {
             serde_json::to_value(provider(request)).map(Some)
         });
 
-        self.providers.push((key.into(), provider));
+        Arc::make_mut(&mut self.providers).push((key.into(), provider));
         self
     }
 
@@ -284,7 +309,7 @@ impl SharedProps {
     /// JSON `null`.
     pub fn prop_optional<K, F, T>(mut self, key: K, provider: F) -> Self
     where
-        K: Into<String>,
+        K: Into<Box<str>>,
         F: Fn(&InertiaRequest) -> Option<T> + Send + Sync + 'static,
         T: Serialize,
     {
@@ -292,7 +317,7 @@ impl SharedProps {
             provider(request).map(serde_json::to_value).transpose()
         });
 
-        self.providers.push((key.into(), provider));
+        Arc::make_mut(&mut self.providers).push((key.into(), provider));
         self
     }
 
@@ -310,7 +335,7 @@ impl SharedProps {
             .iter()
             .filter(|(key, _provider)| !page.owns_prop_root(key))
             .filter_map(|(key, provider)| match provider(request) {
-                Ok(Some(value)) => Some(Ok((key.clone(), value))),
+                Ok(Some(value)) => Some(Ok((key.to_string(), value))),
                 Ok(None) => None,
                 Err(error) => Some(Err(error)),
             })
@@ -330,7 +355,7 @@ pub struct InertiaRequest {
     method: Method,
     shared_props: Option<SharedProps>,
     uri: String,
-    version: Option<String>,
+    version: Option<InertiaVersion>,
 }
 
 impl fmt::Debug for InertiaRequest {
@@ -363,7 +388,7 @@ impl InertiaRequest {
 
     /// Returns the current asset version installed by [`VersionLayer`].
     pub fn asset_version(&self) -> Option<&str> {
-        self.version.as_deref()
+        self.version.as_ref().map(InertiaVersion::as_str)
     }
 
     /// Returns a request extension value inserted by an Axum layer.
@@ -403,7 +428,13 @@ impl InertiaRequest {
             .url()
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| self.uri.clone());
-        let mut page = inertia.into_page(url, self.version.clone(), &context)?;
+        let mut page = inertia.into_page(
+            url,
+            self.version
+                .as_ref()
+                .map(|version| version.as_str().to_owned()),
+            &context,
+        )?;
 
         if let Some(shared_props) = &self.shared_props {
             if !shared_props.is_empty() {
@@ -468,12 +499,12 @@ where
         let version = parts
             .extensions
             .get::<InertiaVersion>()
-            .map(|version| version.0.clone())
+            .cloned()
             .or_else(|| {
                 parts
                     .extensions
                     .get::<InertiaVersionSource>()
-                    .map(|source| source.resolve().0)
+                    .map(InertiaVersionSource::resolve)
             });
         let shared_props = parts.extensions.get::<SharedProps>().cloned();
         let mut extensions = parts.extensions.clone();
@@ -503,15 +534,15 @@ where
 /// `409 Conflict` with `X-Inertia-Location` before the route handler runs.
 #[derive(Clone)]
 pub struct VersionLayer {
-    version_provider: VersionProvider,
+    source: VersionSource,
 }
 
 impl VersionLayer {
     /// Creates a layer with a static asset `version`.
-    pub fn new<V: Into<String>>(version: V) -> Self {
-        let version = version.into();
-
-        Self::dynamic(move || version.clone())
+    pub fn new<V: Into<Arc<str>>>(version: V) -> Self {
+        Self {
+            source: VersionSource::Static(version.into()),
+        }
     }
 
     /// Creates a layer with a dynamic asset-version provider.
@@ -522,10 +553,10 @@ impl VersionLayer {
     pub fn dynamic<F, V>(version_provider: F) -> Self
     where
         F: Fn() -> V + Send + Sync + 'static,
-        V: Into<String>,
+        V: Into<Arc<str>>,
     {
         Self {
-            version_provider: Arc::new(move || version_provider().into()),
+            source: VersionSource::Dynamic(Arc::new(move || version_provider().into())),
         }
     }
 }
@@ -536,7 +567,7 @@ impl<S> Layer<S> for VersionLayer {
     fn layer(&self, inner: S) -> Self::Service {
         VersionService {
             inner,
-            version_provider: self.version_provider.clone(),
+            source: self.source.clone(),
         }
     }
 }
@@ -545,7 +576,7 @@ impl<S> Layer<S> for VersionLayer {
 #[derive(Clone)]
 pub struct VersionService<S> {
     inner: S,
-    version_provider: VersionProvider,
+    source: VersionSource,
 }
 
 impl<S, B> Service<Request<B>> for VersionService<S>
@@ -565,10 +596,10 @@ where
             request.method() == Method::GET && header(request.headers(), X_INERTIA).is_some();
 
         if should_check {
-            let version = (self.version_provider)();
+            let version = self.source.resolve();
             let request_version = header(request.headers(), super::X_INERTIA_VERSION);
 
-            if request_version != Some(version.as_str()) {
+            if request_version != Some(version.as_ref()) {
                 let response = conflict_response(&original_uri_from_extensions(&request))
                     .unwrap_or_else(internal_error_response);
 
@@ -583,7 +614,7 @@ where
         } else {
             request
                 .extensions_mut()
-                .insert(InertiaVersionSource(self.version_provider.clone()));
+                .insert(InertiaVersionSource(self.source.clone()));
         }
 
         VersionFuture::Inner {
