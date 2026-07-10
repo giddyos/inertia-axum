@@ -349,6 +349,10 @@ impl RequestContext {
         metadata: &PageMetadata,
         optional: bool,
     ) -> bool {
+        if prop == "errors" {
+            return true;
+        }
+
         if metadata
             .always_props
             .iter()
@@ -432,30 +436,6 @@ fn insert_shared_prop_path(props: &mut Map<String, Value>, path: &[&str], value:
 
 fn string_set(values: &[String]) -> BTreeSet<&str> {
     values.iter().map(String::as_str).collect()
-}
-
-fn partial_reload_includes_prop(context: &RequestContext, component: &str, prop: &str) -> bool {
-    if !context.partial_reload_matches(component) {
-        return true;
-    }
-
-    let partial_excluded = string_set(context.partial_except());
-
-    if !partial_excluded.is_empty() {
-        return !partial_excluded.contains(prop);
-    }
-
-    let partial_requested = string_set(context.partial_data());
-
-    partial_requested.is_empty() || partial_requested.contains(prop)
-}
-
-fn partial_reload_explicitly_requests_prop(
-    context: &RequestContext,
-    component: &str,
-    prop: &str,
-) -> bool {
-    context.partial_reload_matches(component) && string_set(context.partial_data()).contains(prop)
 }
 
 /// Additional Inertia v3 page-object metadata.
@@ -660,23 +640,6 @@ impl PageMetadata {
         &self.once_props
     }
 
-    fn deferred_prop_names(&self) -> BTreeSet<&str> {
-        self.deferred_props
-            .values()
-            .flat_map(|props| props.iter().map(String::as_str))
-            .collect()
-    }
-
-    fn once_props_excluded_by(&self, context: &RequestContext) -> BTreeSet<&str> {
-        let excluded_once_keys = string_set(context.except_once_props());
-
-        self.once_props
-            .iter()
-            .filter(|(key, _once)| excluded_once_keys.contains(key.as_str()))
-            .map(|(_key, once)| once.prop())
-            .collect()
-    }
-
     fn into_response_metadata(
         mut self,
         context: &RequestContext,
@@ -874,38 +837,12 @@ impl PropEntry<'_> {
         request: &RequestContext,
         metadata: &PageMetadata,
     ) -> bool {
-        let key = self.key.as_str();
-
-        if key == "errors" {
-            return true;
-        }
-
-        let always_props = string_set(metadata.always_props());
-
-        if always_props.contains(key) {
-            return true;
-        }
-
-        let explicitly_requested = partial_reload_explicitly_requests_prop(request, component, key);
-        let deferred_props = metadata.deferred_prop_names();
-
-        if deferred_props.contains(key) && !explicitly_requested {
-            return false;
-        }
-
-        let once_excluded_props = metadata.once_props_excluded_by(request);
-
-        if once_excluded_props.contains(key) && !explicitly_requested {
-            return false;
-        }
-
-        let included_by_partial_reload = partial_reload_includes_prop(request, component, key);
-
-        if matches!(self.mode, PropMode::Optional) {
-            return explicitly_requested && included_by_partial_reload;
-        }
-
-        included_by_partial_reload
+        request.includes_prop(
+            component,
+            &self.key,
+            metadata,
+            matches!(self.mode, PropMode::Optional),
+        )
     }
 }
 
