@@ -6,25 +6,30 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Rebranded the project and repository as `axum-inertia` and the Cargo package as `axum-inertia`.
+- Made the Axum integration unconditional and removed framework-selection
+  feature flags.
+
+### Removed
+
+- Removed the legacy alternate web-framework adapter, its public API,
+  dependencies, examples, documentation, and CI coverage.
 
 ## 0.4.0 - 2026-05-15
 
 ### Added
 
-- Rocket 0.5.1, Svelte 5, and Vite example updates.
 - Public Inertia protocol header constants and `RequestContext` parsing.
-- Inertia v3 page-object metadata for history flags, merge props, deferred props, once props, shared props, and scroll props.
+- Inertia v3 page-object metadata for history flags, merge props, deferred
+  props, once props, shared props, and scroll props.
 - Partial reload filtering for matching Inertia components.
-- Asset version handling for successful page responses and stale Inertia visits.
-- `VersionFairing::dynamic` for request-time asset version values.
-- `InertiaHeaders` Rocket request guard.
+- Asset version handling for successful page responses and stale visits.
 - `Inertia::location` for external Inertia redirects.
 - `Inertia::redirect` for method-aware application redirects.
-- Rocket `SharedProps` managed state for common page props.
-- Initial Axum integration with `InertiaRequest`, `VersionLayer`, page response rendering, external locations, and method-aware redirects.
+- Initial Axum integration with `InertiaRequest`, `VersionLayer`, page response
+  rendering, external locations, and method-aware redirects.
 - Minimal Axum example.
-- `InertiaProps` and `ScopedInertiaProps` for synchronous lazy, optional, deferred, and once prop resolvers.
+- `InertiaProps` and `ScopedInertiaProps` for synchronous lazy, optional,
+  deferred, and once prop resolvers.
 - Axum `SharedProps` extension support for common page props.
 - README protocol support matrix.
 
@@ -39,5 +44,6 @@ All notable changes to this project will be documented in this file.
 
 - Escaped serialized page JSON for safe embedding in HTML script contexts.
 - Kept shared dotted props from merging into route-owned prop roots.
-- Preserved route-owned prop roots across partial filtering before shared-prop merging.
+- Preserved route-owned prop roots across partial filtering before shared-prop
+  merging.
 - Kept internal route-prop tracking out of `Page` equality.
