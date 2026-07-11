@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@inertiajs/vite": "^3.6.1",
+    "@playwright/test": "^1.61.1",
     "@sveltejs/vite-plugin-svelte": "7.1.2",
     "svelte": "5.55.7",
     "svelte-preprocess": "^6.0.3",
