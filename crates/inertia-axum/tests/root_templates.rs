@@ -48,7 +48,7 @@ async fn inline_template_changes_initial_html_but_not_json_or_script_safety() {
     );
     let html = response_body(app.clone(), false).await;
     assert!(html.contains("data-shell=\"template\""));
-    assert!(html.contains(r#"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"#));
+    assert!(html.contains(r"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"));
     let json = response_body(app, true).await;
     assert!(!json.contains("data-shell"));
     assert!(json.starts_with('{'));
