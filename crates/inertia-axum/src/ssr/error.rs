@@ -17,6 +17,8 @@ pub enum SsrStartError {
     UnsupportedEndpoint(String),
     /// Render timeouts must be greater than zero.
     InvalidTimeout,
+    /// Control request timeouts must be greater than zero.
+    InvalidControlTimeout,
     /// Render concurrency must be greater than zero.
     InvalidConcurrency,
     /// Response limits must be greater than zero.
@@ -48,6 +50,10 @@ pub enum SsrStartError {
         directory: std::path::PathBuf,
         source: std::io::Error,
     },
+    /// Waiting for the managed Node process failed.
+    NodeWait { source: std::io::Error },
+    /// The managed Node process exited before becoming ready.
+    ProcessExitedDuringStartup { status: std::process::ExitStatus },
     /// The Node child process could not be spawned.
     NodeSpawn {
         runtime: std::path::PathBuf,
@@ -74,6 +80,9 @@ impl fmt::Display for SsrStartError {
             ),
             Self::InvalidTimeout => {
                 formatter.write_str("SSR render timeout must be greater than zero")
+            }
+            Self::InvalidControlTimeout => {
+                formatter.write_str("SSR control timeout must be greater than zero")
             }
             Self::InvalidConcurrency => {
                 formatter.write_str("SSR maximum concurrency must be greater than zero")
@@ -112,6 +121,11 @@ impl fmt::Display for SsrStartError {
                 "Node working directory {} is unavailable: {source}",
                 directory.display()
             ),
+            Self::NodeWait { source } => write!(formatter, "could not wait for Node: {source}"),
+            Self::ProcessExitedDuringStartup { status } => write!(
+                formatter,
+                "Node exited during SSR startup with {status}; likely causes include an invalid or stale SSR bundle, missing Node dependencies, an endpoint/port mismatch, or a JavaScript startup failure"
+            ),
             Self::NodeSpawn {
                 runtime,
                 bundle,
@@ -133,7 +147,9 @@ impl std::error::Error for SsrStartError {
             Self::InvalidEndpoint { source, .. } => Some(source),
             Self::BundleUnavailable { source, .. } => Some(source),
             Self::WorkingDirectoryUnavailable { source, .. } => Some(source),
-            Self::NodeUnavailable { source, .. } | Self::NodeSpawn { source, .. } => Some(source),
+            Self::NodeUnavailable { source, .. }
+            | Self::NodeSpawn { source, .. }
+            | Self::NodeWait { source } => Some(source),
             _ => None,
         }
     }

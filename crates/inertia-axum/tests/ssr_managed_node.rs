@@ -79,6 +79,137 @@ server.listen({port}, '127.0.0.1');
 }
 
 #[tokio::test]
+#[ignore = "requires Node 22 or newer"]
+async fn managed_node_exit_during_startup_fails_immediately() {
+    let root = std::env::current_dir()
+        .unwrap()
+        .join("target/ssr-fixtures")
+        .join(format!("immediate-exit-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let bundle = root.join("server.mjs");
+    std::fs::write(&bundle, "process.exit(17);").unwrap();
+    let started = tokio::time::timeout(
+        Duration::from_secs(2),
+        InertiaApp::default_root()
+            .ssr(Ssr::node(&bundle).startup_timeout(Duration::from_secs(30)))
+            .start(),
+    )
+    .await
+    .expect("an exited child must not consume the startup timeout");
+    assert!(matches!(
+        started,
+        Err(inertia_axum::StartError::Ssr(
+            inertia_axum::SsrStartError::ProcessExitedDuringStartup { .. }
+        ))
+    ));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+#[ignore = "requires Node 22 or newer"]
+async fn hanging_shutdown_route_reaches_force_kill() {
+    let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = reservation.local_addr().unwrap().port();
+    drop(reservation);
+    let root = std::env::current_dir()
+        .unwrap()
+        .join("target/ssr-fixtures")
+        .join(format!("hanging-shutdown-{}-{port}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let bundle = root.join("server.mjs");
+    std::fs::write(
+        &bundle,
+        format!(
+            r#"import http from 'node:http';
+const server=http.createServer((req,res)=>{{
+if(req.url==='/health')return res.end('ok');
+if(req.url==='/shutdown')return;
+if(req.url==='/render')return res.end('null');
+res.statusCode=404;res.end();}});server.listen({port},'127.0.0.1');"#
+        ),
+    )
+    .unwrap();
+    let inertia = InertiaApp::default_root()
+        .ssr(
+            Ssr::node(&bundle)
+                .endpoint(format!("http://127.0.0.1:{port}"))
+                .control_timeout(Duration::from_millis(50)),
+        )
+        .start()
+        .await
+        .unwrap();
+    drop(inertia);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("force-kill must release the SSR port");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+#[ignore = "requires Node 22 or newer"]
+async fn supervisor_restart_health_checks_remain_bounded() {
+    use inertia_axum::{SsrBackendKind, SsrHealth};
+    let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = reservation.local_addr().unwrap().port();
+    drop(reservation);
+    let root = std::env::current_dir()
+        .unwrap()
+        .join("target/ssr-fixtures")
+        .join(format!("bounded-restart-{}-{port}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let bundle = root.join("server.mjs");
+    let launches = root.join("launches");
+    std::fs::write(
+        &bundle,
+        format!(
+            r#"import http from 'node:http';import fs from 'node:fs';
+const file={launches:?};const count=fs.existsSync(file)?Number(fs.readFileSync(file))+1:1;fs.writeFileSync(file,String(count));
+const server=http.createServer((req,res)=>{{
+if(req.url==='/health'){{if(count===2)return;return res.end('ok');}}
+if(req.url==='/shutdown'){{res.end('ok');return server.close();}}
+if(req.url==='/render')return res.end('null');res.statusCode=404;res.end();}});
+server.listen({port},'127.0.0.1',()=>{{if(count===1)setTimeout(()=>process.exit(17),100);}});"#,
+            launches = launches.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let inertia = InertiaApp::default_root()
+        .ssr(
+            Ssr::node(&bundle)
+                .endpoint(format!("http://127.0.0.1:{port}"))
+                .control_timeout(Duration::from_millis(25))
+                .startup_timeout(Duration::from_millis(75)),
+        )
+        .start()
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(4), async {
+        loop {
+            if std::fs::read_to_string(&launches).ok().as_deref() == Some("3")
+                && inertia.ssr_health()
+                    == (SsrHealth::Ready {
+                        backend: SsrBackendKind::ManagedNode,
+                    })
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("a hanging restart probe must be killed and relaunched");
+    drop(inertia);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
 async fn managed_node_starts_renders_and_shuts_down() {
     let version = tokio::process::Command::new("node")
         .arg("--version")

@@ -22,6 +22,7 @@ pub(crate) struct SsrClient {
     endpoints: SsrEndpoints,
     render: Arc<Mutex<RenderService>>,
     raw: HttpClient,
+    control_timeout: std::time::Duration,
     max_response_bytes: usize,
 }
 
@@ -29,11 +30,15 @@ impl SsrClient {
     pub(crate) fn new(
         endpoints: SsrEndpoints,
         timeout: std::time::Duration,
+        control_timeout: std::time::Duration,
         max_concurrency: usize,
         max_response_bytes: usize,
     ) -> Result<Self, SsrStartError> {
         if timeout.is_zero() {
             return Err(SsrStartError::InvalidTimeout);
+        }
+        if control_timeout.is_zero() {
+            return Err(SsrStartError::InvalidControlTimeout);
         }
         if max_concurrency == 0 {
             return Err(SsrStartError::InvalidConcurrency);
@@ -59,6 +64,7 @@ impl SsrClient {
             endpoints,
             render: Arc::new(Mutex::new(BoxCloneService::new(render))),
             raw,
+            control_timeout,
             max_response_bytes,
         })
     }
@@ -98,12 +104,7 @@ impl SsrClient {
         let request = axum::http::Request::get(uri)
             .body(Full::new(Bytes::new()))
             .map_err(SsrFailure::request)?;
-        let response = self
-            .raw
-            .clone()
-            .oneshot(request)
-            .await
-            .map_err(SsrFailure::transport)?;
+        let response = self.control_request(request).await?;
         if response.status().is_success() {
             Ok(())
         } else {
@@ -118,11 +119,22 @@ impl SsrClient {
         let request = axum::http::Request::get(uri)
             .body(Full::new(Bytes::new()))
             .map_err(SsrFailure::request)?;
-        match self.raw.clone().oneshot(request).await {
-            Ok(response) if response.status().is_success() => Ok(()),
-            Err(_) => Ok(()),
-            Ok(response) => Err(SsrFailure::shutdown(response.status())),
+        let response = self.control_request(request).await?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(SsrFailure::shutdown(response.status()))
         }
+    }
+
+    async fn control_request(
+        &self,
+        request: axum::http::Request<RequestBody>,
+    ) -> Result<axum::http::Response<Incoming>, SsrFailure> {
+        tokio::time::timeout(self.control_timeout, self.raw.clone().oneshot(request))
+            .await
+            .map_err(|_| SsrFailure::Timeout)?
+            .map_err(SsrFailure::transport)
     }
 }
 
@@ -164,6 +176,7 @@ mod tests {
         SsrClient::new(
             SsrEndpoints::node(base).unwrap(),
             timeout,
+            timeout,
             concurrency,
             limit,
         )
@@ -202,6 +215,7 @@ mod tests {
         let base = server(app).await;
         let client = SsrClient::new(
             SsrEndpoints::vite(&base).unwrap(),
+            Duration::from_secs(1),
             Duration::from_secs(1),
             1,
             100,
@@ -353,15 +367,43 @@ mod tests {
         let endpoints = SsrEndpoints::node("http://127.0.0.1:13714/").unwrap();
         assert_eq!(endpoints.render, "http://127.0.0.1:13714/render");
         assert!(matches!(
-            SsrClient::new(endpoints.clone(), Duration::ZERO, 1, 1),
+            SsrClient::new(
+                endpoints.clone(),
+                Duration::ZERO,
+                Duration::from_secs(1),
+                1,
+                1,
+            ),
             Err(SsrStartError::InvalidTimeout)
         ));
         assert!(matches!(
-            SsrClient::new(endpoints.clone(), Duration::from_secs(1), 0, 1),
+            SsrClient::new(
+                endpoints.clone(),
+                Duration::from_secs(1),
+                Duration::ZERO,
+                1,
+                1,
+            ),
+            Err(SsrStartError::InvalidControlTimeout)
+        ));
+        assert!(matches!(
+            SsrClient::new(
+                endpoints.clone(),
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                0,
+                1,
+            ),
             Err(SsrStartError::InvalidConcurrency)
         ));
         assert!(matches!(
-            SsrClient::new(endpoints, Duration::from_secs(1), 1, 0),
+            SsrClient::new(
+                endpoints,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                1,
+                0,
+            ),
             Err(SsrStartError::InvalidResponseLimit)
         ));
     }

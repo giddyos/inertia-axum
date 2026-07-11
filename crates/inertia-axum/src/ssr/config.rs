@@ -6,6 +6,7 @@ use std::{
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:13714";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 const DEFAULT_MAX_CONCURRENCY: usize = 16;
 const DEFAULT_MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
@@ -43,6 +44,7 @@ pub struct Ssr {
     pub(crate) failure_mode: FailureMode,
     pub(crate) timeout: Duration,
     pub(crate) startup_timeout: Duration,
+    pub(crate) control_timeout: Duration,
     pub(crate) max_concurrency: usize,
     pub(crate) max_response_bytes: usize,
 }
@@ -60,6 +62,7 @@ impl Ssr {
             failure_mode: FailureMode::Fallback,
             timeout: DEFAULT_TIMEOUT,
             startup_timeout: DEFAULT_STARTUP_TIMEOUT,
+            control_timeout: DEFAULT_CONTROL_TIMEOUT,
             max_concurrency: DEFAULT_MAX_CONCURRENCY,
             max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         }
@@ -77,6 +80,7 @@ impl Ssr {
             failure_mode: FailureMode::Fallback,
             timeout: DEFAULT_TIMEOUT,
             startup_timeout: DEFAULT_STARTUP_TIMEOUT,
+            control_timeout: DEFAULT_CONTROL_TIMEOUT,
             max_concurrency: DEFAULT_MAX_CONCURRENCY,
             max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         }
@@ -142,6 +146,11 @@ impl Ssr {
     /// Overrides the startup timeout.
     pub fn startup_timeout(mut self, timeout: Duration) -> Self {
         self.startup_timeout = timeout;
+        self
+    }
+    /// Overrides the timeout for health and shutdown requests.
+    pub fn control_timeout(mut self, timeout: Duration) -> Self {
+        self.control_timeout = timeout;
         self
     }
     /// Overrides the maximum number of concurrent renders.

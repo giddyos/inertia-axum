@@ -79,6 +79,7 @@ pub(crate) async fn start_runtime(
         let client = SsrClient::new(
             SsrEndpoints::vite(dev_server)?,
             config.timeout,
+            config.control_timeout,
             config.max_concurrency,
             config.max_response_bytes,
         )?;
@@ -101,6 +102,7 @@ pub(crate) async fn start_runtime(
             let client = SsrClient::new(
                 SsrEndpoints::node(&endpoint)?,
                 config.timeout,
+                config.control_timeout,
                 config.max_concurrency,
                 config.max_response_bytes,
             )?;

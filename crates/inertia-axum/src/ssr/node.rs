@@ -192,26 +192,33 @@ pub(crate) async fn check_health_until_ready(
     #[allow(unused_assignments)]
     let mut last_error = None;
     loop {
-        match client.health().await {
-            Ok(()) => return Ok(()),
-            Err(error) => last_error = Some(error),
-        }
-        if tokio::time::Instant::now() >= deadline {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
             return Err(SsrStartError::HealthTimeout { source: last_error });
         }
-        tokio::time::sleep(DELAYS[attempt.min(DELAYS.len() - 1)]).await;
+        match tokio::time::timeout(remaining, client.health()).await {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(error)) => last_error = Some(error),
+            Err(_) => {
+                return Err(SsrStartError::HealthTimeout {
+                    source: Some(super::SsrFailure::Timeout),
+                });
+            }
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        tokio::time::sleep(DELAYS[attempt.min(DELAYS.len() - 1)].min(remaining)).await;
         attempt = attempt.saturating_add(1);
     }
 }
 
-async fn stop_child(child: &mut Child, client: &SsrClient) {
-    let _ = client.shutdown().await;
-    if tokio::time::timeout(std::time::Duration::from_secs(2), child.wait())
+async fn stop_child(child: &mut Child, client: &SsrClient, control_timeout: std::time::Duration) {
+    let _ = tokio::time::timeout(control_timeout, client.shutdown()).await;
+    if tokio::time::timeout(control_timeout, child.wait())
         .await
         .is_err()
     {
         let _ = child.start_kill();
-        let _ = child.wait().await;
+        let _ = tokio::time::timeout(control_timeout, child.wait()).await;
     }
 }
 
@@ -221,6 +228,7 @@ struct NodeLaunchConfig {
     bundle: PathBuf,
     working_directory: PathBuf,
     startup_timeout: std::time::Duration,
+    control_timeout: std::time::Duration,
 }
 
 fn relaunch(launch: &NodeLaunchConfig) -> Result<Child, SsrStartError> {
@@ -253,7 +261,7 @@ async fn supervise(
     loop {
         tokio::select! {
             shutdown = lifecycle.changed() => {
-                if shutdown.is_err() { stop_child(&mut child, &client).await; break; }
+                if shutdown.is_err() { stop_child(&mut child, &client, launch.control_timeout).await; break; }
             }
             result = child.wait() => {
                 tracing::error!(result = ?result, "Inertia SSR Node process exited");
@@ -299,6 +307,7 @@ pub(crate) async fn start_managed_node(
     let client = SsrClient::new(
         SsrEndpoints::node(&endpoint)?,
         config.timeout,
+        config.control_timeout,
         config.max_concurrency,
         config.max_response_bytes,
     )?;
@@ -309,10 +318,19 @@ pub(crate) async fn start_managed_node(
         child.stdout.take().expect("piped stdout exists"),
         child.stderr.take().expect("piped stderr exists"),
     );
-    if let Err(error) = check_health_until_ready(&client, config.startup_timeout).await {
-        let _ = child.start_kill();
-        let _ = child.wait().await;
-        return Err(error);
+    tokio::select! {
+        readiness = check_health_until_ready(&client, config.startup_timeout) => {
+            if let Err(error) = readiness {
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(config.control_timeout, child.wait()).await;
+                return Err(error);
+            }
+        }
+        status = child.wait() => {
+            return Err(SsrStartError::ProcessExitedDuringStartup {
+                status: status.map_err(|source| SsrStartError::NodeWait { source })?,
+            });
+        }
     }
     let (health_tx, health) = tokio::sync::watch::channel(SsrHealth::Ready {
         backend: SsrBackendKind::ManagedNode,
@@ -326,6 +344,7 @@ pub(crate) async fn start_managed_node(
             bundle,
             working_directory,
             startup_timeout: config.startup_timeout,
+            control_timeout: config.control_timeout,
         },
         health_tx.clone(),
         lifecycle_rx,
@@ -344,6 +363,7 @@ pub(crate) async fn start_managed_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Router, http::StatusCode, routing::get};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Fixture(PathBuf);
@@ -375,6 +395,66 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    async fn control_client(router: Router, control_timeout: std::time::Duration) -> SsrClient {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        SsrClient::new(
+            SsrEndpoints::node(&format!("http://{address}")).unwrap(),
+            std::time::Duration::from_secs(1),
+            control_timeout,
+            1,
+            1024,
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn hanging_health_respects_overall_startup_timeout() {
+        let client = control_client(
+            Router::new().route(
+                "/health",
+                get(|| async {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    StatusCode::OK
+                }),
+            ),
+            std::time::Duration::from_secs(1),
+        )
+        .await;
+        let error = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            check_health_until_ready(&client, std::time::Duration::from_millis(25)),
+        )
+        .await
+        .expect("startup deadline must remain bounded")
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            SsrStartError::HealthTimeout {
+                source: Some(super::super::SsrFailure::Timeout)
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_health_status_retains_classified_source() {
+        let client = control_client(
+            Router::new().route("/health", get(|| async { StatusCode::SERVICE_UNAVAILABLE })),
+            std::time::Duration::from_millis(20),
+        )
+        .await;
+        let error = check_health_until_ready(&client, std::time::Duration::from_millis(10))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            SsrStartError::HealthTimeout {
+                source: Some(super::super::SsrFailure::Transport(message))
+            } if message.contains("503")
+        ));
     }
 
     #[test]
