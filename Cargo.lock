@@ -193,6 +193,7 @@ dependencies = [
  "axum",
  "inertia-axum",
  "serde",
+ "serde_json",
  "tokio",
  "tower",
 ]

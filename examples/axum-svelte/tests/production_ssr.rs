@@ -1,16 +1,9 @@
 #![allow(missing_docs)]
 
-#[path = "../src/main.rs"]
-#[allow(dead_code)]
-mod example;
-
 use axum::{
     body::{to_bytes, Body},
-    http::Request,
-    routing::get,
-    Router,
+    http::{header::CONTENT_TYPE, Request, StatusCode},
 };
-use inertia_axum::{DynamicPage, RouterInertiaExt as _};
 use tower::ServiceExt as _;
 
 async fn require_node_22() {
@@ -35,29 +28,91 @@ async fn require_node_22() {
     );
 }
 
-#[tokio::test]
-#[ignore = "requires Node 22 or newer and built example frontend artifacts"]
-async fn production_example_consumes_manifest_and_official_ssr_bundle() {
-    require_node_22().await;
-    let inertia = example::production_inertia().await.unwrap();
-    let app = Router::new()
-        .route(
-            "/todos",
-            get(|| async { DynamicPage::new("Todos/Index").prop("todos", Vec::<String>::new()) }),
-        )
-        .inertia(inertia);
-    let response = app
-        .oneshot(Request::get("/todos").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    let html = String::from_utf8(
+async fn response_body(response: axum::response::Response) -> String {
+    String::from_utf8(
         to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap()
             .to_vec(),
     )
-    .unwrap();
+    .unwrap()
+}
+
+fn extract_data_page(html: &str) -> serde_json::Value {
+    let marker = "<script data-page=\"app\" type=\"application/json\">";
+    let start = html.find(marker).expect("missing Inertia page script") + marker.len();
+    let end = html[start..]
+        .find("</script>")
+        .map(|offset| start + offset)
+        .expect("unterminated Inertia page script");
+    serde_json::from_str(&html[start..end]).expect("invalid Inertia page JSON")
+}
+
+fn extract_module_script_path(html: &str) -> &str {
+    let marker = "<script type=\"module\" src=\"";
+    let start = html.find(marker).expect("missing client module script") + marker.len();
+    let end = html[start..]
+        .find('"')
+        .map(|offset| start + offset)
+        .expect("unterminated client module script path");
+    &html[start..end]
+}
+
+#[tokio::test]
+#[ignore = "requires a pnpm production build and Node 22 or newer"]
+async fn production_example_uses_manifest_ssr_bundle_and_static_assets() {
+    require_node_22().await;
+    let frontend = axum_svelte::frontend_root();
+    let manifest = frontend.join("../public/build/.vite/manifest.json");
+    let bundle = frontend.join("dist/ssr/app.js");
+    assert!(
+        manifest.is_file(),
+        "missing {}; run scripts/test-live-ssr.sh",
+        manifest.display()
+    );
+    assert!(
+        bundle.is_file(),
+        "missing {}; run scripts/test-live-ssr.sh",
+        bundle.display()
+    );
+
+    let inertia = axum_svelte::build_inertia().await.unwrap();
+    let app = axum_svelte::router(axum_svelte::seeded_state(), inertia);
+    let response = app
+        .clone()
+        .oneshot(Request::get("/todos").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response
+        .headers()
+        .get(CONTENT_TYPE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("text/html"));
+    let html = response_body(response).await;
     assert!(html.contains("data-server-rendered=\"true\""));
+    assert!(html.contains("data-page=\"app\""));
     assert!(html.contains("<h1>Todos</h1>"));
+    assert!(html.contains("Try automatic deferred props"));
     assert!(html.contains("/public/build/"));
+    assert_eq!(html.matches("id=\"app\"").count(), 1);
+
+    let page = extract_data_page(&html);
+    assert_eq!(page["component"], "Todos/Index");
+    assert_eq!(page["url"], "/todos");
+    assert_eq!(
+        page["props"]["todos"][0]["title"],
+        "Try automatic deferred props"
+    );
+    assert!(page["version"].is_string());
+
+    let client_asset = extract_module_script_path(&html);
+    assert!(client_asset.starts_with("/public/build/"));
+    let asset_response = app
+        .oneshot(Request::get(client_asset).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(asset_response.status(), StatusCode::OK);
 }
