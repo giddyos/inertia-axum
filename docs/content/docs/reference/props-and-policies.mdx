@@ -1,0 +1,96 @@
+---
+title: Props and policies
+description: Resolution timing, partial selection, merge metadata, once caching, infinite scroll, rescue behavior, and compatibility prop APIs.
+---
+
+Direct responses accept ordinary serializable values and composable `Prop<T>` values. Selection happens before a lazy resolver creates its future, so work for an unselected asynchronous prop is neither constructed nor polled.
+
+## Loading policies
+
+| Constructor | Initial/full visit | Matching partial reload | Notes |
+| --- | --- | --- | --- |
+| Ordinary value or `Prop::immediate(value)` | Included | Included unless excluded or omitted by `only` | Serialization is delayed until finalization, but the value is already constructed. |
+| `lazy(\|\| async { ... })` | Resolved | Resolved when selected | Uses standard selection with deferred future construction. |
+| `always(value)` | Included | Included even when not requested | The value is immediate, not asynchronous. |
+| `optional(\|\| async { ... })` | Omitted | Resolved only when explicitly named by `X-Inertia-Partial-Data` | Useful for expensive opt-in data. |
+| `defer(\|\| async { ... })` | Omitted and advertised in `deferredProps.default` | Resolved when explicitly requested | `.group("name")` changes the group. |
+| `once(\|\| async { ... })` | Resolved | Omitted when the client reports its cache key, unless explicitly requested | Composes standard lazy loading with once metadata. |
+
+All asynchronous helpers accept an owned `FnOnce() -> Future<Output = Result<T, E>>`, where the future is `Send + 'static` and `E` is a sendable error. Selected asynchronous props execute concurrently while response order remains deterministic. The current finalizer buffers up to 16 selected asynchronous resolutions.
+
+## Composable `Prop<T>` methods
+
+| Method | Effect |
+| --- | --- |
+| `.group(name)` | Changes the load policy to deferred in `name`. |
+| `.rescue()` | Omits a failed value, records its prop in `rescuedProps`, and calls the configured `ErrorHandler` or logs the failure. |
+| `.once()` | Adds client once-cache metadata. |
+| `.key(key)` | Uses a stable once key instead of the prop name. |
+| `.expires_at(time)` / `.expires_in(duration)` | Sets the client expiration timestamp. |
+| `.fresh_if(true)` | Forces the value to refresh instead of honoring the client's exclusion. |
+| `.append()` / `.append_at(path)` | Emits append merge metadata at the root or nested path. |
+| `.prepend()` / `.prepend_at(path)` | Emits prepend merge metadata. |
+| `.deep()` | Emits deep-merge metadata. |
+| `.match_on(path)` | Adds an identity path. With no existing merge policy, it selects root append merging. |
+| `.match_on_at(path, key)` | Adds `path.key` as the identity path. |
+| `.options()` | Borrows the resulting public `PropOptions`. |
+
+`PropOptions` exposes `load`, optional `once`, optional `merge`, and `rescue`. `LoadPolicy` and `MergePolicy` variants are public for inspection; `OncePolicy` and `ScrollPolicy` are configured through builders rather than public fields.
+
+## Merge and reset rules
+
+Merge metadata is emitted only when the value is present in that response. `X-Inertia-Reset` removes matching append, prepend, deep-merge, match, and scroll directives for the partial response; it does not remove the prop value itself.
+
+Nested merge paths are component prop paths. For example:
+
+```rust
+use inertia_axum::merge;
+
+let users = merge(vec!["Ada", "Grace"])
+    .append_at("data")
+    .match_on_at("data", "id");
+```
+
+Later merge selections replace earlier merge selections. Deep merging can carry multiple match paths; append, prepend, and scroll carry one.
+
+## Infinite scroll
+
+Normalize application pagination with `ScrollPage<T>` or implement `IntoScrollPage`:
+
+```rust
+use inertia_axum::{ScrollPage, scroll};
+
+let activity = scroll(
+    ScrollPage::new(vec!["created", "assigned"], 2)
+        .previous(1)
+        .next(3)
+        .page_name("activity"),
+)
+.match_on("id");
+```
+
+The serialized prop is an object with `data`. Page numbers and the query parameter name are emitted separately in `scrollProps`. Scroll also adds an append target at `<prop>.data`; `X-Inertia-Infinite-Scroll-Merge-Intent: prepend` switches that response to prepend.
+
+## Once behavior
+
+The default once key is the prop name. `.key(...)` decouples the cache identity from the prop name, and expiration is serialized as Unix epoch milliseconds. `X-Inertia-Except-Once-Props` lists keys the client already holds. An explicit partial request for the prop wins over that exclusion.
+
+## Rescue and error handling
+
+Without `.rescue()`, resolution or serialization failure makes the page finalization fail with `InertiaError::Prop`. A rescued failure is omitted from `props`, added to `rescuedProps`, and reported through `InertiaAppBuilder::error_handler`. Rescue does not supply a fallback value.
+
+## Shared props
+
+Fields produced by the application `Share` provider use the same policies. Route-owned top-level roots win over shared roots. Standard and lazy shared props are treated as always present on partial responses; optional and deferred policies retain their explicit selection behavior. Dotted shared keys are expanded into nested objects.
+
+## Compatibility props
+
+`InertiaProps` is an alias for `ScopedInertiaProps<'static>`, the synchronous lazy compatibility container. It provides:
+
+- `new`, `with_capacity`, `value`, and `lazy`;
+- `optional`, `always`, `defer`, and `defer_group`;
+- `once`, `once_with_key`, `optional_once`, `defer_once`, and `defer_group_once`.
+
+`ScopedInertiaProps<'a>` may borrow short-lived data when it is rendered immediately through the explicit compatibility path. `Inertia<T>`, `InertiaPageBuilder`, and `PageMetadata` also expose manual methods for all page-object flags and metadata. Their `defer`, `rescue`, and `share` methods declare protocol metadata; they do not install an asynchronous resolver, catch an error, or register global shared data.
+
+Prefer direct typed pages for new handlers. See [partial reloads](/docs/guides/partial-reloads), [deferred and lazy props](/docs/guides/deferred-and-lazy-props), and [merge, scroll, once, and reset](/docs/guides/merge-scroll-once-and-reset).

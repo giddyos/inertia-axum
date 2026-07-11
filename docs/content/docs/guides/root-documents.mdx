@@ -1,0 +1,87 @@
+---
+title: Root documents
+description: Use the built-in root, startup-compiled marker HTML, Askama, or a custom renderer.
+keywords:
+  - root template
+  - Askama
+---
+
+The root renderer creates complete HTML for an initial browser request. Inertia JSON
+visits bypass it. CSR and SSR use the same selected root.
+
+## Use the built-in root
+
+No template file is required:
+
+```rust
+let inertia = InertiaApp::vite("frontend").build()?;
+```
+
+The built-in renderer writes document metadata, configured asset tags, Inertia head
+output, and the CSR or SSR mount. It is the smallest and fastest setup when the
+document needs no application-specific fields.
+
+## Compile a marker template at startup
+
+Create `templates/app.html`:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- inertia:assets -->
+    <!-- inertia:head -->
+  </head>
+  <body><!-- inertia:mount --></body>
+</html>
+```
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .root_template("templates/app.html")
+    .build()?;
+```
+
+Each marker is required exactly once. The file is read, validated, and split into
+static segments during startup; requests never reread or reparse it. Restart the
+application after editing the file. Use `.root_template_source(include_str!(...))`
+to embed the same HTML in the binary.
+
+## Compile a typed Askama root
+
+Enable `askama`:
+
+```toml
+inertia-axum = {
+  version = "1.0.0-alpha.1",
+  features = ["askama"]
+}
+```
+
+Implement `AskamaRoot` and expose `AskamaRootContext` to the concrete template. In
+the template, use `safe` only for the adapter's three trusted fragments:
+
+```html
+{{ inertia.assets|safe }}
+{{ inertia.head|safe }}
+{{ inertia.mount|safe }}
+```
+
+Keep Askama's normal escaping for application strings and user content. Use
+`inertia.has_ssr_head` to avoid emitting a fallback `<title>` when SSR supplied one.
+The complete, runnable implementation is in
+[`examples/axum-askama`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-askama).
+
+## Selection and SSR behavior
+
+`root`, `root_template`, `root_template_source`, and `askama_root` use
+last-call-wins behavior. Successful SSR supplies head fragments and a rendered body;
+CSR supplies an empty head and a mount containing script-safe initial page JSON.
+
+The adapter escapes `<`, `>`, `&`, closing script text, U+2028, and U+2029 in the
+embedded page payload. Do not serialize a page manually into the root.
+
+Use [Custom root document](/docs/recipes/custom-root-document) for a marker recipe
+or [Custom RootView](/docs/advanced/custom-root-view) for another template engine.

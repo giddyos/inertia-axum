@@ -1,0 +1,78 @@
+---
+title: Server-side rendering
+description: Render initial Inertia page visits through managed Node or an external SSR server, with safe CSR fallback.
+keywords:
+  - SSR
+  - server-side rendering
+  - Node
+  - CSR fallback
+---
+
+Add server-rendered markup to initial browser visits while keeping the same Axum
+routes and Inertia page responses. `inertia-axum` can supervise a Node process or
+connect to an SSR server managed outside the Rust application.
+
+## Prerequisites
+
+- Enable the non-default `ssr` feature.
+- Use Node.js 22 or newer for managed Node mode.
+- Build a client manifest and SSR bundle when using Vite in production.
+
+```toml
+[dependencies]
+inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
+```
+
+## Start managed SSR
+
+The string passed to `.ssr(...)` is shorthand for `Ssr::node(...)`. With
+`InertiaApp::vite("frontend")`, a relative bundle path is resolved from that
+Vite root.
+
+```rust
+use inertia_axum::prelude::*;
+
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .start()
+    .await?;
+```
+
+SSR startup is asynchronous. Once `.ssr(...)` is configured, use
+`.start().await`; `.build()` returns a configuration error rather than starting a
+process implicitly.
+
+## What gets rendered
+
+SSR is attempted for an eligible page response only when all of these are true:
+
+- The request is an initial browser request, not an `X-Inertia: true` visit.
+- The method is `GET`.
+- The route policy enables SSR.
+- A page response reaches the Inertia finalizer.
+
+Inertia JSON visits, write requests, and ordinary Axum responses do not invoke the
+SSR backend. The final root document—built-in, marker-based, Askama, or
+custom—receives either the SSR head and body or the normal CSR mount.
+
+## Defaults
+
+Configured SSR is enabled for eligible routes by default. A failed render falls
+back to a usable CSR document unless `.strict()` is selected. The default render
+timeout is 3 seconds, maximum concurrency is 16, and maximum response size is
+8 MiB.
+
+Read [Fallback and strict mode](/docs/ssr/fallback-and-strict-mode) before choosing
+strict mode, and review all limits in
+[Health and operations](/docs/ssr/health-and-operations).
+
+## Choose a backend
+
+- [Managed Node](/docs/ssr/managed-node) starts, monitors, restarts, and shuts down
+  one Node child with the Rust application.
+- [External server](/docs/ssr/external-server) connects to a separately supervised
+  SSR service.
+
+Next, create both frontend outputs in
+[Frontend build](/docs/ssr/frontend-build), then apply route-specific behavior in
+[Route policies](/docs/ssr/route-policies).

@@ -1,0 +1,40 @@
+---
+title: Examples
+description: Every maintained inertia-axum example, its feature set, intended lesson, command, and production limitations.
+---
+
+Choose the smallest example that demonstrates the behavior you need. Browser examples contain a frontend; typed fixtures are intentionally in-process test applications.
+
+## Browser applications
+
+| Example | Adapter features | What it teaches | Run from the repository root |
+| --- | --- | --- | --- |
+| [`axum-minimal`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-minimal) | Defaults: `macros`, `vite` | Smallest router, Axum state, `page!`, marker root, production manifest, initial HTML and JSON visits. | `cargo run -p axum-minimal` |
+| [`axum-askama`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-askama) | Defaults plus `askama` | Typed application root compiled by Askama with a minimal Vue page. | Build `examples/axum-askama/frontend`, then `cargo run -p axum-askama`. |
+| [`axum-svelte`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-svelte) | Defaults plus `ssr` | Svelte 5, managed production SSR, deferred UI, validation, route opt-out, and conditional SSR. | Build `svelte-app`, then `cargo run -p axum-svelte`. |
+| [`axum-react`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-react) | Defaults plus `ssr` | React 19 version of the same production SSR, deferred, form, and route-policy contract. | Build `react-app`, then `cargo run -p axum-react`. |
+| [`axum-vue`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-vue) | Defaults plus `ssr` | Vue 3 version of the same production SSR, deferred, form, and route-policy contract. | Build `vue-app`, then `cargo run -p axum-vue`. |
+
+The three framework SSR examples produce both a client manifest and `dist/ssr/app.js`. Their `production_ssr.rs` tests exercise the built application through Axum, while `scripts/test-live-ssr.sh` verifies the real managed Node lifecycle and static assets.
+
+The framework applications use `MemoryTransient` and in-memory Todo state to remain deterministic. Replace both with production storage.
+
+## Typed in-process examples
+
+| Example | What it teaches | Test command |
+| --- | --- | --- |
+| [`todo`](https://github.com/giddyos/inertia-axum/tree/main/examples/todo) | Canonical `InertiaPage`, generated keys, deferred stats, custom form validation, redirect errors, flash, and `TestApp`. | `cargo test -p inertia-axum-example-todo` |
+| [`incident-board`](https://github.com/giddyos/inertia-axum/tree/main/examples/incident-board) | Deferred groups, rescued failures, append/scroll metadata, match paths, error bags, flash, and external locations. | `cargo test -p inertia-axum-example-incident-board` |
+| [`observatory`](https://github.com/giddyos/inertia-axum/tree/main/examples/observatory) | Once caching, optional selection, deep merge, scroll prepend/reset, encrypted history, rescued props, error bags, and redacted old input. | `cargo test -p inertia-axum-example-observatory` |
+
+These three crates return real pending page responses through a configured Axum router, but they do not bind browser servers. Their tests are the canonical copyable source for typed partial requests and page metadata assertions.
+
+## Which example should I copy?
+
+- First Axum/Inertia request: start with `axum-minimal` and [quick start](/docs/getting-started/quick-start).
+- Framework client setup: choose [Svelte](/docs/frontend/svelte), [React](/docs/frontend/react), or [Vue](/docs/frontend/vue), then compare its browser example.
+- Typed handlers and tests: use `todo` with [testing an application](/docs/recipes/testing-an-application).
+- Production SSR: use the matching framework example and the [frontend SSR build](/docs/ssr/frontend-build).
+- Advanced protocol policies: treat `incident-board` and `observatory` as focused fixtures, not starter architectures.
+
+All examples are unpublished workspace members. Because most are not workspace default members, run their explicit package commands or use `cargo test --workspace` when validating everything.

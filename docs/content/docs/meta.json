@@ -1,0 +1,15 @@
+{
+  "title": "inertia-axum",
+  "pages": [
+    "index",
+    "getting-started",
+    "concepts",
+    "guides",
+    "ssr",
+    "frontend",
+    "recipes",
+    "advanced",
+    "reference",
+    "migrations"
+  ]
+}

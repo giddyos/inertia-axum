@@ -1,0 +1,149 @@
+---
+title: Macros
+description: Syntax, generated APIs, supported attributes, validation backends, and compile-time constraints for inertia-axum macros.
+---
+
+Use `page!` for a small dynamic response. Use derives when the page, prop, or form shape should be checked by Rust.
+
+## `page!`
+
+`page!` is an unconditional declarative macro; it does not require the `macros` Cargo feature. It creates a `DynamicPage` and accepts identifier keys with explicit or shorthand values.
+
+```rust
+use inertia_axum::prelude::*;
+
+async fn home() -> DynamicPage {
+    let greeting = "Hello";
+
+    page!("Home", {
+        greeting,
+        timestamp: 42_u64,
+    })
+}
+```
+
+Values may also be `Prop<T>` policies such as `defer(...)`. Keys must be Rust identifiers; use `DynamicPage::prop("auth.user", value)` when a string or dotted key is required.
+
+The returned response still requires an installed `InertiaApp`. Without the Inertia layer, a pending page returns an actionable internal-server-error response.
+
+## Derive availability
+
+The `macros` feature, enabled by default, reexports all three derives:
+
+| Derive | Generated contract |
+| --- | --- |
+| `InertiaPage` | `IntoInertiaProps`, `InertiaPage`, Axum `IntoResponse`, a public `COMPONENT`, and one uppercase `PropKey<T>` constant per included field. |
+| `InertiaProps` | Field-by-field `IntoInertiaProps` conversion for shared or nested typed prop structs. |
+| `InertiaForm` | The local `Validate` implementation used by `Validated<T>`. |
+
+The proc-macro crate discovers the actual Cargo name of `inertia-axum`, so derives also work when the runtime dependency is renamed.
+
+## `InertiaPage`
+
+Every typed page needs a non-empty component name.
+
+```rust
+use inertia_axum::prelude::*;
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct User {
+    id: u64,
+    display_name: String,
+}
+
+#[derive(InertiaPage)]
+#[inertia(
+    component = "Users/Show",
+    rename_all = "camelCase",
+    encrypt_history
+)]
+struct UsersShowPage {
+    user: User,
+    audit_note: String,
+}
+```
+
+This derive generates `UsersShowPage::COMPONENT`, `UsersShowPage::USER`, and `UsersShowPage::AUDIT_NOTE`. `AUDIT_NOTE` carries the serialized name `auditNote`. A field of type `Prop<T>` generates a `PropKey<T>`, not `PropKey<Prop<T>>`.
+
+Container attributes:
+
+| Attribute | Meaning |
+| --- | --- |
+| `component = "..."` | Required frontend component name. |
+| `rename_all = "camelCase"` | Renames every non-skipped field. Also accepts `snake_case`, `kebab-case`, and `PascalCase`. |
+| `encrypt_history` | Sets the page's encrypted-history flag. |
+| `clear_history` | Clears existing encrypted browser history. |
+| `preserve_fragment` | Preserves the original URL fragment. |
+
+Field attributes:
+
+| Attribute | Meaning |
+| --- | --- |
+| `rename = "wireName"` | Overrides this field's serialized prop name. |
+| `skip` | Omits the field from props and generated key constants. |
+
+`skip` and `rename` cannot be combined. The serialized name `errors` is reserved for validation. Derives accept only structs with named fields, and the derived value must be `Send + 'static` when converted into a pending response.
+
+## `InertiaProps`
+
+Use this derive for a typed `Share::Props` object or another field-by-field prop source.
+
+```rust
+use inertia_axum::prelude::*;
+
+#[derive(InertiaProps)]
+#[inertia(rename_all = "camelCase")]
+struct SharedData {
+    app_name: &'static str,
+    signed_in: bool,
+}
+```
+
+It supports `rename_all`, field `rename`, and field `skip`. It does not accept component or history attributes and does not generate `COMPONENT` or `PropKey` constants.
+
+## `InertiaForm`
+
+The derive supplies validation metadata to `Validated<T>`. Custom validation is the smallest dependency-free option:
+
+```rust
+use inertia_axum::{Errors, prelude::*};
+use serde::Deserialize;
+
+#[derive(Deserialize, InertiaForm)]
+#[inertia(
+    validate_with = "validate_signup",
+    error_bag = "signup",
+    old_input,
+    redact = "password"
+)]
+struct Signup {
+    email: String,
+    password: String,
+}
+
+fn validate_signup(input: &Signup) -> Result<(), Errors> {
+    input
+        .email
+        .contains('@')
+        .then_some(())
+        .ok_or_else(|| Errors::field("email", "Enter a valid email"))
+}
+```
+
+Container attributes:
+
+| Attribute | Meaning |
+| --- | --- |
+| `validate_with = "path"` | Calls a function with `&self` and expects `Result<(), Errors>`. |
+| `validator = "garde"` | Calls `::garde::Validate`; add Garde directly to the application. |
+| `validator = "validator"` | Calls `::validator::Validate`; add Validator directly to the application. |
+| `error_bag = "name"` | Derive-level fallback bag. An `X-Inertia-Error-Bag` request header wins. |
+| `old_input` | Includes non-redacted fields as `oldInput` after validation redirects. Without it, no old input is retained. |
+| `redact = "a,b"` | Excludes the named fields from old input. May be repeated. |
+
+Fields may use `#[inertia(redact)]` or `#[inertia(sensitive)]` instead of the container list. Every redacted name must exist. Serialization failures for individual old-input fields are omitted rather than failing the redirect.
+
+Only one validator backend may be configured. With no `validator` or `validate_with`, the generated validation method succeeds.
+
+See [forms and validation](/docs/guides/forms-and-validation) for redirect behavior and [Cargo features](/docs/reference/cargo-features) for backend dependencies.

@@ -1,0 +1,98 @@
+---
+title: Cargo features
+description: Default features, optional integrations, dependency implications, and supported feature combinations.
+---
+
+`inertia-axum` enables `macros` and `vite` by default. Adding another feature does not disable those defaults.
+
+```toml
+[dependencies]
+inertia-axum = "=1.0.0-alpha.1"
+```
+
+## Feature table
+
+| Feature | Default | Enables | Public effect |
+| --- | ---: | --- | --- |
+| `macros` | Yes | `inertia-axum-macros` | Reexports the `InertiaPage`, `InertiaProps`, and `InertiaForm` derives. The declarative `page!` macro is available without this feature. |
+| `vite` | Yes | `sha2`, `tower-http` with `fs` | Adds `InertiaApp::vite`, Vite builder methods, manifest hashing, static build serving, `StaticAssetService`, and `AssetProvider::static_service`. |
+| `askama` | No | Askama 0.16 with `config`, `derive`, and `std` | Reexports `askama`; adds `AskamaRoot`, `AskamaRootContext`, and `.askama_root(...)`. |
+| `cookies` | No | `cookie` with `secure`, `sha2` | Adds encrypted `CookieTransient` storage and works independently of `vite`. |
+| `tower-sessions` | No | `tower-sessions` | Adds `TowerSessionTransient` and the Tower Session projection on `TransientRequest`. |
+| `ssr` | No | Hyper client support, `http-body-util`, Tokio process/runtime support, and Tower timeout/concurrency/load-shed utilities | Adds managed and external SSR, route policies, health models, `.ssr(...)`, and asynchronous `.start()`. |
+| `garde` | No | No dependency | Marker used only by the repository's integration-test matrix. It is not required to derive a Garde-backed `InertiaForm`; the application dependency on `garde` is what generated code uses. |
+| `validator` | No | No dependency | Marker used only by the repository's integration-test matrix. It is not required to derive a Validator-backed `InertiaForm`; the application dependency on `validator` is what generated code uses. |
+| `test-support` | No | No dependency | Reserved marker currently used by `inertia-axum-test`; it adds no API or runtime behavior. |
+
+## Common combinations
+
+Use direct pages and a custom asset pipeline with no optional dependencies:
+
+```toml
+inertia-axum = {
+  version = "=1.0.0-alpha.1",
+  default-features = false
+}
+```
+
+`DynamicPage`, `page!`, custom `AssetProvider` implementations, built-in and marker roots, forms, memory transient state, and compatibility APIs remain available. Derives and Vite helpers do not.
+
+Add derives without Vite:
+
+```toml
+inertia-axum = {
+  version = "=1.0.0-alpha.1",
+  default-features = false,
+  features = ["macros"]
+}
+```
+
+Use the default Vite integration with SSR:
+
+```toml
+inertia-axum = {
+  version = "=1.0.0-alpha.1",
+  features = ["ssr"]
+}
+```
+
+Use a typed Askama root:
+
+```toml
+inertia-axum = {
+  version = "=1.0.0-alpha.1",
+  features = ["askama"]
+}
+```
+
+## Validation dependencies
+
+The `InertiaForm` derive emits calls to the validation crate named by its attribute. Add that crate directly. The `garde` and `validator` features on `inertia-axum` are not required to use either derive integration and do not supply those crates.
+
+```toml
+[dependencies]
+inertia-axum = "=1.0.0-alpha.1"
+garde = { version = "0.22", features = ["derive"] }
+```
+
+The same rule applies to `validator = "0.20"` with its `derive` feature. Custom validation through `validate_with` also needs neither marker.
+
+## Encrypted cookies without Vite
+
+Cookie transient storage can be selected in a minimal, no-Vite build:
+
+```toml
+inertia-axum = {
+  version = "=1.0.0-alpha.1",
+  default-features = false,
+  features = ["cookies"]
+}
+```
+
+The adapter hashes the supplied key material with SHA-512 before constructing the cookie key. Supply at least 32 random bytes and keep the key stable across all application instances that must read one another's cookies. See [transient storage](/docs/guides/transient-storage) for cookie attributes and deployment tradeoffs.
+
+## Test crate feature unification
+
+`inertia-axum-test` depends on `inertia-axum` with its defaults plus `ssr` and `test-support`. Cargo unifies those features for the test build. This makes SSR test helpers available even if the application dependency does not select `ssr` in its normal dependency set.
+
+See [configuration](/docs/reference/configuration) for the runtime defaults introduced by each integration.

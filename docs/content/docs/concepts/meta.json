@@ -1,0 +1,11 @@
+{
+  "title": "Concepts",
+  "pages": [
+    "index",
+    "how-inertia-works",
+    "application-and-router",
+    "page-responses",
+    "props",
+    "shared-data"
+  ]
+}

@@ -1,0 +1,134 @@
+---
+title: Testing API
+description: Complete inertia-axum-test request, response, page, cookie, redirect, deferred-prop, and fake-SSR API.
+---
+
+`inertia-axum-test` sends real requests through an Axum `Router` without binding an application socket. It retains cookies and followed redirect history between requests.
+
+```toml
+[dev-dependencies]
+inertia-axum-test = "=1.0.0-alpha.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Start a test application
+
+```rust
+use inertia_axum::prelude::*;
+use inertia_axum_test::TestApp;
+
+fn test_app(router: axum::Router) -> TestApp {
+    TestApp::new(router)
+}
+```
+
+The router must already have its `InertiaApp` installed. Configure `MemoryTransient` when the test uses flash, validation errors, or old input.
+
+## `TestApp`
+
+| Method | Result |
+| --- | --- |
+| `TestApp::new(router)` | Stateful in-process client. |
+| `.with_version(value)` | Default `X-Inertia-Version` for later Inertia requests. |
+| `.get(uri)` | Ordinary initial-page GET builder. |
+| `.inertia_get(uri)` | Inertia GET builder. |
+| `.inertia_post(uri)` | Inertia POST builder. |
+| `.inertia_put(uri)` | Inertia PUT builder. |
+| `.inertia_patch(uri)` | Inertia PATCH builder. |
+| `.inertia_delete(uri)` | Inertia DELETE builder. |
+| `.history()` | Destinations followed through `TestResponse::follow`, in order. |
+
+Each `TestApp` stores response cookies by name and sends them on subsequent requests. This exercises encrypted-cookie transient storage as well as ordinary application cookies.
+
+## `TestRequest`
+
+| Method | Effect |
+| --- | --- |
+| `.only(PropKey<T>)` | Sets the typed partial component and includes one prop. |
+| `.except(PropKey<T>)` | Sets the component and excludes one prop. |
+| `.reset(PropKey<T>)` | Requests reset metadata for one prop. |
+| `.except_once(key)` | Reports one held once-cache key. |
+| `.scroll_intent(intent)` | Sends append or prepend scroll intent. |
+| `.error_bag(name)` | Selects a validation error bag. |
+| `.version(value)` | Overrides the default asset version. |
+| `.header(name, value)` | Adds an arbitrary header. The name argument is `&'static str`. |
+| `.json(value)` | Serializes an `application/json` body. |
+| `.form(&[(key, value)])` | Encodes an `application/x-www-form-urlencoded` body. |
+| `.send().await` | Runs the request through Tower and buffers the response. |
+
+Typed `only`, `except`, and `reset` calls on one request must all belong to the same generated component; mixing components panics with a focused assertion.
+
+## `TestResponse`
+
+| Method | Assertion or value |
+| --- | --- |
+| `.status()` / `.headers()` / `.body()` | Borrows the buffered HTTP response data. |
+| `.assert_ok()` | Consumes and returns a `200 OK` response. |
+| `.assert_html()` | Asserts a `text/html` content type. |
+| `.assert_page::<P>()` | Parses a 200 JSON page and checks `P::COMPONENT`; returns `TestPage`. |
+| `.assert_html_page::<P>()` | Extracts the built-in CSR page script from initial HTML and checks the component. |
+| `.assert_see_other(url)` | Asserts a `303` `Location` redirect. |
+| `.assert_location_conflict(url)` | Asserts `409` and `X-Inertia-Location`. |
+| `.assert_version(value)` | Parses the JSON page and accepts string or numeric expected versions. |
+| `.follow().await` | Follows `Location` or `X-Inertia-Location` with GET, retaining whether the client was an Inertia client. |
+| `.assert_ssr()` / `.assert_csr()` | Detects the `data-server-rendered="true"` marker in HTML. |
+| `.assert_ssr_head_contains(text)` | Finds expected SSR head markup in HTML. |
+
+`assert_html_page` targets the adapter's CSR script shape. For an SSR response, use SSR assertions and inspect the recorded page sent to `TestSsr` when page-level details matter.
+
+## `TestPage`
+
+| Method | Assertion or value |
+| --- | --- |
+| `.value()` | Complete owned page JSON. |
+| `.prop(key)` | Deserializes a typed top-level prop. |
+| `.assert_missing(key)` | Prop was not serialized. |
+| `.flash(key)` / `.assert_no_flash(key)` | Reads or rejects one flash value. |
+| `.assert_error(path)` | Follows a dotted path below `props.errors`. |
+| `.assert_appends(key)` / `.assert_prepends(key)` | Merge direction exists at the root or nested path. |
+| `.assert_deep_merges(key)` | Deep-merge metadata exists. |
+| `.assert_matches_on(key, field)` | Qualified identity path exists. |
+| `.assert_rescued(key)` | Prop is listed in `rescuedProps`. |
+| `.assert_deferred(group, key)` | Group advertises the prop. |
+| `.assert_once(cache_key, key)` | Once key describes the typed prop. |
+| `.assert_reset(key)` | All merge and scroll directives for the prop were suppressed. |
+| `.assert_scroll(key)` | Scroll metadata exists. |
+| `.assert_encrypts_history()` | Page enables encrypted history. |
+| `.assert_version(value)` | String or numeric page version matches. |
+
+## Fake SSR with `TestSsr`
+
+`TestSsr` implements Node-compatible `/health`, `/render`, and `/shutdown` endpoints on an ephemeral loopback port.
+
+```rust
+use inertia_axum_test::{TestSsr, TestSsrDocument};
+
+# async fn example() {
+let ssr = TestSsr::builder()
+    .render(
+        "Todos/Index",
+        TestSsrDocument::new(
+            ["<title>Todos</title>".to_owned()],
+            "<div id=\"app\" data-server-rendered=\"true\">Todos</div>",
+        ),
+    )
+    .start()
+    .await;
+
+let config = ssr.config();
+# let _ = config;
+# }
+```
+
+Public fake-SSR APIs:
+
+- `TestSsr::builder`, `TestSsrBuilder::render`, and `start` configure the server.
+- `config()` returns `Ssr::external(endpoint)`; it can be further changed with normal SSR builders.
+- `endpoint()` exposes the loopback URL.
+- `calls()` returns `TestSsrCall` records with `component()`, `url()`, and the full `page()`.
+- `assert_render_count`, `assert_rendered_component`, and `assert_not_rendered_component` verify routing policy.
+- Dropping `TestSsr` aborts its server task.
+
+The fake server returns 404 for an unconfigured component, which exercises normal SSR fallback or strict failure. It does not replace the repository's managed-Node lifecycle and live Vite production tests.
+
+For complete examples, see [testing an application](/docs/recipes/testing-an-application) and the [Todo example](/docs/reference/examples#typed-in-process-examples).

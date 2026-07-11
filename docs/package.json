@@ -1,0 +1,42 @@
+{
+  "name": "inertia-axum-docs",
+  "version": "1.0.0-alpha.1",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",
+    "docs:check-links": "node scripts/check-links.mjs",
+    "postinstall": "fumadocs-mdx"
+  },
+  "dependencies": {
+    "cnfast": "0.0.8",
+    "fumadocs-core": "16.11.3",
+    "fumadocs-mdx": "15.1.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.11.3",
+    "lucide-react": "1.24.0",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.2",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.10",
+    "github-slugger": "2.0.0",
+    "postcss": "8.5.16",
+    "tailwindcss": "4.3.2",
+    "typescript": "6.0.3"
+  }
+}

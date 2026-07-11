@@ -1,0 +1,92 @@
+---
+title: Deferred and lazy props
+description: Delay expensive data, group follow-up requests, and recover from resolver failures.
+keywords:
+  - deferred props
+  - lazy props
+  - rescued props
+---
+
+Use `defer` to return the first page quickly and let the Inertia client request data
+after it renders. Use `lazy` when a value should load on ordinary visits but still
+benefit from selection-before-execution.
+
+## Defer expensive data
+
+This is reduced from the tested `todo` example:
+
+```rust
+use inertia_axum::prelude::*;
+use std::convert::Infallible;
+
+#[derive(InertiaPage)]
+#[inertia(component = "Todos/Index")]
+struct TodosPage {
+    todos: Vec<Todo>,
+    stats: Prop<TodoStats>,
+}
+
+async fn index() -> TodosPage {
+    TodosPage {
+        todos: load_todos().await,
+        stats: defer(|| async {
+            Ok::<_, Infallible>(calculate_stats().await)
+        }),
+    }
+}
+# struct Todo;
+# struct TodoStats;
+# async fn load_todos() -> Vec<Todo> { vec![] }
+# async fn calculate_stats() -> TodoStats { TodoStats }
+```
+
+The initial page advertises `stats` in `deferredProps.default` but omits its value.
+The v3 client automatically makes the matching partial request. Render the client
+adapter's `<Deferred>` fallback until the prop arrives.
+
+## Group follow-up requests
+
+Props in the same group load together. Change the default group with `.group(...)`:
+
+```rust
+let page = page!("Dashboard", {
+    permissions: defer(load_permissions).group("auth"),
+    teams: defer(load_teams).group("auth"),
+    analytics: defer(load_analytics).group("analytics"),
+});
+# async fn load_permissions() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
+# async fn load_teams() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
+# async fn load_analytics() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
+```
+
+Choose groups around UI boundaries that can reveal together. Each group creates a
+follow-up request, so avoid one group per field.
+
+## Rescue a failure
+
+By default, a resolver error becomes a generic `500`. Add `.rescue()` when the page
+can remain useful without the value:
+
+```rust
+let activity = defer(load_activity)
+    .group("sidebar")
+    .rescue();
+# async fn load_activity() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
+```
+
+A rescued failure omits the prop and adds its key to `rescuedProps`. The client
+`<Deferred>` component can render its rescue state. The application-wide
+`ErrorHandler` receives the identified failure; without one, the adapter logs it
+with `tracing`.
+
+## Lazy, optional, and deferred
+
+- `lazy` resolves on an ordinary selection, including the initial visit.
+- `optional` resolves only when a matching partial request explicitly names it.
+- `defer` advertises a follow-up group and is omitted initially.
+
+All three accept an owned `FnOnce` resolver. Unselected resolvers are not called;
+selected asynchronous resolvers run concurrently with a limit of 16.
+
+Test grouping and rescue metadata with [Testing](/docs/guides/testing), and see
+[Props and policies](/docs/reference/props-and-policies) for every modifier.

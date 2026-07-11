@@ -1,0 +1,17 @@
+{
+  "title": "Guides",
+  "pages": [
+    "vite-and-assets",
+    "typed-pages-and-props",
+    "partial-reloads",
+    "deferred-and-lazy-props",
+    "merge-scroll-once-and-reset",
+    "forms-and-validation",
+    "redirects-flash-and-old-input",
+    "transient-storage",
+    "root-documents",
+    "testing",
+    "cargo-inertia",
+    "deployment"
+  ]
+}

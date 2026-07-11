@@ -1,0 +1,165 @@
+---
+title: Compatibility APIs
+description: Migrate explicit inertia-axum rendering, synchronous props, shared registries, and version middleware without mistaking metadata for resolver behavior.
+keywords:
+  - compatibility
+  - InertiaRequest
+  - InertiaPageBuilder
+  - VersionLayer
+---
+
+The compatibility APIs preserve the explicit rendering path used by older
+applications during the 1.0 alpha migration. They need no optional Cargo feature,
+but they are not the recommended starting point for new handlers. Prefer direct
+`DynamicPage` or derived `InertiaPage` responses, typed `Share`, and one
+`InertiaApp` layer.
+
+## Exact `compat` exports
+
+`inertia_axum::compat` is an import grouping for exactly these seven items:
+
+| Export | Purpose |
+| --- | --- |
+| `Inertia<T>` | Framework-neutral page value with synchronous `IntoPageProps` conversion. |
+| `InertiaPageBuilder` | Builder returned by `Inertia::page(component)`. |
+| `InertiaProps` | Alias for `ScopedInertiaProps<'static>`. |
+| `ScopedInertiaProps<'props>` | Synchronous lazy props container whose resolvers may borrow for immediate rendering. |
+| `InertiaRequest` | Infallible Axum extractor for explicit page, redirect, and location finalization. |
+| `SharedProps` | Cloneable registry of synchronous fixed and request-aware shared values. |
+| `VersionLayer` | Standalone static or dynamic asset-version middleware. |
+
+The same types remain available from their root or `inertia_axum::axum` paths.
+The grouping does not enable a separate runtime or alter their behavior.
+
+## Keep an explicit route working
+
+An unmigrated handler can continue to extract `InertiaRequest` and call
+`render`. The HTML callback is used only for an initial non-Inertia response;
+Inertia visits receive JSON.
+
+```rust
+use axum::{response::{Html, Response}, routing::get, Router};
+use inertia_axum::{
+    axum::InertiaError,
+    compat::{Inertia, InertiaRequest},
+};
+use serde_json::json;
+
+async fn dashboard(request: InertiaRequest) -> Result<Response, InertiaError> {
+    request.render(
+        Inertia::response("Dashboard", json!({ "ready": true })),
+        |context| Html(format!(
+            "<!doctype html><html><body><script data-page=\"app\" \
+             type=\"application/json\">{}</script><div id=\"app\"></div></body></html>",
+            context.data_page(),
+        )),
+    )
+}
+
+let app = Router::new().route("/dashboard", get(dashboard));
+# let _: Router = app;
+```
+
+`HtmlResponseContext::data_page()` is already escaped for an HTML script
+context. The callback still owns the complete document, asset tags, and any
+other raw markup. Migrate the route to a direct response to use the application's
+configured root and the common async finalizer:
+
+```rust
+use inertia_axum::prelude::*;
+
+async fn dashboard() -> DynamicPage {
+    page!("Dashboard", { ready: true })
+}
+```
+
+See [Migrate from 0.5](/docs/migrations/from-0-5) for the complete sequence.
+
+## `Inertia<T>` and its builder
+
+Construct a response with `Inertia::response(component, props)` or
+`Inertia::page(component).props(props)`. Both paths support:
+
+- `with_url`, `encrypt_history`, `clear_history`, and `preserve_fragment`;
+- `always`, `merge`, `prepend`, `deep_merge`, `match_on`, and `scroll`;
+- `defer`, `defer_group`, `rescue`, `share`, `once`, and `once_with_key`;
+- `shared_value` and fallible `serialize_shared` for route-local shared values.
+
+`Inertia<T>` also exposes `component`, `props`, `url`, and `metadata` accessors.
+When `T: IntoPageProps`, `into_page` builds a concrete `Page<Value>` from an
+explicit URL, version, and `RequestContext`. `Inertia::location` and
+`Inertia::redirect` construct the corresponding protocol response values.
+
+### Metadata is not resolution
+
+The builder's protocol-looking methods do not install the direct response
+resolver machinery:
+
+- `defer` and `defer_group` mark a prop for deferred selection and emit
+  `deferredProps`. With ordinary serializable props, the complete value is
+  constructed and serialized before filtering; this is not lazy or async work.
+- `rescue` only adds a name to `rescuedProps`. It does not catch serialization
+  or resolver errors and does not invoke the application rescue handler.
+- `share` only adds a top-level name to `sharedProps`. It does not register,
+  resolve, or merge shared data.
+
+Use direct `Prop<T>` policies for selected asynchronous work and real rescued
+resolution. Use typed `Share`, `shared_value` / `serialize_shared`, or the
+compatibility `SharedProps` registry to supply actual shared values. See
+[Deferred and lazy props](/docs/guides/deferred-and-lazy-props) and
+[Shared data](/docs/concepts/shared-data).
+
+## Synchronous compatibility props
+
+`InertiaProps` and `ScopedInertiaProps` expose the same synchronous operations:
+
+- `new`, `with_capacity`, `value`, and `lazy`;
+- `optional`, `always`, `defer`, and `defer_group`;
+- `once`, `once_with_key`, `optional_once`, `defer_once`, and
+  `defer_group_once`.
+
+These closures are evaluated only when selected, so they can avoid synchronous
+construction and serialization. They cannot return or schedule an asynchronous
+resolver. `ScopedInertiaProps<'props>` differs only by permitting borrowed values
+while the page is rendered immediately; `InertiaProps` requires `'static`
+resolvers and is suitable for owned handler values.
+
+## Explicit Axum rendering support
+
+`inertia_axum::axum` publicly exposes the support surface used by this path:
+
+| Type | Behavior |
+| --- | --- |
+| `InertiaRequest` | Accesses `is_inertia`, parsed `context`, local `uri`, and `asset_version`; finalizes `render`, `location`, and `redirect`. |
+| `HtmlResponseContext` | Holds script-safe serialized page JSON for the initial HTML callback. |
+| `InertiaError` | Reports serialization, URI/header, root, prop, shared, transient, and feature-gated strict SSR failures as a generic response. |
+| `SharedProps` / `SharedRequest` | Register `value`, `prop`, or `prop_optional`; providers may inspect context, method, URI, and asset version. |
+| `InertiaVersion` | Request-extension value containing the resolved version. |
+| `VersionLayer` / `VersionService<S>` | Static or synchronous dynamic version middleware and its concrete Tower service. |
+
+Install `SharedProps` as an Axum `Extension`. Providers run synchronously once
+per compatibility page, dotted names become nested values, and route-owned
+top-level roots win. Shared values are merged after partial filtering.
+
+`VersionLayer::new` uses a fixed version; `VersionLayer::dynamic` calls a fast,
+non-blocking provider for each request. An Inertia `GET` with a missing or stale
+version receives the standard pre-handler `409` conflict. The application-level
+`.version(...)` configuration is preferred when consolidating onto `InertiaApp`.
+
+For exact wire behavior, see [Protocol behavior](/docs/advanced/protocol-behavior)
+and [Request headers](/docs/reference/request-headers).
+
+## Pending response plumbing is not an extension surface
+
+`PendingPage`, `PendingResponse`, and `PendingResponseHandle` are public because
+direct responses and exported macros pass request-aware work through an Axum
+response extension. A handle is one-shot, and the installed Inertia layer owns
+its extraction and finalization.
+
+`PendingResponse::InvalidForm` carries validation state whose concrete type is
+intentionally not nameable from the public module tree. That state, the pending
+enum layout, and manual handle insertion are implementation plumbing, not the
+supported way to add a response kind or replace the finalizer. Return
+`DynamicPage`, a derived page, `Redirect`, `Location`, or `Validated<T>` instead.
+Use `AssetProvider`, `RootView`, `Share`, `TransientStore`, and the documented SSR
+configuration as the supported extension points.

@@ -1,0 +1,79 @@
+---
+title: Shared data
+description: Add typed application-wide props with access to the current Axum request.
+---
+
+The configured `Share` provider is prepared for every request through the Inertia
+layer. Its values are merged beneath route props only when the response is an Inertia
+page. Use one provider for values needed across many pages, such as the authenticated
+user, application name, or notifications.
+
+## Define shared props
+
+`InertiaProps` gives the shared object the same immediate and asynchronous prop
+policies as a page:
+
+```rust
+use inertia_axum::prelude::*;
+use std::convert::Infallible;
+
+#[derive(InertiaProps)]
+#[inertia(rename_all = "camelCase")]
+struct AppShared {
+    app_name: String,
+    #[inertia(rename = "auth.user")]
+    auth_user: Prop<String>,
+}
+
+#[derive(Clone)]
+struct AppShare;
+
+impl Share for AppShare {
+    type Props = AppShared;
+    type Error = Infallible;
+
+    fn share(&self, context: ShareContext<'_>) -> Result<Self::Props, Self::Error> {
+        let name = context
+            .extension::<CurrentUser>()
+            .map_or_else(|| "Guest".to_owned(), |user| user.name.clone());
+
+        Ok(AppShared {
+            app_name: "Acme".to_owned(),
+            auth_user: lazy(|| async move { Ok::<_, Infallible>(name) }),
+        })
+    }
+}
+# struct CurrentUser { name: String }
+```
+
+`ShareContext` borrows the request method, URI, headers, parsed `Visit`, and Axum
+extensions during synchronous preparation. Move only the owned data an asynchronous
+resolver needs into its closure.
+
+## Install the provider
+
+```rust
+# use inertia_axum::prelude::*;
+let inertia = InertiaApp::default_root()
+    .share(AppShare)
+    .build()?;
+# #[derive(Clone)]
+# struct AppShare;
+# impl Share for AppShare { type Props = Empty; type Error = std::convert::Infallible; fn share(&self, _: ShareContext<'_>) -> Result<Empty, Self::Error> { Ok(Empty) } }
+# struct Empty;
+# impl inertia_axum::IntoInertiaProps for Empty { fn into_inertia_props(self) -> inertia_axum::Props { inertia_axum::Props::new() } }
+# Ok::<(), inertia_axum::ConfigError>(())
+```
+
+Only one provider is installed; a later `.share(...)` call replaces the earlier one.
+Route props win by top-level root. If a route declares `auth`, shared keys beginning
+with `auth.` are neither resolved nor emitted.
+
+The page object's `sharedProps` array records the top-level shared keys actually
+included. This supports Inertia v3 instant visits. Optional, once, lazy, and deferred
+shared values use the same selection engine as route values, so unselected
+resolver futures are not constructed.
+
+For an authentication-oriented implementation, see
+[Authenticated shared props](/docs/recipes/authenticated-shared-props). For the
+lower-level request model, see [Request context](/docs/advanced/request-context).

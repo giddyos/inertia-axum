@@ -1,0 +1,153 @@
+---
+title: Custom asset provider
+description: Replace Vite with an application-defined asset version, HTML tags, and optional static service.
+keywords:
+  - AssetProvider
+  - asset version
+  - static assets
+---
+
+Use `AssetProvider` when another build pipeline or deployment service owns your
+browser assets. The provider supplies the Inertia version and trusted root-document
+tags; with the default `vite` feature, it can also let the Inertia router serve a
+directory.
+
+## Prerequisites
+
+`AssetProvider`, `AssetContext`, `AssetTags`, `AssetError`, and `AssetVersion` need no
+Cargo feature. The optional `static_service` method and `StaticAssetService` type are
+available only with `vite`, which is a default feature:
+
+```toml
+[dependencies]
+inertia-axum = "1.0.0-alpha.1"
+```
+
+If a CDN, reverse proxy, or separate Axum route serves the files, omit
+`static_service`; the provider then works with `default-features = false`.
+
+## Implement the provider
+
+This provider is reduced from the custom provider exercised by the adapter's Vite
+integration tests. It adds a static directory so the URLs in its tags are served by
+the application:
+
+```rust
+use inertia_axum::{
+    AssetContext, AssetError, AssetProvider, AssetTags, AssetVersion,
+    StaticAssetService,
+};
+use std::path::PathBuf;
+
+#[derive(Clone)]
+struct BuiltAssets {
+    version: AssetVersion,
+    directory: PathBuf,
+}
+
+impl BuiltAssets {
+    fn new(version: impl Into<AssetVersion>, directory: impl Into<PathBuf>) -> Self {
+        Self {
+            version: version.into(),
+            directory: directory.into(),
+        }
+    }
+}
+
+impl AssetProvider for BuiltAssets {
+    fn version(&self) -> &AssetVersion {
+        &self.version
+    }
+
+    fn render_tags(&self, _context: AssetContext<'_>) -> Result<AssetTags, AssetError> {
+        Ok(AssetTags::new(
+            concat!(
+                r#"<link rel="stylesheet" href="/assets/app.css">"#,
+                r#"<script type="module" src="/assets/app.js"></script>"#,
+            )
+            .to_owned(),
+        ))
+    }
+
+    fn static_service(&self) -> Option<StaticAssetService> {
+        Some(StaticAssetService::new(&self.directory))
+    }
+}
+```
+
+Install it and make the static mount match the tag URLs:
+
+```rust
+use inertia_axum::InertiaApp;
+
+let inertia = InertiaApp::default_root()
+    .public_path("/assets")
+    .assets(BuiltAssets::new("release-2026-07-11", "public/assets"))
+    .build()?;
+```
+
+Install the resulting `InertiaApp` with `RouterInertiaExt::inertia` as usual. The
+router mounts `public/assets` at `/assets`.
+
+## How provider finalization works
+
+`build()` and `start()` finalize a provider once:
+
+- The provider type must implement `Clone + Send + Sync + 'static`; keep clones cheap
+  and hold shared immutable build metadata behind an `Arc` when it is large.
+- `version()` is cloned into the page object. String versions remain JSON strings;
+  numeric versions remain JSON numbers. The same value is normalized to text for
+  `X-Inertia-Version` comparisons.
+- `render_tags()` runs once during startup. Its result is reused by every initial
+  HTML response; it does not run for each request. An error becomes a configuration
+  error and stops startup.
+- `static_service()` defaults to `None`. With `vite`, a returned
+  `StaticAssetService` is mounted at the builder's final `public_path`, which defaults
+  to `/build`. Without it, inertia-axum adds no asset route.
+
+The version should change whenever a deployment can make an already-loaded client
+stale. A mismatched version on an Inertia `GET` produces the protocol's `409`
+asset-reload response before the page handler runs.
+
+## Understand `AssetContext`
+
+`AssetContext::nonce()` is the only current context value. Application finalization
+currently calls the provider with `AssetContext::default()`, so the nonce is always
+`None`; there is no `InertiaApp` setting that populates it. Asset tags are therefore
+startup-wide, not request-specific.
+
+`AssetTags::new` marks its string as trusted markup. inertia-axum inserts that markup
+without escaping or sanitizing it. Construct tags only from build output and trusted
+configuration; never concatenate request data or user content into them.
+
+## Selection and ordering
+
+Calling `.assets(provider)` on `InertiaApp::vite(...)` discards the pending Vite
+configuration. The custom provider then owns versioning, tags, and optional static
+serving; no manifest is read and no Vite development tags are emitted.
+
+Multiple `.assets(...)` calls use the last provider. Once a provider has replaced
+Vite, `.entry(...)`, `.build_dir(...)`, and `.dev_server(...)` cannot restore or
+change Vite because they only mutate a pending Vite configuration. Start a new
+`InertiaApp::vite(...)` builder to select Vite again.
+
+Provider finalization also replaces a manually configured `.version(...)`, regardless
+of whether `.version(...)` appears before or after `.assets(...)`. `public_path(...)`
+still controls the custom provider's optional static mount and may appear in either
+order.
+
+## Production guidance
+
+Generate tags and the version from one immutable build artifact so they cannot drift.
+Prefer content-fingerprinted filenames with long-lived cache headers, and use a
+release or manifest digest as the version. If a CDN or reverse proxy serves assets,
+return `None` from `static_service()` and configure its cache and compression policy
+there. Keep every URL emitted by `render_tags()` consistent with that deployment
+prefix.
+
+## Related guides
+
+- [Vite and assets](/docs/guides/vite-and-assets)
+- [Application configuration](/docs/reference/configuration)
+- [Protocol support](/docs/reference/protocol-support)
+- [Maintained examples](/docs/reference/examples)

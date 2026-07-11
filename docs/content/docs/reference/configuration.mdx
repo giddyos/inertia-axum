@@ -1,0 +1,177 @@
+---
+title: Configuration
+description: Constructors, builder methods, lifecycle rules, defaults, precedence, and configuration errors.
+---
+
+An `InertiaApp` is immutable application-wide configuration installed around an Axum router. Build it once, then pass it to `.inertia(...)`.
+
+```rust
+use axum::Router;
+use inertia_axum::prelude::*;
+
+fn install(router: Router, inertia: InertiaApp) -> Router {
+    router.inertia(inertia)
+}
+```
+
+## Choose a constructor
+
+| Constructor | Feature | Initial root | Assets |
+| --- | --- | --- | --- |
+| `InertiaApp::default_root()` | None | Safe built-in HTML document | None until configured |
+| `InertiaApp::builder(root)` | None | Application `RootView` | None until configured |
+| `InertiaApp::vite(path)` | `vite`, default | Safe built-in HTML document | Vite rooted at `path` |
+
+A custom root template is not required. The built-in document includes viewport metadata, asset tags, the SSR head, and the CSR or SSR mount.
+
+## Builder methods
+
+| Method | Feature | Effect |
+| --- | --- | --- |
+| `.root(view)` | None | Selects a custom `RootView`. |
+| `.root_template(path)` | None | Reads and compiles a marker template during `build` or `start`. |
+| `.root_template_source(source)` | None | Compiles an in-memory marker template. |
+| `.askama_root(root)` | `askama` | Selects a typed Askama root factory. |
+| `.version(value)` | None | Sets a manual string or numeric asset version when no provider later replaces it. |
+| `.entry(path)` | `vite` | Changes the Vite entry from `src/main.ts`. |
+| `.build_dir(path)` | `vite` | Changes the Vite build directory from `dist`. |
+| `.public_path(path)` | None | Changes the production asset URL prefix from `/build`; also controls a custom provider's static mount. |
+| `.dev_server(url)` | `vite` | Overrides `VITE_DEV_SERVER_URL`. |
+| `.assets(provider)` | None | Replaces Vite with an application `AssetProvider`. |
+| `.share(provider)` | None | Installs one typed, application-wide `Share` provider. |
+| `.transient(store)` | None | Installs flash, validation-error, and old-input transport. |
+| `.error_handler(handler)` | None | Reports rescued asynchronous prop failures. |
+| `.ssr(config)` | `ssr` | Configures managed or external SSR. SSR is enabled for eligible routes by default. |
+
+Root selection is last-call-wins. Calling `.root(...)` or `.askama_root(...)` clears a pending marker template; calling a template method later makes that template the final root.
+
+`.assets(...)` disables the pending Vite configuration. Conversely, `.entry`, `.build_dir`, and `.dev_server` only mutate a builder created by `InertiaApp::vite`; on another constructor they have no effect.
+
+The asset provider or Vite build determines the final asset version. A preceding `.version(...)` value is replaced when either provider is finalized.
+
+## `build` and `start`
+
+Use synchronous `build()` when SSR is not configured:
+
+```rust
+# use inertia_axum::InertiaApp;
+let inertia = InertiaApp::vite("frontend").build()?;
+# Ok::<(), inertia_axum::ConfigError>(())
+```
+
+Use `start().await` after `.ssr(...)`:
+
+```rust
+# use inertia_axum::InertiaApp;
+# async fn example() -> Result<(), inertia_axum::StartError> {
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .start()
+    .await?;
+# Ok(())
+# }
+```
+
+With the `ssr` feature compiled but no `.ssr(...)` call, either lifecycle works. `start()` simply builds assets and returns an app without an SSR runtime. Calling `build()` after configuring SSR returns `ConfigError` rather than silently disabling SSR.
+
+## Vite defaults
+
+- Root: the path supplied to `InertiaApp::vite`.
+- Entry: `src/main.ts`.
+- Build directory: `dist` below the Vite root unless absolute.
+- Client manifest: `<build-dir>/.vite/manifest.json`.
+- Public URL and static mount: `/build`.
+- Development URL: `.dev_server(...)`, then `VITE_DEV_SERVER_URL`; otherwise production mode.
+
+Development emits `@vite/client` and entry scripts, with no asset version or static mount. Production resolves imported chunks and CSS from the client manifest, hashes the resolved filenames into the asset version, and mounts the build directory with `ServeDir`.
+
+See [Vite and assets](/docs/guides/vite-and-assets) for deployment setup.
+
+## SSR defaults
+
+<TypeTable
+  type={{
+    endpoint: {
+      description: 'Managed Node render endpoint.',
+      type: 'absolute http URL',
+      default: 'http://127.0.0.1:13714',
+    },
+    runtime: {
+      description: 'Managed Node executable.',
+      type: 'path',
+      default: 'node',
+    },
+    timeout: {
+      description: 'Deadline for each render.',
+      type: 'Duration',
+      default: '3 seconds',
+    },
+    startupTimeout: {
+      description: 'Deadline for initial or restarted readiness.',
+      type: 'Duration',
+      default: '10 seconds',
+    },
+    controlTimeout: {
+      description: 'Deadline for health and shutdown control requests.',
+      type: 'Duration',
+      default: '2 seconds',
+    },
+    maxConcurrency: {
+      description: 'Maximum in-flight render requests.',
+      type: 'usize',
+      default: 16,
+    },
+    maxResponseBytes: {
+      description: 'Maximum buffered SSR response body.',
+      type: 'usize',
+      default: '8 MiB',
+    },
+    routeDefault: {
+      description: 'Whether unmarked eligible routes use SSR.',
+      type: 'enabled | opt-in',
+      default: 'enabled',
+    },
+    failureMode: {
+      description: 'Behavior after a render failure.',
+      type: 'fallback | strict',
+      default: 'CSR fallback',
+    },
+  }}
+/>
+
+`Ssr::node(bundle)` supervises Node 22 or newer. `Ssr::external(endpoint)` connects to a separately supervised server. The endpoint must be absolute `http://`; HTTPS endpoints are not accepted by the current client.
+
+| `Ssr` method | Effect |
+| --- | --- |
+| `node(bundle)` | Managed child process using the official `/render`, `/health`, and `/shutdown` contract. |
+| `external(endpoint)` | Separately supervised server using the same contract. |
+| `opt_in()` | Disables SSR unless a route calls `.with_ssr()`. |
+| `strict()` | Returns an internal error instead of CSR fallback on render failure. |
+| `runtime(path)` / `endpoint(url)` | Managed-mode Node executable and server endpoint. |
+| `bundle(path)` / `skip_bundle_check()` | Enables or disables local bundle verification for external mode. |
+| `timeout(duration)` | Per-render deadline. |
+| `startup_timeout(duration)` | Health-readiness deadline. |
+| `control_timeout(duration)` | Health and shutdown request deadline. |
+| `max_concurrency(count)` | Render concurrency limit and connection-pool sizing. Zero is rejected. |
+| `max_response_bytes(bytes)` | Maximum buffered render body. Zero is rejected. |
+
+Some methods are backend-specific: `.runtime(...)` and `.endpoint(...)` only change managed mode; `.bundle(...)` and `.skip_bundle_check()` only change external mode. `InertiaApp::ssr_health()` returns the latest local `Disabled`, `Starting`, `Ready`, `Degraded`, or `Unavailable` state without network I/O. See the [SSR overview](/docs/ssr).
+
+## Extension contexts
+
+- `ShareContext` provides borrowed method, URI, headers, extensions, and `Visit` during synchronous shared-data preparation.
+- `Visit` is an infallible Axum extractor for parsed visit state and typed selection checks.
+- `AssetContext` and `RootContext` expose optional nonce/title/locale fields, but `1.0.0-alpha.1` has no application setting that populates them; they are currently `None` in production rendering.
+- `ErrorHandler` only handles failures from props marked `.rescue()`; other failures become `InertiaError` responses.
+
+## Error types
+
+| Error | When returned |
+| --- | --- |
+| `ConfigError` | Root template or asset configuration failure; SSR passed to `build()`. |
+| `StartError::Config` | Asset/root configuration failed during `start()`. |
+| `StartError::Ssr` | SSR validation or startup failed. |
+| `InertiaError` | Request-time serialization, root, prop, shared-data, transient, URI/header, or strict SSR failure. |
+| `FormError` | Bad form body, unsupported media type, or redirect-based validation failure. |
+
+For request-time failure policy, see [error handling](/docs/advanced/error-handling).

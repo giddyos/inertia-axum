@@ -1,0 +1,93 @@
+---
+title: Transient storage
+description: Choose memory, encrypted-cookie, Tower Sessions, or custom one-request storage.
+keywords:
+  - flash storage
+  - encrypted cookies
+  - Tower Sessions
+---
+
+Transient storage carries flash values, validation errors, and opted-in old input to
+the next request. Install one store with `.transient(store)` before using those
+features.
+
+## Memory storage
+
+```rust
+use inertia_axum::prelude::*;
+
+let inertia = InertiaApp::default_root()
+    .transient(MemoryTransient::new())
+    .build()?;
+```
+
+`MemoryTransient` is process-local. It uses the `X-Inertia-Transient-Id` header as a
+scope when one is explicitly supplied and otherwise shares the store's `default`
+scope. It is suitable for examples and tests, not normal multi-user or multi-process
+production deployments.
+
+## Encrypted cookie storage
+
+Enable `cookies` and use at least 32 random bytes from a secret manager:
+
+```toml
+inertia-axum = {
+  version = "1.0.0-alpha.1",
+  features = ["cookies"]
+}
+```
+
+```rust
+use inertia_axum::{CookieTransient, InertiaApp};
+
+let key = std::env::var("INERTIA_COOKIE_KEY")?;
+let inertia = InertiaApp::default_root()
+    .transient(CookieTransient::encrypted(key.as_bytes()))
+    .build()?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The adapter writes an encrypted and authenticated `__Host-inertia_transient` cookie
+with `Secure`, `HttpOnly`, `SameSite=Lax`, and path `/`. Browser cookie-size limits
+still apply; the adapter does not enforce a maximum payload. Keep flash, errors, and
+old input small. A `__Host-` cookie also requires HTTPS outside local development.
+
+## Tower Sessions storage
+
+Enable `tower-sessions` and add `tower-sessions` to the application. Install its
+`SessionManagerLayer` outside the Inertia layer so the session is present in request
+extensions:
+
+```rust
+use inertia_axum::{InertiaApp, RouterInertiaExt, TowerSessionTransient};
+
+# let routes = axum::Router::<()>::new();
+# let session_manager = tower_sessions::SessionManagerLayer::new(tower_sessions::MemoryStore::default()).with_secure(false);
+let inertia = InertiaApp::default_root()
+    .transient(TowerSessionTransient::new())
+    .build()?;
+
+let app = routes
+    .inertia(inertia)
+    .layer(session_manager);
+```
+
+Choose a production session store appropriate to your deployment. The adapter removes
+incoming state before serving it and writes only non-empty outgoing state under the
+session key `inertia.transient`.
+
+## Build a custom store
+
+Implement `TransientStore` to integrate another system. `load` receives a narrow
+`TransientRequest` with method, URI, raw cookie header, test scope, and—when enabled—
+the projected Tower session. Return `TransientData`, then persist its outgoing state
+from `commit`.
+
+The layer loads state only while finalizing a pending page, internal redirect, or
+validation failure. External `Location` responses and unrelated responses bypass it.
+Initial browser page responses do load it so they can consume flash, errors, and old
+input. Store failures become generic server errors. Keep implementations bounded,
+observable, and safe for concurrent requests.
+
+See [Redirects, flash, and old input](/docs/guides/redirects-flash-and-old-input)
+for lifecycle semantics.

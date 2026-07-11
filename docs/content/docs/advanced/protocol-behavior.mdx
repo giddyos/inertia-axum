@@ -1,0 +1,174 @@
+---
+title: Protocol behavior
+description: Follow inertia-axum request negotiation, page fields, partial selection, version conflicts, redirects, flash, and SSR fallback.
+keywords:
+  - Inertia protocol
+  - page object
+  - version conflict
+  - partial reload
+---
+
+Use this page to predict the exact HTTP response produced by `inertia-axum` or
+to debug a client, proxy, or middleware integration. The normal CSR protocol
+needs no optional Cargo feature. Server-side rendering additionally requires
+`ssr` and a started SSR configuration.
+
+## HTML first, JSON after boot
+
+The presence of `X-Inertia` selects the response format; its value is not
+validated. `Accept` and `X-Requested-With` are exported for integrations but do
+not participate in negotiation.
+
+| Request | Page response |
+| --- | --- |
+| Initial browser request without `X-Inertia` | A complete HTML document. The CSR mount contains `<script data-page="app" type="application/json">…</script><div id="app"></div>`. |
+| Inertia visit with `X-Inertia` | The page object as `application/json`, with `X-Inertia: true`. |
+
+Adapter-owned page, redirect, and conflict responses include `Vary: X-Inertia`.
+An ordinary Axum response with no pending Inertia value passes through unchanged.
+The page URL defaults to the original local path and query, including through a
+nested router; an explicit URL override wins.
+
+## Complete page-object shape
+
+Fields use Inertia v3 camel-case names. Empty optional metadata and false history
+flags are omitted.
+
+| Field | Serialized behavior |
+| --- | --- |
+| `component` | Required frontend component name. |
+| `props` | Required page data. Direct object pages retain an `errors` object through partial reloads. |
+| `flash` | Top-level one-response flash values; omitted when empty and separate from `props`. |
+| `url` | Required local page URL or an explicit override. |
+| `version` | String or numeric asset version; omitted when no version is configured. |
+| `encryptHistory` | Included as `true` when browser history should be encrypted. |
+| `clearHistory` | Included as `true` when encrypted history should be cleared. |
+| `preserveFragment` | Included as `true` when the original fragment should survive a redirect. |
+| `mergeProps` | Prop paths the client appends while merging. |
+| `prependProps` | Prop paths the client prepends while merging. |
+| `deepMergeProps` | Prop paths the client deep-merges. |
+| `matchPropsOn` | Nested identity paths used to match merge items. |
+| `scrollProps` | Per-prop `pageName`, `previousPage`, `nextPage`, and `currentPage` metadata for infinite scroll. |
+| `deferredProps` | Deferred prop names grouped by follow-up request group. Resolved values disappear from the remaining groups. |
+| `rescuedProps` | Rescued deferred prop names whose failed values were omitted. |
+| `sharedProps` | Top-level shared roots the v3 client may carry across instant visits. |
+| `onceProps` | Stable keys mapped to `{ prop, expiresAt }`; `expiresAt` is Unix epoch milliseconds or `null`. |
+
+Low-level `Page<T>` and compatibility responses can deliberately use non-object
+props. The direct page finalizer uses object props and supplies `errors: {}` when
+there are no redirected validation errors.
+
+## Asset-version conflicts
+
+When an application version is configured, every Inertia `GET` must send the
+same value in `X-Inertia-Version`. A missing or stale value stops the request
+before the route handler and returns `409 Conflict` with the original local path
+and query in `X-Inertia-Location`. Initial browser requests and non-GET requests
+do not perform this check.
+
+If transient state is configured, a stale-version conflict reflashes unconsumed
+flash, validation errors, and old input so the eventual fresh visit can receive
+them. See [Vite and assets](/docs/guides/vite-and-assets) for choosing a version.
+
+## Partial, deferred, and once selection
+
+Partial filtering applies only to `GET` and only when
+`X-Inertia-Partial-Component` matches the response component. A component
+mismatch or a write response uses full-visit selection.
+
+For a matching partial reload:
+
+1. An explicit `X-Inertia-Partial-Except` list takes precedence over
+   `X-Inertia-Partial-Data` when both are non-empty.
+2. Always props remain included and `errors` remains present.
+3. Optional props resolve only when explicitly named by partial data and not
+   excluded.
+4. Deferred props stay out of the initial response and resolve when explicitly
+   requested.
+5. `X-Inertia-Except-Once-Props` names once **keys** already held by the client.
+   Those values are not resolved or returned, but an explicit partial request
+   for the associated prop wins and refreshes it.
+
+Unselected direct asynchronous props are neither constructed nor polled.
+Selection and resolution details are in
+[Props and policies](/docs/reference/props-and-policies).
+
+## Merge, scroll, and reset metadata
+
+Merge metadata is emitted only for values present in that response. Infinite
+scroll adds an append target at `<prop>.data`; a matching
+`X-Inertia-Infinite-Scroll-Merge-Intent: prepend` switches that target to
+`prependProps`, while `append` switches it back.
+
+On a matching partial reload, `X-Inertia-Reset` removes the matching merge,
+prepend, deep-merge, match, and scroll metadata for that response. The requested
+prop value is still returned, so the client replaces it instead of merging it.
+Reset and scroll intent are ignored when the partial component does not match.
+See [Merge, scroll, once, and reset](/docs/guides/merge-scroll-once-and-reset).
+
+## Shared data and flash
+
+Typed application shared props use the same prop policies as route props.
+Route-owned top-level roots win on collisions, dotted shared keys expand into
+nested objects, and `sharedProps` contains each inserted top-level root once.
+Standard shared values remain available on partial responses; optional and
+deferred shared values retain their selection rules.
+
+Redirect flash is stored for the next page and then consumed. Flash attached
+directly to a page exists only on that response. Redirects and stale-version
+conflicts reflash unconsumed incoming state. Redirect flash, validation errors,
+and old input require a configured transient store. Continue to
+[Redirects, flash, and old input](/docs/guides/redirects-flash-and-old-input).
+
+## Redirect and location responses
+
+`Redirect` is for application navigation: read methods return `302 Found`, and
+POST, PUT, PATCH, and DELETE return `303 See Other`. `Redirect::back()` uses the
+request `Referer` and falls back to `/`; `back_or(...)` supplies another fallback.
+Semantic validation failures also redirect back with `303` rather than returning
+ordinary `422` JSON.
+
+`Location` asks the Inertia client to perform a full browser visit. An Inertia
+request receives `409 Conflict` with `X-Inertia-Location`; a destination that
+contains a fragment uses `X-Inertia-Redirect`. A non-Inertia request receives the
+same method-aware `302` or `303` behavior as an ordinary redirect. Invalid URI
+references become a generic `500` without copying the target into a header.
+
+## Script safety and trusted markup
+
+Before embedding the initial page object, the adapter escapes `<`, `>`, `&`,
+U+2028, and U+2029 as JSON Unicode escapes. This prevents prop content such as
+`</script>` from ending the application/json script element. A compatibility
+root receives this already script-safe value through `HtmlResponseContext`.
+
+This JSON protection does not sanitize trusted raw HTML returned by an
+`AssetProvider`, a `RootView`, or an SSR backend. Applications own the trust
+boundary for those fragments. See [Custom root view](/docs/advanced/custom-root-view).
+
+## SSR eligibility and fallback
+
+Configured SSR is considered only for a finalized initial page `GET` without
+`X-Inertia`, after application and nested route policy are applied. Inertia JSON
+visits, write requests, redirects, locations, and ordinary Axum responses never
+invoke the SSR backend.
+
+A successful backend response supplies trusted head fragments and the rendered
+mount body to the configured root. Vite development may return `null` while
+warming up. That response, plus backend unavailability, overload, timeout,
+transport failure, a non-success status, malformed or oversized output, and
+render failure all return the normal usable CSR document in the default fallback
+mode. Strict mode turns the same production render failures into a generic `500`.
+See [SSR route policies](/docs/ssr/route-policies) and
+[Fallback and strict mode](/docs/ssr/fallback-and-strict-mode).
+
+## Unsupported request modes
+
+- Precognition request detection and Precognition response semantics are not
+  implemented.
+- `InertiaForm<T>` and `Validated<T>` accept JSON and URL-encoded bodies up to
+  2 MiB. Multipart requests return `415 Unsupported Media Type`; use Axum's
+  multipart extractor and application validation for file uploads.
+
+For the canonical constant names and parsed accessors, use
+[Request headers](/docs/reference/request-headers). The concise capability
+matrix is in [Protocol support](/docs/reference/protocol-support).

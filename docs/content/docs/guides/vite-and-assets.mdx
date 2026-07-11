@@ -1,0 +1,99 @@
+---
+title: Vite and assets
+description: Connect Vite development and production builds, version assets, and serve compiled files.
+keywords:
+  - Vite
+  - asset manifest
+  - static assets
+---
+
+The default `vite` feature turns a frontend directory into development script tags
+or production manifest assets. It also derives the Inertia asset version and mounts
+the compiled directory as an Axum static service.
+
+## Use the conventions
+
+```rust
+use inertia_axum::InertiaApp;
+
+let inertia = InertiaApp::vite("frontend").build()?;
+```
+
+The defaults are:
+
+| Setting | Default |
+| --- | --- |
+| Entry | `src/main.ts` |
+| Build directory | `dist` beneath the frontend root |
+| Public URL | `/build` |
+| Development URL | `VITE_DEV_SERVER_URL` or an explicit `.dev_server(...)` |
+
+## Run development mode
+
+Start Vite, then export its absolute URL for the Axum process:
+
+```bash
+VITE_DEV_SERVER_URL=http://127.0.0.1:5173 cargo run
+```
+
+The root document receives Vite's `/@vite/client` and configured entry scripts. No
+manifest, asset version, or Axum static mount is used in this mode. The URL must be
+an absolute `http://` or `https://` URL.
+
+`cargo inertia dev` can coordinate Vite and Cargo for its generated npm projects;
+read its [documented limits](/docs/guides/cargo-inertia#run-the-development-processes).
+
+## Build for production
+
+Configure Vite to emit a client manifest:
+
+```js
+import inertia from '@inertiajs/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [inertia()],
+  build: {
+    manifest: true,
+    rollupOptions: { input: 'src/main.ts' },
+  },
+})
+```
+
+Run `pnpm build` before starting Axum. Without a development URL, startup reads
+`frontend/dist/.vite/manifest.json`. Missing, malformed, or incomplete manifests are
+configuration errors and stop the application before it serves requests.
+
+Imported JavaScript and CSS are walked from the selected entry. The root receives
+stylesheet, module-preload, and entry-script tags. The build directory is mounted at
+`/build`, and a SHA-256 digest of resolved file paths becomes the page version.
+
+On a stale Inertia `GET`, the adapter returns `409` before running the handler so the
+client can perform a full reload. Browser requests and write methods do not trigger
+that version conflict.
+
+## Override the layout
+
+The production browser examples place output outside the frontend root:
+
+```rust
+let inertia = InertiaApp::vite(frontend_root)
+    .entry("src/app.js")
+    .build_dir("../public/build")
+    .public_path("/public/build")
+    .build()?;
+```
+
+`entry`, `build_dir`, and `dev_server` affect only builders created with
+`InertiaApp::vite`. `public_path` must be an absolute, HTML-safe URL path.
+
+## Use another asset pipeline
+
+Call `.assets(provider)` to replace Vite with an `AssetProvider`. A later custom
+provider replaces Vite. During `build()` or `start()`, either Vite or the custom
+provider also replaces any manual `.version(...)`, regardless of call order. See
+[Custom asset provider](/docs/advanced/custom-asset-provider).
+
+Production Vite needs the **client manifest even when SSR is enabled**. The SSR wire
+protocol does not consume it, but the initial root still needs client assets and the
+adapter uses it for versioning and static serving.

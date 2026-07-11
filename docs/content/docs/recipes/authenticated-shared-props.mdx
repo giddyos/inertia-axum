@@ -1,0 +1,102 @@
+---
+title: Share the authenticated user
+description: Project Axum authentication state into typed, request-aware shared props.
+keywords:
+  - authentication
+  - shared props
+---
+
+This recipe exposes `auth.user` on every Inertia page while keeping authentication
+inside ordinary Axum middleware. The shared provider reads a request extension and
+returns a typed prop object.
+
+## 1. Define the request value
+
+```rust
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+struct UserSummary {
+    id: u64,
+    name: String,
+}
+
+#[derive(Clone)]
+struct CurrentUser(Option<UserSummary>);
+```
+
+Your authentication middleware should insert `CurrentUser` into request extensions.
+Keep the value small and safe to expose to the browser.
+
+## 2. Define shared props
+
+```rust
+use inertia_axum::prelude::*;
+
+#[derive(InertiaProps)]
+struct AppShared {
+    #[inertia(rename = "auth.user")]
+    user: Prop<Option<UserSummary>>,
+}
+
+#[derive(Clone)]
+struct AppShare;
+
+impl Share for AppShare {
+    type Props = AppShared;
+    type Error = std::convert::Infallible;
+
+    fn share(&self, context: ShareContext<'_>) -> Result<Self::Props, Self::Error> {
+        let user = context
+            .extension::<CurrentUser>()
+            .and_then(|current| current.0.clone());
+
+        let user = match user {
+            Some(user) => once(move || async move {
+                Ok::<_, std::convert::Infallible>(Some(user))
+            })
+            .key("auth.user"),
+            None => Prop::immediate(None),
+        };
+
+        Ok(AppShared { user })
+    }
+}
+```
+
+An authenticated value is remembered as a once prop. A signed-out request emits an
+immediate `null`, replacing any remembered user. Refresh the once value explicitly
+after a profile change or use `.fresh_if(...)` from application state.
+
+## 3. Install both layers
+
+```rust
+# let routes = axum::Router::<()>::new();
+let inertia = InertiaApp::vite("frontend")
+    .share(AppShare)
+    .build()?;
+
+let app = routes
+    .inertia(inertia)
+    .layer(axum::Extension(CurrentUser(None)));
+```
+
+In a real application, replace the static `Extension` with authentication middleware
+that inserts the user before the Inertia layer prepares shared data.
+
+## How conflicts work
+
+The dotted key becomes nested JSON while `sharedProps` records the root `auth`. If a
+route declares its own top-level `auth` prop, the entire shared `auth` root is blocked,
+even when the route's value is optional and omitted. This prevents shared work from
+overwriting route-owned data.
+
+## Production guidance
+
+Do not serialize session tokens, permissions you do not need in the UI, or private
+profile fields. Authorization still belongs on every server route; shared props are
+display data, not an access-control boundary. Test signed-in, signed-out, refresh,
+and route-root collision behavior.
+
+See [Shared data](/docs/concepts/shared-data) and
+[Request context](/docs/advanced/request-context).

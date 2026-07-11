@@ -1,0 +1,40 @@
+---
+title: Reference
+description: Exact APIs, defaults, protocol behavior, tooling, and compatibility information for inertia-axum 1.0 alpha.
+---
+
+Use this section when you need the exact name, default, feature gate, or wire behavior of an `inertia-axum` API. The task-oriented guides show how to assemble these pieces into an application.
+
+## Choose a reference
+
+| Need | Reference |
+| --- | --- |
+| Select optional dependencies and compile-time APIs | [Cargo features](/docs/reference/cargo-features) |
+| Configure `InertiaApp`, assets, roots, sharing, transient state, or SSR | [Configuration](/docs/reference/configuration) |
+| Use `page!` or a derive and its `#[inertia(...)]` attributes | [Macros](/docs/reference/macros) |
+| Choose immediate, lazy, optional, deferred, once, merge, scroll, or rescue behavior | [Props and policies](/docs/reference/props-and-policies) |
+| Construct or inspect protocol headers | [Request headers](/docs/reference/request-headers) |
+| Check implemented Inertia v3 behavior and limitations | [Protocol support](/docs/reference/protocol-support) |
+| Drive an Axum router with `inertia-axum-test` | [Testing API](/docs/reference/testing-api) |
+| Scaffold, run, or validate a frontend | [CLI](/docs/reference/cli) |
+| Find a maintained, tested application | [Examples](/docs/reference/examples) |
+
+## Public API groups
+
+The main crate deliberately exposes a small common path and several advanced extension points:
+
+- Application setup: `InertiaApp`, `InertiaAppBuilder`, `RouterInertiaExt`, `InertiaLayer`, and `InertiaService`.
+- Direct responses: `DynamicPage`, `page!`, `Redirect`, `Location`, and typed structs derived with `InertiaPage`.
+- Props: `Prop<T>`, the helper functions, `ScrollPage<T>`, prop policy models, and generated `PropKey<T>` constants.
+- Request-aware data: `Share`, `ShareContext`, `Visit`, and `RequestContext`.
+- Roots and assets: `RootView`, `RootContext`, trusted markup wrappers, `AssetProvider`, and `AssetVersion`.
+- Forms and transient data: `Validated<T>`, `Validate`, `Errors`, `TransientStore`, and the built-in stores.
+- Optional SSR: `Ssr`, route policies, health models, and classified start/render failures.
+
+The `inertia_axum::prelude` module contains the usual handler and setup imports. `inertia_axum::advanced` collects extension interfaces. `inertia_axum::compat` retains the explicit rendering APIs used while migrating from 0.5. See [compatibility APIs](/docs/advanced/compatibility-apis) before starting new code with `Inertia<T>` or `InertiaRequest`.
+
+## Version and stability
+
+This documentation describes `1.0.0-alpha.1`. The workspace MSRV is Rust 1.88. Alpha releases may still change public APIs; pin the exact version when reproducible builds matter.
+
+For a first application, start with [installation](/docs/getting-started/installation) and the [quick start](/docs/getting-started/quick-start).

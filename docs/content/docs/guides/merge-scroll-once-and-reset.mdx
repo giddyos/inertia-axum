@@ -1,0 +1,111 @@
+---
+title: Merge, scroll, once, and reset
+description: Append or deep-merge partial data, normalize infinite scroll, reuse once props, and reset metadata.
+keywords:
+  - merge props
+  - infinite scroll
+  - once props
+  - reset
+---
+
+Use prop policies when a partial reload should combine data with the current page
+instead of replacing it, or when an expensive value can be reused across visits.
+
+## Append or prepend values
+
+`merge(value)` creates an immediate prop ready for a merge policy:
+
+```rust
+use inertia_axum::{merge, page};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct Message { id: u64 }
+
+let messages = vec![Message { id: 1 }];
+let notices = vec![Message { id: 2 }];
+let page = page!("Messages/Index", {
+    messages: merge(messages).append().match_on("id"),
+    notices: merge(notices).prepend(),
+});
+```
+
+Use `.append_at("data")` or `.prepend_at("data")` for a nested array.
+`match_on("id")` identifies existing items; `match_on_at("data", "id")` qualifies a
+key beneath a nested merge path.
+
+## Deep-merge objects
+
+```rust
+use inertia_axum::merge;
+
+let report = serde_json::json!({"sections": []});
+let report = merge(report)
+    .deep()
+    .match_on("sections.id")
+    .match_on("sections.items.id");
+```
+
+Deep merge applies to the complete prop. Add every identity path the client should
+use while combining nested arrays.
+
+## Normalize an infinite-scroll page
+
+```rust
+use inertia_axum::{ScrollPage, page, scroll};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct Activity { id: u64 }
+
+let items = vec![Activity { id: 1 }];
+let current_page = 2;
+let results = ScrollPage::new(items, current_page)
+    .previous(current_page.saturating_sub(1))
+    .next(current_page + 1)
+    .page_name("page");
+
+let page = page!("Activity/Index", {
+    activity: scroll(results).match_on("id"),
+});
+```
+
+`ScrollPage` serializes as `{ data: [...] }`; its policy adds `pageName`,
+`currentPage`, and optional previous/next values to `scrollProps`. Implement
+`IntoScrollPage` to adapt an application paginator.
+
+## Reuse a once prop
+
+```rust
+use inertia_axum::once;
+use std::time::Duration;
+
+let countries = once(load_countries)
+    .key("countries:v1")
+    .expires_in(Duration::from_secs(60 * 60));
+# async fn load_countries() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
+```
+
+The stable key can differ from the prop name. Once the client reports that key in
+`X-Inertia-Except-Once-Props`, the server skips its resolver. Explicit partial
+selection refreshes it. `.fresh_if(true)` also forces refresh, and `.once()` can be
+composed onto a deferred or mergeable prop.
+
+## Reset merge metadata
+
+When a filter changes, ask the client to reset a prop before applying new results:
+
+```ts
+router.reload({
+  data: { search },
+  only: ['activity'],
+  reset: ['activity'],
+})
+```
+
+The adapter removes merge or scroll metadata for a reset key. Reset does not omit
+the prop and does not remove unrelated metadata. Merge behavior is relevant only to
+partial reloads; full page visits always replace values.
+
+See [Paginated infinite scroll](/docs/recipes/paginated-infinite-scroll) for a full
+route and [Props and policies](/docs/reference/props-and-policies) for exact methods.

@@ -1,0 +1,176 @@
+---
+title: Troubleshoot SSR
+description: Diagnose SSR feature, startup, bundle, manifest, policy, fallback, capacity, and shutdown failures.
+keywords:
+  - SSR troubleshooting
+  - health timeout
+  - missing manifest
+  - Node version
+  - CSR fallback
+---
+
+Work from startup errors, `ssr_health()`, and the
+`inertia_axum::ssr::node` tracing target. Fallback mode intentionally turns many
+runtime failures into valid CSR, so a successful HTTP page alone does not prove
+that SSR succeeded.
+
+## The SSR methods do not exist
+
+Enable the non-default feature:
+
+```toml
+inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
+```
+
+Route methods also require the trait import:
+
+```rust
+use inertia_axum::SsrRouteExt as _;
+```
+
+## `build()` rejects the configuration
+
+Starting SSR requires asynchronous work. Replace:
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .build()?;
+```
+
+with:
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .start()
+    .await?;
+```
+
+## Node is missing or unsupported
+
+Managed mode runs the configured runtime with `--version` and requires major
+version 22 or newer.
+
+```sh
+node --version
+```
+
+Install Node 22+, put it on `PATH`, or pass an executable with
+`.runtime("/path/to/node")`.
+
+## The bundle cannot be found
+
+The bundle must exist and be a regular file before managed startup.
+
+- With `InertiaApp::vite("frontend")`, `dist/ssr/app.js` means
+  `frontend/dist/ssr/app.js`.
+- Without a Vite root, a relative path starts from the Rust process directory.
+- Run both `vite build` and `vite build --ssr`.
+- Make `.ssr(...)` match a custom Vite entry or output name.
+
+Directories are rejected even when the path exists.
+
+## Production Vite reports a missing manifest
+
+`InertiaApp::vite(...)` requires the client manifest before it starts production
+SSR:
+
+```text
+<vite root>/<build directory>/.vite/manifest.json
+```
+
+The SSR protocol itself does not consume this file. The initial document still
+needs the manifest to inject browser scripts and styles and serve static assets.
+Run the client build, verify `.build_dir(...)`, and then start Rust. A custom
+asset provider or `default_root()` with no Vite configuration has no manifest
+requirement.
+
+## Startup times out waiting for health
+
+Check all of the following:
+
+- The endpoint is an absolute `http://` URL.
+- The server listens on the same host and port configured in Rust.
+- `GET /health` returns a successful response.
+- The Vite plugin's SSR port matches a custom `.endpoint(...)`.
+- Container networking permits Rust to reach the external service.
+- Startup fits inside `.startup_timeout(...)`.
+
+Changing the Rust endpoint does not change a port compiled into the Node bundle.
+
+## A page silently renders as CSR
+
+Fallback is the default. Inspect `ssr_health()` and tracing for timeout,
+overload, transport, invalid response, response-too-large, render, or process-exit
+failures.
+
+Also verify that:
+
+- the request is an initial browser `GET`, not an Inertia JSON visit;
+- the handler returned an Inertia page;
+- the route is not under `.without_ssr()`;
+- opt-in mode routes use `.with_ssr()`;
+- `ssr_when` returned `true`;
+- Vite development did not return temporary `null`.
+
+Use `.strict()` in a test or staging configuration when an otherwise hidden
+fallback should become a visible 500. Do not expose raw backend errors to users.
+
+## Strict mode returns 500
+
+The backend failed to produce a valid document. Check its logs and the local
+failure kind. Common causes are a backend 500, timeout, malformed JSON, or a body
+larger than `max_response_bytes`. Strict responses intentionally omit the raw
+Node error.
+
+## Renders are overloaded or slow
+
+- Measure Node render latency and CPU before increasing concurrency.
+- Set `.max_concurrency(...)` to real backend capacity; saturation load-sheds
+  immediately rather than forming an unbounded queue.
+- Increase `.timeout(...)` only for legitimate slow renders.
+- Run an external cluster when one managed process is insufficient.
+- Keep large or unnecessary data out of initial page props.
+
+## SSR output is rejected
+
+`POST /render` must return successful JSON with either `null` or:
+
+```json
+{
+  "head": ["<title>Page</title>"],
+  "body": "<div id=\"app\" data-server-rendered=\"true\">Page</div>"
+}
+```
+
+Every head element must be a string and `body` must be a string. Increase
+`.max_response_bytes(...)` only after confirming that the output is expected.
+
+## Head or mount markup appears twice
+
+The root document must place each Inertia fragment once. Marker templates require
+exactly one `inertia:assets`, `inertia:head`, and `inertia:mount` marker. Askama
+roots should mark only `inertia.assets`, `inertia.head`, and `inertia.mount` as
+safe. Do not wrap the backend body in a second `#app` element.
+
+See [Root documents](/docs/guides/root-documents) for the complete contract.
+
+## Browser assets return 404
+
+Make the Vite client output, `.build_dir(...)`, and `.public_path(...)` agree.
+The manifest's entry must match `.entry(...)`. The maintained production tests
+request the emitted module script through the Axum router; use the same check in
+your deployment smoke test.
+
+## Managed Node does not release its port
+
+The bundle should implement `/shutdown` and close its listener. Managed mode
+waits for that route and then force-kills after the control timeout. Keep the
+`InertiaApp` handle owned by the live router and allow normal Rust shutdown to
+drop the last clone. Increase `.control_timeout(...)` only when graceful shutdown
+legitimately needs longer.
+
+For baseline configuration values, read
+[Health and operations](/docs/ssr/health-and-operations). For deterministic
+reproduction, use [SSR testing](/docs/ssr/testing).

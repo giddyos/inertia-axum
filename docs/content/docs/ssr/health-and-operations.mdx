@@ -1,0 +1,122 @@
+---
+title: Health and operations
+description: Configure SSR timeouts and limits, expose local health, and operate managed or external rendering safely.
+keywords:
+  - SSR health
+  - concurrency
+  - response limit
+  - startup timeout
+  - graceful shutdown
+---
+
+Set bounded render behavior and expose the adapter's locally recorded health to
+your monitoring system. Every limit has a production-safe default and can be
+overridden on `Ssr`.
+
+## Prerequisites
+
+Enable the `ssr` feature and retain an `InertiaApp` clone wherever application
+health is reported. Managed operations also require Node 22 or newer; external
+process health and lifecycle remain the external supervisor's responsibility.
+
+## Default configuration
+
+| Setting | Default | Builder method | Applies to |
+| --- | ---: | --- | --- |
+| Node endpoint | `http://127.0.0.1:13714` | `.endpoint(...)` | Managed Node |
+| Render timeout | 3 seconds | `.timeout(...)` | Each render |
+| Startup timeout | 10 seconds | `.startup_timeout(...)` | Initial and restarted readiness |
+| Control timeout | 2 seconds | `.control_timeout(...)` | Health and shutdown control requests |
+| Maximum concurrency | 16 | `.max_concurrency(...)` | In-flight renders |
+| Maximum response size | 8 MiB | `.max_response_bytes(...)` | SSR response body |
+| Route default | Enabled | `.opt_in()` changes it | Eligible page GETs |
+| Failure mode | CSR fallback | `.strict()` changes it | Failed renders |
+
+Timeouts must be non-zero. Concurrency and response-size limits must be greater
+than zero; invalid values fail startup.
+
+```rust
+use inertia_axum::Ssr;
+use std::time::Duration;
+
+let ssr = Ssr::node("dist/ssr/app.js")
+    .timeout(Duration::from_secs(2))
+    .startup_timeout(Duration::from_secs(20))
+    .control_timeout(Duration::from_secs(3))
+    .max_concurrency(32)
+    .max_response_bytes(4 * 1024 * 1024);
+```
+
+## Read local health
+
+`InertiaApp::ssr_health()` performs no network request. It returns the latest
+state already known by the runtime:
+
+| State | Meaning |
+| --- | --- |
+| `Disabled` | No SSR runtime is configured. |
+| `Starting { backend }` | A managed backend is starting or restarting. |
+| `Ready { backend }` | Startup or the latest render succeeded. |
+| `Degraded { backend, last_failure }` | A render failed; fallback may still be serving CSR. |
+| `Unavailable { backend }` | The managed process exited or the runtime cannot currently render. |
+
+Backend kinds are `Vite`, `ManagedNode`, and `External`. Failure kinds distinguish
+unavailable, overloaded, timeout, transport, invalid response, render error,
+oversized response, and process exit.
+
+```rust
+use axum::http::StatusCode;
+use inertia_axum::{InertiaApp, SsrHealth};
+
+fn readiness(inertia: &InertiaApp) -> StatusCode {
+    match inertia.ssr_health() {
+        SsrHealth::Ready { .. } => StatusCode::OK,
+        _ => StatusCode::SERVICE_UNAVAILABLE,
+    }
+}
+```
+
+Decide whether your application readiness endpoint should require `Ready`.
+Fallback mode can keep serving valid CSR while SSR is degraded, so a separate SSR
+health signal is often more useful than taking the whole application out of
+service.
+
+## Know when health changes
+
+- Managed and external startup poll `/health` until `startup_timeout`.
+- A failed render records `Degraded`; the next successful render records `Ready`.
+- A managed process exit records `Unavailable`, then `Starting`, then `Ready`
+  after a successful restart.
+- External mode has no background supervisor after startup. A later outage is
+  discovered by an attempted render.
+- `Vite` development mode has no health or shutdown endpoint.
+
+## Tune capacity
+
+The HTTP client pools connections and limits in-flight render requests. When the
+limit is saturated, the next request is load-shed immediately. Measure Node CPU,
+memory, render latency, and fallback rate before changing the limit. For an
+external cluster, configure concurrency for the cluster's measured total
+capacity.
+
+Keep `max_response_bytes` above the largest legitimate rendered document but low
+enough to bound memory use. A response that crosses the limit is rejected before
+JSON decoding.
+
+## Operate shutdown and restarts
+
+Managed mode requests `/shutdown` when the last application handle is dropped,
+waits for the child, and force-kills it if the control deadline expires. It also
+restarts unexpected exits with bounded backoff and rechecks `/health`.
+
+External mode leaves lifecycle management to its process manager. Coordinate
+rolling deployment and capacity there; Rust does not send an external shutdown
+when its application handle is dropped.
+
+Node stdout is logged at `info` and stderr at `warn` under the
+`inertia_axum::ssr::node` tracing target. Capture that target together with
+application errors and SSR health transitions.
+
+Read [Fallback and strict mode](/docs/ssr/fallback-and-strict-mode) for user-facing
+failure behavior and [Troubleshooting](/docs/ssr/troubleshooting) for common
+operational failures.

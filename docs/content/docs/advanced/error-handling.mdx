@@ -1,0 +1,233 @@
+---
+title: Error handling
+description: Rescue nonessential prop failures, classify adapter errors, and keep internal failure details out of HTTP responses.
+keywords:
+  - ErrorHandler
+  - PropError
+  - FormError
+  - InertiaError
+  - strict SSR
+---
+
+Use `.rescue()` for a prop the page can safely omit, and install one `ErrorHandler`
+to report those failures. Let required data fail the page, and handle configuration,
+form, transient-state, root-view, shared-data, and SSR failures through their
+separate typed error paths.
+
+## Prerequisites
+
+Prop rescue, `PropError`, `InertiaError`, and `ErrorHandler` require no Cargo
+feature. `FormError` is always available; the form derives use the default `macros`
+feature. `StartError`, `SsrStartError`, `SsrFailure`, and the `InertiaError::Ssr`
+variant require `ssr`.
+
+Add `tracing` directly when the reporter below is used, and install a structured
+logging subscriber in the application:
+
+```toml
+[dependencies]
+tracing = "0.1"
+```
+
+The adapter emits tracing events but does not install a subscriber for you.
+`InertiaError` is exported at `inertia_axum::axum::InertiaError`; the other error
+and reporter types on this page are exported from the crate root.
+
+## Report a rescued prop
+
+This pattern is reduced from the rescued-failure integration test:
+
+```rust
+use axum::{Router, routing::get};
+use inertia_axum::{
+    DynamicPage, ErrorHandler, InertiaApp, PropError,
+    RouterInertiaExt as _, defer, page,
+};
+
+#[derive(Clone)]
+struct PropReporter;
+
+impl ErrorHandler for PropReporter {
+    fn handle(&self, prop: &str, error: &PropError) {
+        tracing::error!(prop, error = %error, "rescued Inertia prop failed");
+    }
+}
+
+async fn dashboard() -> DynamicPage {
+    page!("Dashboard", {
+        title: "Operations",
+        activity: defer(load_activity).group("sidebar").rescue(),
+    })
+}
+
+async fn load_activity() -> Result<Vec<String>, std::io::Error> {
+    Ok(vec![])
+}
+
+let app = Router::new().route("/dashboard", get(dashboard)).inertia(
+    InertiaApp::default_root()
+        .error_handler(PropReporter)
+        .build()?,
+);
+# Ok::<_, inertia_axum::ConfigError>(app)
+```
+
+When the selected `activity` resolver fails, the adapter:
+
+1. omits `activity` from `props`;
+2. adds `activity` to `rescuedProps`;
+3. calls `PropReporter::handle("activity", &error)`; and
+4. still returns the usable page.
+
+Rescue does not create a fallback value. The frontend should render the Inertia
+`<Deferred>` rescue state or another missing-data state appropriate to the page.
+
+## Know what the handler catches
+
+`ErrorHandler` runs only for a selected `Prop` whose executable policy includes
+`.rescue()`. It receives a borrowed prop name and `PropError` after the failure is
+associated with its serialized key. It does not handle:
+
+- an unrescued prop failure;
+- a route-handler error or panic;
+- `Share::share`, `RootView::render`, or `TransientStore` failures;
+- form parsing or validation failures;
+- configuration or SSR startup failures; or
+- an SSR render failure, including strict mode.
+
+The callback is synchronous and cannot change the response. Copy the small details
+needed by an asynchronous reporter into an owned queue item rather than retaining
+the borrowed `PropError`. `ErrorHandler` must be `Clone + Send + Sync + 'static`.
+A later `.error_handler(...)` builder call replaces the previous handler.
+
+Without a configured handler, a rescued failure is still omitted and recorded, and
+the adapter emits an error-level tracing event with `prop` and `error` fields.
+Unselected resolver closures are never invoked, so they cannot produce a report.
+The adapter does not catch panics in resolvers or in the handler.
+
+`Prop::rescue()` is the executable error policy. By contrast, the compatibility
+builders `Inertia::page(...).rescue("key")` and
+`Inertia::response(...).rescue("key")` only serialize `rescuedProps` metadata; they
+do not install a resolver or catch serialization failures.
+
+## Understand prop and form errors
+
+`PropError` wraps a resolver or prop-serialization error as
+`Box<dyn Error + Send + Sync>`. `PropError::new` is available when an integration
+needs to normalize an error explicitly, and `InertiaResult<T>` is the alias
+`Result<T, PropError>`. Ordinary `lazy`, `optional`, `defer`, and `once` closures can
+return any error implementing `Error + Send + Sync + 'static`; the prop engine wraps
+it automatically.
+
+Without `.rescue()`, a selected prop failure becomes `InertiaError::Prop` and the
+page returns `500 Internal Server Error`.
+
+`FormError` is an extractor rejection with different HTTP semantics:
+
+| Variant | Result |
+| --- | --- |
+| `BadRequest` | `400 Bad Request` with the body-decoding error. |
+| `UnsupportedMediaType` | `415 Unsupported Media Type`; the common extractor accepts JSON and URL-encoded bodies, not multipart. |
+| `Validation` | A pending `303 See Other` redirect back, with errors and opted-in redacted old input stored for the next request. |
+
+Semantic validation is intentionally not ordinary `422` JSON. It requires a
+configured transient store; otherwise finalization returns the actionable
+`InertiaError::MissingTransientStore` response. See
+[Forms and validation](/docs/guides/forms-and-validation) for error bags and old
+input.
+
+## Classify build, startup, and request failures
+
+| Error | Boundary and behavior |
+| --- | --- |
+| `ConfigError` | Returned by `build()` for root-template or asset configuration failures, and when SSR is configured but synchronous `build()` is used. |
+| `StartError::Config` | Root or asset configuration failed during asynchronous `start()`. |
+| `StartError::Ssr` | Wraps `SsrStartError` when SSR validation or startup fails. |
+| `SsrStartError` | Classifies invalid endpoints or limits, unavailable bundles or Node, unsupported Node versions, health timeout, and managed-process startup failures. |
+| `SsrFailure` | Classifies a render/runtime failure as unavailable, overloaded, timeout, transport, invalid response, render error, response too large, or process exit. `kind()` returns the stable `SsrFailureKind`. |
+| `InertiaError` | Represents request-time page serialization, invalid response headers or URIs, root rendering, prop resolution, shared preparation, missing or failed transient state, and strict SSR failures. |
+
+Startup errors are returned before the router is served and are intended for
+operator logs. With the `ssr` feature, `.start().await` returns `StartError` even
+when no SSR backend was configured; `.build()` remains the synchronous path when
+SSR is not configured.
+
+## Follow request-time failure paths
+
+The standard Inertia layer turns finalization failures into responses. The
+compatibility `InertiaRequest::render`, `location`, and `redirect` methods instead
+return `Result<Response, InertiaError>` so a handler can use `?`.
+
+Important request-time sources are:
+
+- A `Share::share` error becomes `InertiaError::Shared` before the route handler
+  runs. Shared preparation happens on requests that pass the pre-handler asset
+  version check, including ordinary non-page requests. Keep it small and reliable;
+  put optional asynchronous work in rescued shared `Prop`s.
+- A custom or Askama root rendering error becomes `InertiaError::Root` only while
+  producing an initial HTML document. Inertia JSON visits bypass the root view.
+- A transient-store load or commit error becomes `InertiaError::Transient`.
+  Flash, validation errors, and old input without any store become
+  `MissingTransientStore`.
+- An unrescued resolver or prop-serialization failure becomes
+  `InertiaError::Prop`. Compatibility page-object serialization can use
+  `InertiaError::Serialization`.
+- Invalid redirect/location URI references and unrepresentable response header
+  values become `InvalidUri` and `InvalidHeader`.
+- In strict SSR mode, a render-time `SsrFailure` becomes `InertiaError::Ssr`.
+
+Except for `MissingTransientStore`, `InertiaError::into_response` returns a generic
+`500` body: `failed to build Inertia response`. The adapter logs the detailed
+display value at error level, and the public error implementations expose their
+underlying `source()` where one exists. The missing-store response includes an
+actionable instruction to configure `.transient(...)`. Do not replace these generic
+production responses with raw root, database, transient-store, or SSR backend
+messages.
+
+`FormError::BadRequest` is separate and returns the decoder message with status
+`400`; ensure request bodies and application secrets are not added to custom parser
+errors.
+
+## Operate SSR failures
+
+CSR fallback is the default. A failed eligible render records degraded health,
+emits an `inertia.ssr.render` span, warns with the failure and kind, and renders the
+already-built page through the normal CSR root. The span records component, URL,
+backend, outcome, request size, response size when available, and duration.
+
+`Ssr::strict()` changes only the render-failure response: the same `SsrFailure`
+becomes `InertiaError::Ssr` and therefore a generic `500`. Backend response bodies,
+JavaScript exceptions, and transport details stay in server-side errors rather than
+the HTTP body. Strict mode does not change `SsrStartError`; startup still fails
+before an application is returned.
+
+Monitor `InertiaApp::ssr_health()` and the `inertia_axum::ssr::node` tracing target
+even in fallback mode. A successful HTTP response can be CSR after an SSR incident.
+Node stdout is logged at `info`, stderr at `warn`, and unexpected exits or restart
+failures at `error`.
+
+## Respect pending-response limits
+
+`DynamicPage`, typed pages, redirects, locations, and validation failures first
+produce a request-local pending response. Their `IntoResponse` implementation puts
+a `PendingResponseHandle` in response extensions; `InertiaLayer` removes it, takes
+its value once, and performs request-aware finalization. If the layer is missing,
+the placeholder `500` explains how to install it.
+
+`PendingPage`, `PendingResponse`, and `PendingResponseHandle` are exported for
+low-level middleware coordination, but they are not a general exception API:
+
+- `PendingPage` fields and prop-erasure internals are private; construct one through
+  `DynamicPage::into_pending_page` or a typed `InertiaPage`.
+- The `PendingResponse::InvalidForm` payload type is not nameable through the normal
+  public API and its fields are private; construct validation responses through
+  `Validated<T>` or `Form<T>`.
+- `PendingResponseHandle::take()` is one-shot. Consuming it before the Inertia layer
+  prevents normal finalization.
+- There is no public finalizer-error callback that can substitute an HTTP response.
+  `ErrorHandler` remains deliberately limited to rescued props.
+
+Test both rescued and required failures with
+[inertia-axum-test](/docs/guides/testing). For runtime policy and health, continue
+with [Fallback and strict mode](/docs/ssr/fallback-and-strict-mode) and
+[Health and operations](/docs/ssr/health-and-operations).

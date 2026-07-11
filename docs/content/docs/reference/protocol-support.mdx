@@ -1,0 +1,93 @@
+---
+title: Protocol support
+description: Implemented Inertia.js v3 server behavior, SSR support, verified extensions, and current limitations.
+---
+
+`inertia-axum` implements the Inertia v3 server protocol for Axum, including page responses, partial and deferred props, merge metadata, validation redirects, asset-version conflicts, and server-side rendering.
+
+## Support matrix
+
+| Capability | Status | Behavior |
+| --- | --- | --- |
+| Initial browser response | Supported | Returns a complete HTML root with script-safe serialized page data, or an SSR document when eligible. |
+| Inertia visit | Supported | Returns a JSON page with `X-Inertia: true`. |
+| Asset versioning | Supported | String and numeric versions; stale or missing versions on Inertia GET requests produce a pre-handler `409` location conflict. |
+| Local URL preservation | Supported | Page URLs use the original local path and query rather than an absolute request URI. |
+| Partial reloads | Supported | `only`, `except`, component matching, always props, and GET-only filtering. `except` wins if both selection headers are present. |
+| Immediate and lazy props | Supported | Standard values and selected asynchronous resolvers. Unselected asynchronous futures are not constructed. |
+| Optional props | Supported | Included only when explicitly requested on a matching partial reload. |
+| Deferred props | Supported | Named groups, follow-up resolution, and omission from the initial response. |
+| Rescued props | Supported | Failed values are omitted, reported, and listed in `rescuedProps`. |
+| Once props | Supported | Stable cache keys, absolute/relative expiration, explicit refresh, and client exclusions. |
+| Merge metadata | Supported | Append, prepend, nested paths, deep merge, and match paths. |
+| Infinite scroll | Supported | Normalized `data`, page metadata, append/prepend intent, and reset behavior. |
+| Shared data | Supported | Typed application provider, request context, dotted paths, route-root precedence, and shared metadata. |
+| History flags | Supported | Encrypt, clear, and preserve-fragment flags. |
+| Validation errors | Supported | Error bags, redirect-back transport, opt-in redacted old input, and the required `errors` prop. |
+| Flash and reflashing | Supported | Separate `page.flash` namespace, one-request consumption, redirect reflashing, and stale-version reflashing. |
+| Internal redirects | Supported | `302 Found` after read methods and `303 See Other` after POST, PUT, PATCH, or DELETE. |
+| External locations | Supported | Inertia `409` with location/fragment header; ordinary browser requests receive method-aware redirects. |
+| Server-side rendering (SSR) | Supported | Vite development SSR, managed Node, external servers, per-route policy, health, fallback/strict modes, limits, and shutdown. |
+| Not-found passthrough | Supported | Non-Inertia responses with no pending page pass through the layer unchanged. |
+| Precognition | Not supported | Precognition request detection and response semantics are not implemented. |
+| Multipart form extraction | Use a separate extractor | `Validated<T>` accepts JSON and URL-encoded bodies. File uploads should use Axum multipart handling and application validation. |
+
+## Page object fields
+
+The serialized `Page<T>` uses the Inertia v3 camel-case shape:
+
+- required `component`, `props`, and `url`;
+- optional scalar `version`;
+- optional `flash`;
+- history booleans when true;
+- `mergeProps`, `prependProps`, `deepMergeProps`, and `matchPropsOn`;
+- `scrollProps`, `deferredProps`, `rescuedProps`, `sharedProps`, and `onceProps`.
+
+Empty optional metadata is omitted. Object props always contain an `errors` object, even when there are no validation errors.
+
+## HTML and JSON negotiation
+
+The adapter classifies a request by the presence of `X-Inertia`:
+
+- Without it, a pending page renders the application root as HTML.
+- With it, the same pending page serializes directly to JSON.
+
+`X-Requested-With` and `Accept` constants are exported for ecosystem integrations but do not participate in this decision. Root rendering happens only for the initial HTML response; subsequent Inertia visits bypass the root.
+
+Page, redirect, and conflict responses include `Vary: X-Inertia`. Serialized page JSON escapes `<`, `>`, `&`, `U+2028`, and `U+2029` before it is embedded in a script context.
+
+## Partial-selection precedence
+
+Partial reload processing is enabled only for GET responses and only when `X-Inertia-Partial-Component` matches the response component.
+
+1. Deferred and client-held once values are omitted unless explicitly requested.
+2. Always props are included.
+3. `X-Inertia-Partial-Except` is applied when non-empty.
+4. Otherwise `X-Inertia-Partial-Data` is applied when non-empty.
+5. Optional props still require explicit inclusion.
+
+A component mismatch or a non-GET response uses full standard selection. See [props and policies](/docs/reference/props-and-policies).
+
+## Redirect and validation semantics
+
+Validation does not return ordinary `422` JSON. `Validated<T>` stops the handler, stores errors and optional old input in the configured transient store, then returns `303 See Other` to the request referrer or current path fallback. The next page consumes that state.
+
+`Redirect::back()` uses `Referer` with `/` as its fallback; `back_or(...)` supplies another fallback. Redirect responses reflash unconsumed incoming state before adding new flash values.
+
+## SSR protocol support
+
+When configured, SSR is attempted for initial non-Inertia page GET requests unless route policy disables it. Inertia JSON visits, writes, redirects, and non-page responses never render through SSR.
+
+The adapter posts the already serialized page object to the backend. A successful `{ head, body }` response supplies trusted head and mount fragments to the same root renderer used by CSR. Vite development may return `null` while warming up; this falls back to CSR.
+
+Fallback is the default for overload, timeout, transport, invalid response, oversized response, render failure, or unavailable process. `.strict()` turns those failures into a generic internal error. See the [SSR overview](/docs/ssr) for backend contracts and operational defaults.
+
+## Deliberate limitations
+
+- External and managed SSR endpoints must use absolute `http://` URIs.
+- The built-in form extractor limits the body to 2 MiB and does not parse multipart.
+- `MemoryTransient` is deterministic test/example storage, not isolated production user storage.
+- Root title, locale, and CSP nonce fields are exposed to custom renderers but are not configurable in this release.
+- Selected asynchronous prop concurrency is fixed at 16 per page finalization.
+
+The implementation is exercised by protocol, integration, snapshot, compile-fail, SSR, and live production example tests. See [testing](/docs/guides/testing) and [examples](/docs/reference/examples).

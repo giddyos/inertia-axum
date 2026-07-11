@@ -1,0 +1,11 @@
+{
+  "title": "Recipes",
+  "pages": [
+    "authenticated-shared-props",
+    "validation-form",
+    "deferred-dashboard",
+    "paginated-infinite-scroll",
+    "custom-root-document",
+    "testing-an-application"
+  ]
+}

@@ -1,5 +1,9 @@
 /target
 /specs
+docs/.next/
+docs/.source/
+docs/node_modules/
+docs/*.tsbuildinfo
 **/*.snap.new
 examples/axum-*/**/node_modules/
 examples/axum-*/**/dist/

@@ -1,0 +1,79 @@
+---
+title: Application and router
+description: Configure an InertiaApp, choose build or start, and install it on an Axum router.
+---
+
+Create one immutable `InertiaApp` at startup, then install it on the outer Axum
+router with `.inertia(app)`. This adds request parsing, version checks, shared and
+transient state, page finalization, and—when Vite is used—static asset serving.
+
+## Choose a builder
+
+```rust
+use inertia_axum::prelude::*;
+
+// Built-in root, with no asset integration.
+let app = InertiaApp::default_root();
+
+// Built-in root plus the default Vite conventions.
+let app = InertiaApp::vite("frontend");
+```
+
+`InertiaApp::vite` requires the `vite` feature, which is enabled by default. Its defaults are
+`src/main.ts`, build directory `dist`, and public URL prefix `/build`. Use
+`InertiaApp::builder(root)` only when supplying a custom `RootView` from the start.
+
+## Build without SSR
+
+`build()` performs synchronous startup work: it validates and compiles a marker
+root, loads the production Vite manifest when needed, and builds a custom asset
+provider. It returns an error before the server starts if configuration is invalid.
+
+```rust
+let inertia = InertiaApp::vite("frontend").build()?;
+```
+
+Enabling the Cargo `ssr` feature does not require asynchronous startup by itself.
+Only calling `.ssr(...)` configures a renderer.
+
+## Start with configured SSR
+
+Once `.ssr(...)` is called, use asynchronous `start()`. Calling `build()` on that
+builder is an error because it cannot start the managed process or connect the
+external runtime.
+
+```rust
+# use inertia_axum::prelude::*;
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .start()
+    .await?;
+# Ok::<(), inertia_axum::StartError>(())
+```
+
+`start()` is available with the `ssr` feature. Without an `.ssr(...)` configuration,
+it behaves like `build()` and returns an application without an SSR runtime.
+
+## Install the outer layer
+
+```rust
+use axum::{routing::get, Router};
+use inertia_axum::prelude::*;
+
+fn router(inertia: InertiaApp) -> Router {
+    Router::new()
+        .route("/", get(|| async { page!("Home", {}) }))
+        .inertia(inertia)
+}
+```
+
+Install `.inertia(...)` after composing routes and state so its Tower layer wraps
+the complete application. If a page is returned without the layer, the response is
+a diagnostic `500` explaining how to install it.
+
+Builder choices that select the same subsystem are last-call-wins. In particular,
+`root`, `root_template`, `root_template_source`, and `askama_root` replace one another;
+`assets(provider)` replaces Vite asset handling.
+
+See [Configuration reference](/docs/reference/configuration) for every builder
+method and [Route policies](/docs/ssr/route-policies) for nested SSR precedence.

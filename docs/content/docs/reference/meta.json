@@ -1,0 +1,15 @@
+{
+  "title": "Reference",
+  "pages": [
+    "index",
+    "cargo-features",
+    "configuration",
+    "macros",
+    "props-and-policies",
+    "request-headers",
+    "protocol-support",
+    "testing-api",
+    "cli",
+    "examples"
+  ]
+}

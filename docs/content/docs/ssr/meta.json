@@ -1,0 +1,14 @@
+{
+  "title": "Server-side rendering",
+  "pages": [
+    "index",
+    "frontend-build",
+    "managed-node",
+    "external-server",
+    "route-policies",
+    "fallback-and-strict-mode",
+    "health-and-operations",
+    "testing",
+    "troubleshooting"
+  ]
+}

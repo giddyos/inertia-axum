@@ -1,0 +1,76 @@
+---
+title: Partial reloads
+description: Reload selected props without repeating all data work for a page.
+keywords:
+  - partial reloads
+  - optional props
+---
+
+Partial reloads let an Inertia visit request only part of the current component's
+props. Mark expensive request-only values as `optional`, then select them from the
+client with `only` or omit values with `except`.
+
+## Define selectable data
+
+```rust
+use inertia_axum::prelude::*;
+use std::convert::Infallible;
+
+async fn index() -> DynamicPage {
+    page!("Users/Index", {
+        users: load_users().await,
+        companies: optional(|| async {
+            Ok::<_, Infallible>(load_companies().await)
+        }),
+        request_kind: always("partial-aware"),
+    })
+}
+# async fn load_users() -> Vec<String> { vec![] }
+# async fn load_companies() -> Vec<String> { vec![] }
+```
+
+`companies` is absent from a normal visit. It is resolved only when the client
+explicitly requests that key. `request_kind` is immediate and remains present even
+when a partial request does not select it.
+
+## Request selected props
+
+The client adapters share the same router API:
+
+```ts
+import { router } from '@inertiajs/svelte' // or @inertiajs/react / @inertiajs/vue3
+
+router.reload({ only: ['companies'] })
+router.reload({ except: ['users'] })
+```
+
+The client sends `X-Inertia-Partial-Component` and selection headers. No Axum route
+or handler changes are required.
+
+## Selection rules
+
+- Partial filtering applies only to `GET` requests.
+- The requested component must equal the response component. A mismatch returns the
+  normal complete selection so stale data is not combined across pages.
+- `X-Inertia-Partial-Except` wins if both include and exclude lists are present.
+- `always` props survive filtering; `optional` props require explicit selection.
+- `props.errors` remains available for object-valued props.
+- Selection occurs before asynchronous closures are invoked. An unselected closure
+  is not called, so its future is never constructed or polled.
+
+## Test the request
+
+```rust
+let page = app
+    .inertia_get("/users")
+    .only(UsersPage::COMPANIES)
+    .send()
+    .await
+    .assert_page::<UsersPage>();
+
+page.assert_missing(UsersPage::USERS);
+```
+
+For data loaded automatically after the first render, use
+[Deferred and lazy props](/docs/guides/deferred-and-lazy-props). For wire-level
+details, see [Request headers](/docs/reference/request-headers).

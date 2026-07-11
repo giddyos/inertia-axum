@@ -1,0 +1,141 @@
+---
+title: Test a Todo application
+description: Add focused tests for a typed page, deferred follow-up request, and redirect-based validation.
+keywords:
+  - TestApp recipe
+  - deferred prop test
+  - validation redirect test
+---
+
+Add two focused tests to a typed Todo application: one that reproduces the
+client's deferred follow-up request, and one that proves invalid input redirects
+back with validation errors.
+
+This recipe is copied from the maintained
+[`examples/todo`](https://github.com/giddyos/inertia-axum/tree/main/examples/todo)
+fixture.
+
+## Prerequisites
+
+The application should already have:
+
+- a typed `TodosPage` with `TODOS` and deferred `STATS` keys;
+- a `POST /todos` handler using `Validated<CreateTodo>`;
+- `MemoryTransient` or another transient store;
+- an `app(state, inertia) -> Router` function.
+
+Add the test dependencies:
+
+```toml
+[dev-dependencies]
+inertia-axum-test = "1.0.0-alpha.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Build the test application
+
+Put the tests beside the application code so they can reuse its page and state
+types:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use inertia_axum_test::TestApp;
+
+    fn test_app() -> TestApp {
+        let inertia = InertiaApp::default_root()
+            .transient(MemoryTransient::new())
+            .build()
+            .expect("test Inertia configuration should be valid");
+
+        TestApp::new(app(AppState::seeded(), inertia))
+    }
+}
+```
+
+`TestApp` sends requests directly through Tower. It does not bind an application
+socket.
+
+## Test deferred loading
+
+First assert that the initial JSON page advertises `stats` but omits its value.
+Then make the typed partial request that the Inertia client makes automatically:
+
+```rust
+#[tokio::test]
+async fn stats_are_deferred_until_the_follow_up_request() {
+    let app = test_app();
+
+    let initial = app
+        .inertia_get("/todos")
+        .send()
+        .await
+        .assert_page::<TodosPage>();
+
+    initial
+        .assert_deferred("default", TodosPage::STATS)
+        .assert_missing(TodosPage::STATS);
+
+    let partial = app
+        .inertia_get("/todos")
+        .only(TodosPage::STATS)
+        .send()
+        .await
+        .assert_page::<TodosPage>();
+
+    let stats: TodoStats = partial.prop(TodosPage::STATS);
+
+    assert_eq!(stats.total, 1);
+    assert_eq!(stats.remaining, 1);
+    partial.assert_missing(TodosPage::TODOS);
+}
+```
+
+This proves both halves of deferred behavior: the metadata sent initially and the
+resolver value returned only when selected.
+
+## Test redirect validation
+
+Send an empty URL-encoded form with a referer. The validation extractor should
+redirect before the handler body runs, store the error, and expose it on the
+follow-up page:
+
+```rust
+#[tokio::test]
+async fn invalid_input_redirects_back_with_errors() {
+    let app = test_app();
+
+    let redirect = app
+        .inertia_post("/todos")
+        .header("referer", "/todos")
+        .form(&[("title", "")])
+        .send()
+        .await
+        .assert_see_other("/todos");
+
+    redirect
+        .follow()
+        .await
+        .assert_page::<TodosPage>()
+        .assert_error("title");
+}
+```
+
+The same `MemoryTransient` store carries the transient error between the two
+calls. `follow()` uses an Inertia GET and records `/todos` in `app.history()`.
+
+## Run the tests
+
+```sh
+cargo test
+```
+
+Use a fresh `TestApp` in each test to avoid sharing cookies, redirect history, or
+in-memory domain state. `MemoryTransient` is appropriate here because the test is
+single-process; choose encrypted-cookie or session-backed storage for the
+deployed application.
+
+Next, read [Testing applications](/docs/guides/testing) for flash, cookies,
+versions, merge metadata, reset, rescue, and raw-response assertions. For SSR
+routes, continue with [Test SSR](/docs/ssr/testing).

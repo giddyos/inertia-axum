@@ -1,0 +1,87 @@
+---
+title: Project structure
+description: Organize Rust routes, Vite assets, and Inertia page components using the repository's conventional layout.
+keywords:
+  - project structure
+  - page components
+  - Vite manifest
+---
+
+## What you will accomplish
+
+You will organize a small application so Rust component names, frontend page files, and Vite build output line up without custom paths.
+
+## Prerequisites and features
+
+Start with the application from the [Quick start](/docs/getting-started/quick-start). The structure below uses the default `macros` and `vite` features and the built-in root document.
+
+## Minimal project layout
+
+<Files>
+  <File name="Cargo.toml" />
+  <File name="Cargo.lock" />
+  <Folder name="src" defaultOpen>
+    <File name="main.rs" />
+  </Folder>
+  <Folder name="frontend" defaultOpen>
+    <File name="package.json" />
+    <File name="pnpm-lock.yaml" />
+    <File name="vite.config.ts" />
+    <Folder name="src" defaultOpen>
+      <File name="main.ts" />
+      <Folder name="Pages" defaultOpen>
+        <File name="Home.svelte (or Home.tsx / Home.vue)" />
+      </Folder>
+    </Folder>
+    <Folder name="dist">
+      <Folder name=".vite">
+        <File name="manifest.json" />
+      </Folder>
+      <Folder name="assets" />
+    </Folder>
+  </Folder>
+</Files>
+
+Keep the relationship explicit in Rust:
+
+```rust title="src/main.rs"
+async fn index() -> DynamicPage {
+    page!("Home", { greeting: "Hello" })
+}
+
+let inertia = InertiaApp::vite("frontend").build()?;
+```
+
+`Home` resolves beneath `frontend/src/Pages`, while the Vite root passed to `InertiaApp::vite` owns the source entry and production manifest.
+
+## How it works
+
+| Path | Responsibility |
+| --- | --- |
+| `src/main.rs` | Axum listener, routes, state, and `InertiaApp` startup. |
+| `frontend/src/main.ts` | Boots the selected Inertia client adapter. |
+| `frontend/src/Pages/` | Holds components selected by Rust page names. |
+| `frontend/vite.config.ts` | Defines the framework plugin, entry, manifest, and optional SSR build. |
+| `frontend/dist/.vite/manifest.json` | Maps the configured entry to hashed browser assets. |
+
+The `frontend/dist` directory is generated. The manifest is read during application startup; individual requests do not re-read it.
+
+## Defaults and edge cases
+
+- Do not add `templates/app.html` unless you need a custom document. The built-in root is complete.
+- If the entry is `src/app.jsx`, configure `.entry("src/app.jsx")`; the manifest key must match exactly.
+- If the build leaves `frontend/dist`, configure `.build_dir(...)` and `.public_path(...)` together, as the maintained framework examples do.
+- Page names may contain directories, such as `Users/Show`, which resolve beneath `Pages/Users/Show.*`.
+- Keep generated assets out of source control unless an example intentionally uses committed fixtures.
+
+## Production guidance
+
+Commit both lockfiles, build `frontend/dist` as a deployment step, and fail the deployment if the manifest is absent. Keep application code and pages together when they change as one unit so Rust page names cannot drift from frontend paths.
+
+## Related guides and examples
+
+- [Typed pages and props](/docs/guides/typed-pages-and-props)
+- [Vite and assets](/docs/guides/vite-and-assets)
+- [Custom root documents](/docs/guides/root-documents)
+- [Maintained examples](/docs/reference/examples)
+- [`axum-minimal` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-minimal)

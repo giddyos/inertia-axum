@@ -1,0 +1,71 @@
+---
+title: Create a custom root document
+description: Add static document markup with a marker template compiled once at startup.
+keywords:
+  - root document
+  - HTML template
+---
+
+Use a marker template when the built-in root is almost right but you need static
+metadata, classes, preload hints, or a document wrapper. No extra Cargo feature or
+template engine is required.
+
+## 1. Create the HTML file
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Acme operations console">
+    <link rel="icon" href="/favicon.svg">
+    <!-- inertia:assets -->
+    <!-- inertia:head -->
+  </head>
+  <body class="application-shell">
+    <!-- inertia:mount -->
+  </body>
+</html>
+```
+
+Each of the three markers must appear exactly once.
+
+## 2. Select it at startup
+
+```rust
+use inertia_axum::InertiaApp;
+
+let inertia = InertiaApp::vite("frontend")
+    .root_template("templates/app.html")
+    .build()?;
+```
+
+The adapter reads and validates the file during `build()`, then keeps compiled static
+segments in the immutable application. A request does no filesystem access or HTML
+parsing. Restart after changing the file.
+
+## 3. Embed it for a single-file deployment
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .root_template_source(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/app.html"
+    )))
+    .build()?;
+```
+
+The embedded and file forms have the same marker validation. A later call to
+`root`, `root_template`, `root_template_source`, or `askama_root` replaces the prior
+selection.
+
+## Dynamic document values
+
+Marker HTML is static. If the root needs typed application values or template logic,
+use the optional Askama integration described in
+[Root documents](/docs/guides/root-documents). Use a custom `RootView` only for
+another engine or complete rendering control.
+
+The same template receives CSR or SSR mount fragments. Do not add your own page JSON
+serialization; the adapter's mount is already script-safe and protocol-correct.

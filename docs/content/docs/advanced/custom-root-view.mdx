@@ -1,0 +1,166 @@
+---
+title: Custom RootView
+description: Render the initial Inertia HTML document with another engine or a fully custom Rust renderer.
+keywords:
+  - RootView
+  - RootContext
+  - root document
+---
+
+Implement `RootView` when another template engine or a custom Rust renderer must
+produce the complete initial HTML document. The renderer receives inertia-axum's
+trusted asset, head, and mount fragments and controls where they appear.
+
+## Prerequisites
+
+`RootView` and `RootContext` require no Cargo feature. The example below keeps the
+default `vite` feature because Vite supplies its asset tags:
+
+```toml
+[dependencies]
+inertia-axum = "1.0.0-alpha.1"
+```
+
+Use the built-in root or a marker template unless you need another engine or complete
+rendering control. Use the typed `AskamaRoot` integration instead when that engine is
+Askama.
+
+## Implement a root renderer
+
+This implementation is reduced from the built-in root and custom-root tests. It
+copies each trusted fragment once and preallocates the output string:
+
+```rust
+use inertia_axum::{InertiaApp, RootContext, RootView};
+use std::convert::Infallible;
+
+#[derive(Clone, Copy)]
+struct AppRoot;
+
+impl RootView for AppRoot {
+    type Error = Infallible;
+
+    fn render(&self, context: RootContext<'_>) -> Result<String, Self::Error> {
+        const PREFIX: &str = concat!(
+            "<!doctype html><html lang=\"en\"><head>",
+            "<meta charset=\"utf-8\">",
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+        );
+        const BODY: &str = "</head><body>";
+        const SUFFIX: &str = "</body></html>";
+
+        let assets = context.assets().as_str();
+        let head = context.head().as_str();
+        let mount = context.mount().as_str();
+        let mut html = String::with_capacity(
+            PREFIX.len()
+                + assets.len()
+                + head.len()
+                + BODY.len()
+                + mount.len()
+                + SUFFIX.len(),
+        );
+
+        html.push_str(PREFIX);
+        html.push_str(assets);
+        html.push_str(head);
+        html.push_str(BODY);
+        html.push_str(mount);
+        html.push_str(SUFFIX);
+        Ok(html)
+    }
+}
+
+let inertia = InertiaApp::vite("frontend")
+    .root(AppRoot)
+    .build()?;
+```
+
+`InertiaApp::builder(AppRoot)` starts directly with the same custom renderer when
+Vite is not the asset pipeline.
+
+## How rendering works
+
+The selected root renders only full HTML responses. A later visit carrying
+`X-Inertia: true` receives a JSON page object and bypasses `RootView` completely.
+`render` is synchronous and runs in the request path for each initial HTML response.
+
+CSR and SSR use the same root:
+
+- In CSR, `head()` is empty. `mount()` contains the script-safe serialized initial
+  page and an empty `#app` element.
+- After successful SSR, `head()` contains the backend's head fragments and `mount()`
+  contains its rendered body.
+- A non-strict SSR failure falls back to the CSR fragments and still uses this root.
+  Strict SSR failure returns an error before a root document is rendered.
+
+Do not serialize the page object yourself or add a second application mount. Place
+the supplied head and mount in their document positions so CSR, SSR, and fallback
+all follow the same path.
+
+## RootContext values
+
+| Getter | Current value and responsibility |
+| --- | --- |
+| `assets()` | Trusted markup finalized by Vite or the custom `AssetProvider`; normally place it in `<head>`. |
+| `head()` | Empty for CSR, or trusted markup returned by the configured SSR backend; place it in `<head>`. |
+| `mount()` | The adapter's script-safe CSR mount or the SSR backend body; place it in `<body>`. |
+| `title()` | Currently always `None`. |
+| `locale()` | Currently always `None`. |
+| `nonce()` | Currently always `None`. |
+
+Version `1.0.0-alpha.1` has no application setting that populates `title`, `locale`,
+or `nonce`. They are text values rather than markup and would require normal output
+escaping if present.
+
+## Preserve the trust boundary
+
+`AssetTags`, `HeadMarkup`, and `MountMarkup` are trusted-markup wrappers. A custom
+root must emit their contents as raw HTML rather than escape them. That trust has
+three corresponding responsibilities:
+
+- A custom `AssetProvider` must create tags only from trusted build configuration.
+- The configured SSR backend must be trusted because its head and body are inserted
+  into the document.
+- Application strings and user content added by the root are not trusted fragments;
+  escape them with the template engine's normal HTML rules.
+
+The CSR mount is already serialized with script-breaking characters escaped. Do not
+decode, rebuild, or interpolate it into JavaScript. If SSR supplies a title in
+`head()`, avoid adding a duplicate fallback title.
+
+## Choose between RootView, markers, and Askama
+
+`root`, `root_template`, `root_template_source`, and `askama_root` select one
+application-wide renderer and use last-call-wins behavior. The last selection is the
+one finalized by `build()` or `start()`.
+
+- The built-in root requires no template and writes into one exact-capacity string.
+- Marker templates are read, validated, and split into static segments once during
+  startup. They are best for static document customization.
+- With the `askama` feature, `AskamaRoot` constructs a concrete compiled template
+  that can borrow application configuration and `AskamaRootContext`. Askama keeps
+  normal escaping for application values; apply `|safe` only to `assets`, `head`, and
+  `mount`. Its context also exposes `has_ssr_head` for fallback-title logic.
+- A direct `RootView` implementation is the engine-neutral option and owns all HTML,
+  escaping, error-type, and performance decisions.
+
+## Production guidance
+
+Keep `render` free of filesystem access, network calls, and template parsing. It is a
+synchronous method in the async response path. Compile or parse templates during
+application setup, store immutable state in a cheaply cloned value such as an `Arc`,
+and preallocate output when the engine allows it.
+
+`RootView` requires `Clone + Send + Sync + 'static`. Its error type must implement
+`Error + Send + Sync + 'static`. A rendering failure is logged as
+`failed to render Inertia root view: ...`; the response is a generic `500 Internal
+Server Error`, so do not rely on exposing renderer details to the browser.
+
+## Related guides and examples
+
+- [Root documents](/docs/guides/root-documents)
+- [Create a custom root document](/docs/recipes/custom-root-document)
+- [SSR fallback and strict mode](/docs/ssr/fallback-and-strict-mode)
+- [Maintained examples](/docs/reference/examples) includes the runnable Askama root
+  application.

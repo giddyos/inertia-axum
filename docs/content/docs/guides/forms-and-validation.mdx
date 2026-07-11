@@ -1,0 +1,117 @@
+---
+title: Forms and validation
+description: Parse Inertia form requests, validate typed input, and redirect failures back with errors.
+keywords:
+  - validation
+  - Garde
+  - Validator
+  - forms
+---
+
+Derive `InertiaForm`, extract `Validated<T>`, and let invalid submissions redirect
+back before the handler body runs. Validation failures are not ordinary `422` JSON
+responses: errors are flashed through transient storage and returned on the next page.
+
+## Prerequisites
+
+The derive needs the default `macros` feature. Redirected errors require a transient
+store:
+
+```rust
+let inertia = InertiaApp::default_root()
+    .transient(MemoryTransient::new())
+    .build()?;
+```
+
+`MemoryTransient` is appropriate for tests and examples only. Choose a production
+store in [Transient storage](/docs/guides/transient-storage).
+
+## Add custom validation
+
+This form is reduced from the tested `todo` example:
+
+```rust
+use inertia_axum::{Errors, prelude::*};
+use serde::Deserialize;
+
+#[derive(Deserialize, InertiaForm)]
+#[inertia(validate_with = "validate_todo")]
+struct CreateTodo {
+    title: String,
+}
+
+fn validate_todo(input: &CreateTodo) -> Result<(), Errors> {
+    let title = input.title.trim();
+
+    if title.is_empty() {
+        return Err(Errors::field("title", "Enter a todo title"));
+    }
+    Ok(())
+}
+
+async fn store(Validated(input): Validated<CreateTodo>) -> Redirect {
+    save(input).await;
+    Redirect::to("/todos").flash("message", "Todo created")
+}
+# async fn save(_: CreateTodo) {}
+```
+
+If validation fails, the extractor uses `Referer` as the destination, falling back
+to the current request path, persists errors, and returns `303 See Other`. The handler
+is not called.
+
+## Preserve safe old input
+
+Old input is opt-in. Mark sensitive values so they can never be serialized:
+
+```rust
+#[derive(Deserialize, InertiaForm)]
+#[inertia(validate_with = "validate_signup", old_input)]
+struct Signup {
+    email: String,
+    #[inertia(sensitive)]
+    password: String,
+}
+# fn validate_signup(_: &Signup) -> Result<(), inertia_axum::Errors> { Ok(()) }
+```
+
+Use `#[inertia(redact)]` as an equivalent field marker, or
+`#[inertia(redact = "password,token")]` on the struct. The next page receives safe
+values in `props.oldInput`. Errors and old input are consumed once.
+
+## Scope errors to a form
+
+Add `#[inertia(error_bag = "signup")]` for a derive-level fallback. A client
+`X-Inertia-Error-Bag` request header takes precedence, letting the same endpoint
+serve several forms.
+
+## Use Garde or Validator
+
+The derive can adapt either ecosystem's errors:
+
+```rust
+#[derive(serde::Deserialize, garde::Validate, InertiaForm)]
+#[inertia(validator = "garde")]
+struct Signup {
+    #[garde(length(min = 1))]
+    email: String,
+}
+```
+
+Or derive `validator::Validate` and use `#[inertia(validator = "validator")]`.
+Applications must add `garde` or `validator` directly. The same-named
+`inertia-axum` features neither add those crates nor need to be enabled; they are
+repository test-matrix markers only.
+
+## Supported request bodies
+
+`Validated<T>` and `Form<T>` accept `application/json` and
+`application/x-www-form-urlencoded`, with a 2 MiB body limit. Malformed data returns
+`400`; unsupported media types return `415`. Multipart uploads require a separate
+Axum extractor and application validation.
+
+For lower-level control, extract `Form<T>` (the public alias for `InertiaForm<T>`)
+and call `.validate_with(...)`. That path does not retain old input by default.
+
+See [Validation form recipe](/docs/recipes/validation-form) for client code and
+[Macros reference](/docs/reference/macros) for all attributes.

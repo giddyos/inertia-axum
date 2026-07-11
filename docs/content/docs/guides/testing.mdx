@@ -1,0 +1,233 @@
+---
+title: Test an application
+description: Send stateful in-process requests and assert Inertia pages, props, redirects, cookies, flash, metadata, and SSR.
+keywords:
+  - testing
+  - TestApp
+  - deferred assertions
+  - cookies
+  - redirects
+---
+
+Exercise the real Axum router without binding a port. `inertia-axum-test`
+constructs protocol requests, keeps request state between calls, and provides
+typed assertions for pages and Inertia v3 metadata.
+
+## Prerequisites
+
+Add the test crate and an asynchronous test runtime:
+
+```toml
+[dev-dependencies]
+inertia-axum-test = "1.0.0-alpha.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+Typed page assertions require `InertiaPage`, available through the default
+`macros` feature. Configure a transient store when the routes under test use
+validation or redirect flash.
+
+## Wrap the router
+
+The canonical Todo example builds the same router used by the application:
+
+```rust
+use inertia_axum::prelude::*;
+use inertia_axum_test::TestApp;
+
+fn test_app() -> TestApp {
+    let inertia = InertiaApp::default_root()
+        .transient(MemoryTransient::new())
+        .build()
+        .expect("test Inertia configuration should be valid");
+
+    TestApp::new(app(AppState::seeded(), inertia))
+}
+```
+
+Create a new `TestApp` for each test when state must be isolated.
+
+## Assert initial HTML and Inertia JSON
+
+`get` makes an ordinary initial-page GET. `inertia_get` includes
+`X-Inertia: true` and expects page JSON.
+
+```rust
+let app = test_app();
+
+let response = app.get("/todos").send().await
+    .assert_ok()
+    .assert_html();
+
+let initial_page = response.assert_html_page::<TodosPage>();
+assert_eq!(initial_page.value()["component"], "Todos/Index");
+
+let json_page = app.inertia_get("/todos")
+    .send()
+    .await
+    .assert_page::<TodosPage>();
+
+let todos: Vec<Todo> = json_page.prop(TodosPage::TODOS);
+assert_eq!(todos.len(), 1);
+```
+
+`assert_page::<P>()` verifies status 200, parses JSON, and checks
+`P::COMPONENT`. `assert_html_page::<P>()` extracts the page from the built-in
+`data-page="app"` script in an initial document.
+
+## Make typed partial requests
+
+Generated `PropKey<T>` constants set both the partial component and prop list:
+
+```rust
+let initial = app.inertia_get("/todos")
+    .send()
+    .await
+    .assert_page::<TodosPage>();
+
+initial
+    .assert_deferred("default", TodosPage::STATS)
+    .assert_missing(TodosPage::STATS);
+
+let partial = app.inertia_get("/todos")
+    .only(TodosPage::STATS)
+    .send()
+    .await
+    .assert_page::<TodosPage>();
+
+let stats: TodoStats = partial.prop(TodosPage::STATS);
+assert_eq!(stats.total, 1);
+partial.assert_missing(TodosPage::TODOS);
+```
+
+Use `.except(key)` to exclude a typed prop and `.reset(key)` to request merge
+reset. All typed keys in one request must belong to the same component; mixing
+components panics to expose an invalid test.
+
+String-based protocol controls are also available:
+
+```rust
+let page = app.inertia_get("/feed")
+    .only(FeedPage::ITEMS)
+    .scroll_intent("prepend")
+    .except_once("permissions:v1")
+    .error_bag("createItem")
+    .version("release-7")
+    .send()
+    .await
+    .assert_page::<FeedPage>();
+```
+
+Set a default asset version on the client when most Inertia requests should send
+the same value:
+
+```rust
+let app = TestApp::new(router).with_version("release-7");
+```
+
+## Assert page metadata
+
+`TestPage` provides typed assertions for:
+
+| Behavior | Assertion |
+| --- | --- |
+| Missing prop | `assert_missing(key)` |
+| Deferred group | `assert_deferred(group, key)` |
+| Once cache key | `assert_once(once_key, key)` |
+| Rescued failure | `assert_rescued(key)` |
+| Append or prepend merge | `assert_appends(key)`, `assert_prepends(key)` |
+| Deep merge | `assert_deep_merges(key)` |
+| Match field | `assert_matches_on(key, field)` |
+| Infinite scroll | `assert_scroll(key)` |
+| Successful reset | `assert_reset(key)` |
+| Encrypted history | `assert_encrypts_history()` |
+| String or numeric version | `assert_version(value)` |
+
+Call `.value()` when an assertion is intentionally outside the typed helpers.
+
+## Submit forms and follow redirects
+
+Use `.json(...)` or `.form(...)` with the Inertia write helpers:
+
+```rust
+let app = test_app();
+
+let redirect = app.inertia_post("/todos")
+    .header("referer", "/todos")
+    .form(&[("title", "")])
+    .send()
+    .await
+    .assert_see_other("/todos");
+
+redirect.follow()
+    .await
+    .assert_page::<TodosPage>()
+    .assert_error("title");
+```
+
+`TestApp` also provides `inertia_put`, `inertia_patch`, and `inertia_delete`.
+`follow()` makes a GET, preserves whether the originating request was an Inertia
+request, and records the destination:
+
+```rust
+assert_eq!(app.history(), vec!["/todos".to_owned()]);
+```
+
+For error bags, use dotted assertions such as
+`.assert_error("createTodo.title")`.
+
+## Assert flash and cookies
+
+`MemoryTransient` carries redirect state through the store shared by the test
+router. When an application uses cookie-backed storage, the client also stores
+`Set-Cookie` values and sends them on later requests. No manual header copying is
+needed:
+
+```rust
+let redirect = app.inertia_post("/todos")
+    .header("referer", "/todos")
+    .form(&[("title", "Ship docs")])
+    .send()
+    .await
+    .assert_see_other("/todos");
+
+let page = redirect.follow()
+    .await
+    .assert_page::<TodosPage>();
+
+let message: String = page.flash("message");
+assert_eq!(message, "Todo created");
+```
+
+Use `assert_no_flash(key)` after the next request to prove one-time consumption.
+The built-in test cookie store is intentionally small and keyed by cookie name;
+it is not a complete browser implementation for domain, path, or same-site
+policy testing.
+
+## Inspect raw responses
+
+`TestResponse` exposes `status()`, `headers()`, and `body()`. It also provides:
+
+- `assert_ok()` and `assert_html()`;
+- `assert_see_other(location)` for a 303 application redirect;
+- `assert_location_conflict(url)` for a 409 `X-Inertia-Location` response;
+- `assert_version(value)` for an Inertia JSON page;
+- `follow()` for redirect and external-location destinations.
+
+Fragment external locations use the adapter's `X-Inertia-Redirect` compatibility
+header and are not covered by `assert_location_conflict`; inspect headers when
+testing that case.
+
+## Test SSR separately
+
+`TestSsr` runs a deterministic Node-free loopback backend and records render
+calls. It supports `assert_ssr`, `assert_csr`, and SSR head assertions. Follow
+[Test SSR](/docs/ssr/testing) for the complete setup.
+
+In-process tests prove Rust routing and protocol behavior. Keep browser tests for
+framework rendering, hydration, automatic deferred requests, and client-side
+navigation, and keep a real Node integration job for production SSR bundles.
+
+Start with the copyable
+[application testing recipe](/docs/recipes/testing-an-application), then use the
+complete [testing API reference](/docs/reference/testing-api).

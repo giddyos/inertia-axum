@@ -1,0 +1,134 @@
+---
+title: Migrate from 0.5
+description: Move a 0.5 application to the 1.0 alpha direct-response and application-layer APIs.
+keywords:
+  - migration
+  - "0.5"
+---
+
+The 1.0 alpha replaces per-handler rendering orchestration with direct page responses.
+Protocol behavior remains compatible, while typed pages, async prop policies, Vite,
+validation, flash, and SSR are integrated through one application layer.
+
+Set `inertia-axum = "1.0.0-alpha.1"`, migrate in the order below, and keep the
+compatibility APIs only where an incremental conversion needs them.
+
+## 1. Build one application
+
+Replace application-specific root, manifest, static service, shared extension, and
+version middleware assembly:
+
+```rust
+// Before: app-specific version, assets, root, and shared layers.
+let app = Router::new()
+    .route("/todos", get(index))
+    .layer(version_layer)
+    .nest_service("/build", assets)
+    .layer(Extension(shared));
+
+// After:
+let inertia = InertiaApp::vite("frontend").build()?;
+let app = Router::new()
+    .route("/todos", get(index))
+    .inertia(inertia);
+```
+
+Vite defaults to `frontend/src/main.ts`, `frontend/dist/.vite/manifest.json`, and
+`/build`. Configure overrides only when the frontend differs.
+
+## 2. Return pages directly
+
+Remove the request extractor and manual root callback from ordinary handlers:
+
+```rust
+// Before:
+async fn index(request: InertiaRequest) -> Result<Response, InertiaError> {
+    request.render(Inertia::response("Todos/Index", props), shell)
+}
+
+// After:
+async fn index() -> DynamicPage {
+    page!("Todos/Index", { todos, filters })
+}
+```
+
+For a stable contract, derive `InertiaPage`. Each non-skipped field becomes a typed
+`PropKey<T>`, and `Prop<T>` fields keep their loading policies.
+
+```rust
+#[derive(InertiaPage)]
+#[inertia(component = "Todos/Index", rename_all = "camelCase")]
+struct TodosPage {
+    todos: Vec<Todo>,
+    stats: Prop<TodoStats>,
+}
+```
+
+## 3. Consolidate shared data
+
+Replace string-keyed registrations with one typed `Share` provider. It receives a
+borrowed `ShareContext` with request parts and extensions, then returns an
+application struct derived with `InertiaProps`. Route-owned top-level roots take
+precedence over shared roots.
+
+Place authentication middleware outside the Inertia layer so its extension is
+available during shared preparation. See
+[Authenticated shared props](/docs/recipes/authenticated-shared-props).
+
+## 4. Adopt redirect validation and flash
+
+Replace manual `422` JSON responses with `InertiaForm` and `Validated<T>`. A semantic
+failure redirects back with `303`, and the next page receives `props.errors`.
+The cookie-backed store below requires the non-default `cookies` feature and at least
+32 random bytes of key material.
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .transient(CookieTransient::encrypted(app_key))
+    .build()?;
+
+#[derive(serde::Deserialize, InertiaForm)]
+#[inertia(validate_with = "validate_todo", error_bag = "createTodo")]
+struct CreateTodo { title: String }
+```
+
+Old input remains opt-in. Redact tokens and passwords before enabling it. Flash values
+now appear in top-level `page.flash`, not inside props.
+
+## 5. Migrate SSR startup
+
+Enable `ssr`, configure the managed bundle or external endpoint, and replace
+`build()` with `start().await` only on builders that call `.ssr(...)`:
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .ssr("dist/ssr/app.js")
+    .start()
+    .await?;
+```
+
+SSR now shares route handling and the selected root document. The default failure
+mode falls back to CSR. Review [Server-side rendering](/docs/ssr) before enabling
+strict mode or route policies.
+
+## 6. Update tests
+
+Use `inertia-axum-test` for page, partial, redirect, validation, flash, merge, rescue,
+version, and SSR assertions. Generated page keys make prop selection and prop-policy
+assertions compiler-checked.
+
+```rust
+let page = TestApp::new(router)
+    .inertia_get("/todos")
+    .only(TodosPage::STATS)
+    .send()
+    .await
+    .assert_page::<TodosPage>();
+```
+
+## Compatibility window
+
+`Inertia<T>`, `InertiaPageBuilder`, `InertiaProps`, `ScopedInertiaProps`,
+`InertiaRequest`, `SharedProps`, and `VersionLayer` remain available during the alpha.
+New common-path code should use direct responses, typed `Share`, and `InertiaApp`.
+See [Compatibility APIs](/docs/advanced/compatibility-apis) for the retained surface.

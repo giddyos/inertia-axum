@@ -1,0 +1,121 @@
+---
+title: Vue
+description: Configure a Vue 3 frontend with Inertia v3, Vite, and an inertia-axum page route.
+keywords:
+  - Vue 3
+  - Inertia Vue
+  - Vite
+---
+
+## What you will accomplish
+
+You will render a Rust `Home` page with Vue 3 using the same client entry pattern as the maintained `axum-vue` example.
+
+## Prerequisites and features
+
+- Node.js 22.12 or newer and pnpm.
+- A Rust application with the default `vite` feature.
+- Vue 3 and `@inertiajs/vue3` 3.
+- The `ssr` Cargo feature and `@vue/server-renderer` are not required for this CSR setup.
+
+## Minimal copyable implementation
+
+<Steps>
+  <Step>
+    ### Install the tested package versions
+
+    ```bash
+    pnpm --dir frontend add @inertiajs/vue3@3.6.1 vue@3.5.29
+    pnpm --dir frontend add -D @inertiajs/vite@3.6.1 @vitejs/plugin-vue@6.0.5 vite@8.1.4
+    ```
+  </Step>
+  <Step>
+    ### Configure the client build
+
+    This is the CSR portion of the maintained example's Vite configuration, using the adapter's conventional `frontend/dist` output:
+
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import vue from '@vitejs/plugin-vue'
+    import { defineConfig } from 'vite'
+
+    export default defineConfig({
+      plugins: [vue(), inertia()],
+      build: {
+        manifest: true,
+        rollupOptions: {
+          input: 'src/app.js',
+        },
+      },
+    })
+    ```
+  </Step>
+  <Step>
+    ### Boot Inertia
+
+    ```js title="frontend/src/app.js"
+    import { createInertiaApp } from '@inertiajs/vue3'
+
+    createInertiaApp()
+    ```
+  </Step>
+  <Step>
+    ### Add the page component
+
+    ```vue title="frontend/src/Pages/Home.vue"
+    <script setup>
+    defineProps({
+      greeting: {
+        type: String,
+        default: 'Hello',
+      },
+    })
+    </script>
+
+    <template>
+      <main>
+        <h1>{{ greeting }} from inertia-axum</h1>
+      </main>
+    </template>
+    ```
+  </Step>
+  <Step>
+    ### Match the entry and page in Rust
+
+    ```rust
+    async fn index() -> DynamicPage {
+        page!("Home", { greeting: "Hello" })
+    }
+
+    let inertia = InertiaApp::vite("frontend")
+        .entry("src/app.js")
+        .build()?;
+    ```
+
+    Build with `pnpm --dir frontend exec vite build`, then run the Rust server.
+  </Step>
+</Steps>
+
+## How it works
+
+The Inertia Vite plugin generates the conventional Vue page resolver and installs the Inertia plugin when the application boots. The page component receives serialized Rust props through `defineProps`, while Vue handles reactive updates during later visits.
+
+## Defaults and edge cases
+
+- Use `@inertiajs/vue3`; the package name intentionally includes `vue3`.
+- `src/app.js` requires a Rust `.entry(...)` override because the adapter default is `src/main.ts`.
+- The page filename and Rust component name are case-sensitive.
+- A custom root template is not required.
+- Add `@vue/server-renderer` only when building an SSR frontend.
+
+## Production guidance
+
+Commit `pnpm-lock.yaml` and build the manifest from a clean install. For SSR, add a compatible `@vue/server-renderer`, enable the Rust `ssr` feature, build both Vite outputs, and verify hydration using the same approach as the maintained Vue example.
+
+## Related guides and examples
+
+- [Deferred and lazy props](/docs/guides/deferred-and-lazy-props)
+- [Forms and validation](/docs/guides/forms-and-validation)
+- [SSR frontend build](/docs/ssr/frontend-build)
+- [Examples reference](/docs/reference/examples)
+- [`axum-vue` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-vue)

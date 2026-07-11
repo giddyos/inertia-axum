@@ -1,0 +1,72 @@
+---
+title: cargo inertia
+description: Scaffold a minimal frontend, run development processes, and check literal component declarations.
+keywords:
+  - cargo inertia
+  - CLI
+---
+
+`cargo-inertia` is optional project tooling. It can create a small client-only Vite
+frontend, run Vite beside `cargo run`, and compare literal typed-page components with
+frontend files. It does not replace understanding the generated setup.
+
+## Install the command
+
+```bash
+cargo install cargo-inertia --version 1.0.0-alpha.1 --locked
+```
+
+## Initialize a frontend
+
+```bash
+cargo inertia init --frontend svelte
+cargo inertia init --frontend react --path ./my-app
+cargo inertia init --frontend vue
+```
+
+The command always creates `<path>/frontend` and refuses to overwrite an existing
+directory. It writes `package.json`, `vite.config.ts`, `src/main.ts`, and one
+`src/Pages/Home` component.
+
+The generated project:
+
+- Uses `latest` package ranges and does not create a lockfile. Install dependencies
+  and commit the resulting lockfile before relying on reproducible builds.
+- Uses npm-oriented scripts, a client-only Vite build, and no SSR configuration.
+- Creates no Rust manifest, router, handler, or root document.
+
+Use it as a starting point, then compare the maintained
+[framework examples](/docs/frontend) for production asset and SSR setup.
+
+## Run the development processes
+
+```bash
+cargo inertia dev --frontend frontend --port 5173
+```
+
+This runs `npm run dev -- --host 127.0.0.1 --port <port>` in the frontend directory
+and plain `cargo run` in the current directory. Only the Cargo child receives
+`VITE_DEV_SERVER_URL=http://127.0.0.1:<port>`. When either child exits, the command
+terminates its peer.
+
+There is no pnpm selection, Cargo argument forwarding, or package selection. In a
+pnpm workspace or multi-binary project, run the two commands yourself and set
+`VITE_DEV_SERVER_URL` explicitly.
+
+## Check component declarations
+
+```bash
+cargo inertia check --path . --frontend frontend
+```
+
+The checker expects `src/main.ts`, `vite.config.ts`, and `src/Pages`. It recognizes
+`.svelte`, `.tsx`, `.jsx`, and `.vue` pages and scans Rust source for literal
+`#[inertia(component = "...")]` attributes.
+
+It detects missing frontend files, duplicate Rust declarations, duplicate frontend
+extensions, and unsafe component paths. It does **not** discover `page!`,
+`DynamicPage::new`, or computed names; it does not reject frontend-only pages. A Vite
+manifest is checked only when one already exists.
+
+See the exact [CLI reference](/docs/reference/cli) and
+[Deployment](/docs/guides/deployment) for gates that the checker does not replace.

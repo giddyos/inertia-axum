@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --ia-rust: #f46623;
+  --ia-ink: #111827;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0 !important;
+  --removed-body-scroll-bar-size: 0 !important;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  color: white;
+  background: var(--ia-rust);
+}

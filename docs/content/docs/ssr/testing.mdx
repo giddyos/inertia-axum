@@ -1,0 +1,125 @@
+---
+title: Test SSR
+description: Exercise SSR routes, rendered markup, policy decisions, and backend calls without installing Node.
+keywords:
+  - TestSsr
+  - assert_ssr
+  - assert_csr
+  - SSR tests
+---
+
+Test SSR behavior with a deterministic loopback backend instead of launching
+Node. `TestSsr` implements `/health`, `/render`, and `/shutdown`, records every
+render call, and returns documents selected by component name.
+
+## Prerequisites
+
+Enable SSR in the application dependency and add the test crate:
+
+```toml
+[dependencies]
+inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
+
+[dev-dependencies]
+inertia-axum-test = "1.0.0-alpha.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Configure a fake document
+
+This example is reduced from the crate's SSR integration test:
+
+```rust
+use axum::{Router, routing::get};
+use inertia_axum::{
+    DynamicPage, InertiaApp, RouterInertiaExt as _, SsrRouteExt as _,
+};
+use inertia_axum_test::{TestApp, TestSsr, TestSsrDocument};
+
+#[tokio::test]
+async fn home_uses_ssr_and_dashboard_opts_out() {
+    let ssr = TestSsr::builder()
+        .render(
+            "Home",
+            TestSsrDocument::new(
+                ["<title>Home</title>".to_owned()],
+                r#"<script data-page="app" type="application/json">{"component":"Home"}</script><div data-server-rendered="true" id="app">Home</div>"#,
+            ),
+        )
+        .start()
+        .await;
+
+    let inertia = InertiaApp::default_root()
+        .ssr(ssr.config())
+        .start()
+        .await
+        .unwrap();
+
+    let router = Router::new()
+        .route("/", get(|| async { DynamicPage::new("Home") }))
+        .route(
+            "/dashboard",
+            get(|| async { DynamicPage::new("Dashboard") }).without_ssr(),
+        )
+        .inertia(inertia);
+
+    let app = TestApp::new(router);
+
+    app.get("/")
+        .send()
+        .await
+        .assert_ssr()
+        .assert_ssr_head_contains("<title>Home</title>");
+
+    app.get("/dashboard").send().await.assert_csr();
+
+    ssr.assert_render_count(1);
+    ssr.assert_rendered_component("Home");
+    ssr.assert_not_rendered_component("Dashboard");
+    assert_eq!(ssr.calls()[0].url(), "/");
+}
+```
+
+`TestSsrDocument` treats its head and body as trusted SSR output, just like a real
+backend. Include the `data-page` script your client needs and include
+`data-server-rendered="true"` when using `assert_ssr()`.
+
+## Inspect backend calls
+
+`ssr.calls()` returns owned `TestSsrCall` values. Each call exposes:
+
+- `component()` for the requested page component;
+- `url()` for the page URL, including its query string;
+- `page()` for the complete serialized page sent to the backend.
+
+Use call inspection to verify props or metadata that affect SSR without parsing
+the final HTML.
+
+## Understand assertion scope
+
+- `assert_ssr()` checks for the literal `data-server-rendered="true"` marker.
+- `assert_csr()` checks that the marker is absent.
+- `assert_ssr_head_contains()` searches the complete HTML string for the expected
+  fragment; it does not parse the `<head>`.
+- A component with no configured document makes the fake backend return 404.
+  Default fallback then returns CSR; strict mode returns 500.
+
+The fake server proves Rust integration and route policy. It does not execute the
+framework bundle or hydrate a browser.
+
+## Keep a real Node job
+
+The repository separates fast fake-backend tests from ignored live tests:
+
+```sh
+./scripts/test-live-ssr.sh
+```
+
+That script requires Node 22 and pnpm. It clean-builds the Svelte, React, and Vue
+client manifests and SSR bundles, verifies managed process lifecycle, renders
+each real application, serves a built browser asset, and exercises route opt-out
+and conditional SSR.
+
+Use fake SSR in the normal Rust test suite and a dedicated live job for bundle,
+Node, and frontend integration. For non-SSR application assertions, read
+[Testing applications](/docs/guides/testing).

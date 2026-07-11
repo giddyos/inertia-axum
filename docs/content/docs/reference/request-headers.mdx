@@ -1,0 +1,65 @@
+---
+title: Request headers
+description: Exported Inertia protocol header constants, parsing rules, response headers, and RequestContext accessors.
+---
+
+HTTP header lookup is case-insensitive. The constants below preserve canonical spelling for integrations and tests.
+
+## Request and response headers
+
+| Constant | Direction | Adapter behavior |
+| --- | --- | --- |
+| `X_INERTIA` | Request and response | Presence marks an Inertia visit. JSON page responses set it to `true`. The request value itself is not validated. |
+| `X_INERTIA_VERSION` | Request | Client asset version used for pre-handler GET conflict checks. |
+| `X_INERTIA_PARTIAL_COMPONENT` | Request | Component targeted by a partial reload. Filtering applies only when it matches the response component. |
+| `X_INERTIA_PARTIAL_DATA` | Request | Comma-separated prop names to include. |
+| `X_INERTIA_PARTIAL_EXCEPT` | Request | Comma-separated prop names to exclude. Takes precedence over partial data when both are present. |
+| `X_INERTIA_RESET` | Request | Comma-separated merge/scroll props whose response metadata should be reset. |
+| `X_INERTIA_ERROR_BAG` | Request | Scopes redirect-based validation errors. Overrides the form derive's fallback bag. |
+| `X_INERTIA_INFINITE_SCROLL_MERGE_INTENT` | Request | `append` or `prepend` override for selected scroll props. Other values leave the default unchanged. |
+| `X_INERTIA_EXCEPT_ONCE_PROPS` | Request | Comma-separated once-cache keys the client already holds. |
+| `PURPOSE` | Request | Exact case-insensitive value `prefetch` sets `RequestContext::is_prefetch`. |
+| `CACHE_CONTROL` | Request | A comma-separated `no-cache` token sets `RequestContext::is_reload`. |
+| `X_INERTIA_LOCATION` | Response | Destination for an external visit or stale-version `409 Conflict`. |
+| `X_INERTIA_REDIRECT` | Response | Destination for a `409 Conflict` when the URI reference contains a fragment. |
+| `VARY` | Response | Page, redirect, and conflict responses include `X-Inertia` without duplicating an existing token. |
+| `X_REQUESTED_WITH` | Exported request constant | Provided for integrations; the adapter does not use it to classify a visit. |
+| `ACCEPT` | Exported request constant | Provided for integrations; the adapter does not inspect it. |
+
+Typed `HeaderName` forms are also exported for `X_INERTIA`, `X_INERTIA_VERSION`, `X_INERTIA_LOCATION`, and `X_INERTIA_REDIRECT` as `*_HEADER` constants.
+
+## Parsed request context
+
+`RequestContext::from_header_fn` is the framework-neutral parser. Axum users normally extract `Visit` or use the context passed to a `Share` provider.
+
+| Accessor | Value |
+| --- | --- |
+| `is_inertia()` | Whether `X-Inertia` was present. |
+| `version()` | Raw version string, if present. |
+| `partial_component()` | Target component. |
+| `partial_data()` / `partial_data_iter()` | Included prop names, allocating or borrowed. |
+| `partial_except()` / `partial_except_iter()` | Excluded prop names. |
+| `reset()` / `reset_iter()` | Reset prop names. |
+| `error_bag()` | Requested validation bag. |
+| `infinite_scroll_merge_intent()` | Raw merge intent. |
+| `except_once_props()` / `except_once_props_iter()` | Client-held once keys. |
+| `is_prefetch()` / `is_reload()` | Purpose and cache-control state. |
+| `partial_reload_matches(component)` | Whether this is an Inertia request targeting `component`. |
+| `without_partial_reload()` | Copy with component/data/except/reset/scroll intent cleared; once exclusions remain. |
+| `filter_props(...)` | Applies selection to a serialized object and preserves an `errors` object. |
+
+The vector accessors exist for compatibility; iterator accessors avoid allocation.
+
+## Partial reload applicability
+
+The application finalizer enables partial filtering only for `GET`. A matching component uses `except` first, then `only`; an empty selection keeps standard props. Component mismatch behaves like a full visit. Deferred, optional, always, and once policies are then applied on top of that selection.
+
+`errors` is always retained for object props. Non-object props are left unchanged by `RequestContext::filter_props`.
+
+## Version conflicts
+
+When the app has an asset version, an Inertia `GET` whose version is missing or different is stopped before the route handler. The response is `409 Conflict` and targets the original local path and query through `X-Inertia-Location` (or `X-Inertia-Redirect` if a fragment is present). Loaded flash, errors, and old input are reflashed when a transient store is configured.
+
+Initial browser requests and non-GET requests do not perform this pre-handler version conflict.
+
+See [protocol behavior](/docs/advanced/protocol-behavior) and [partial reloads](/docs/guides/partial-reloads) for end-to-end request handling.

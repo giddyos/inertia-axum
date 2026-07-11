@@ -1,0 +1,116 @@
+---
+title: React
+description: Configure a React 19 frontend with Inertia v3, Vite, and an inertia-axum page route.
+keywords:
+  - React 19
+  - Inertia React
+  - Vite
+---
+
+## What you will accomplish
+
+You will render a Rust `Home` page with React 19 using the same client entry pattern as the maintained `axum-react` example.
+
+## Prerequisites and features
+
+- Node.js 22.12 or newer and pnpm.
+- A Rust application with the default `vite` feature.
+- React 19, React DOM 19, and `@inertiajs/react` 3.
+- The `ssr` Cargo feature is not required for this CSR setup.
+
+## Minimal copyable implementation
+
+<Steps>
+  <Step>
+    ### Install the tested package versions
+
+    ```bash
+    pnpm --dir frontend add @inertiajs/react@3.6.1 react@19.2.4 react-dom@19.2.4
+    pnpm --dir frontend add -D @inertiajs/vite@3.6.1 @vitejs/plugin-react@6.0.0 vite@8.1.4
+    ```
+  </Step>
+  <Step>
+    ### Configure the client build
+
+    This is the CSR portion of the maintained example's Vite configuration, using the adapter's conventional `frontend/dist` output:
+
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import react from '@vitejs/plugin-react'
+    import { defineConfig } from 'vite'
+
+    export default defineConfig({
+      plugins: [react(), inertia()],
+      build: {
+        manifest: true,
+        rollupOptions: {
+          input: 'src/app.jsx',
+        },
+      },
+    })
+    ```
+  </Step>
+  <Step>
+    ### Boot Inertia
+
+    ```jsx title="frontend/src/app.jsx"
+    import { createInertiaApp } from '@inertiajs/react'
+
+    createInertiaApp({
+      strictMode: true,
+    })
+    ```
+  </Step>
+  <Step>
+    ### Add the page component
+
+    ```jsx title="frontend/src/Pages/Home.jsx"
+    export default function Home({ greeting = 'Hello' }) {
+      return (
+        <main>
+          <h1>{greeting} from inertia-axum</h1>
+        </main>
+      )
+    }
+    ```
+  </Step>
+  <Step>
+    ### Match the entry and page in Rust
+
+    ```rust
+    async fn index() -> DynamicPage {
+        page!("Home", { greeting: "Hello" })
+    }
+
+    let inertia = InertiaApp::vite("frontend")
+        .entry("src/app.jsx")
+        .build()?;
+    ```
+
+    Build with `pnpm --dir frontend exec vite build`, then run the Rust server.
+  </Step>
+</Steps>
+
+## How it works
+
+The Inertia Vite plugin generates the conventional `Pages` resolver used by `createInertiaApp`. React receives the serialized props as component arguments. Enabling `strictMode` matches the maintained example and wraps the client tree in React Strict Mode.
+
+## Defaults and edge cases
+
+- Inertia v3 requires React 19 or newer.
+- `src/app.jsx` is not the Rust adapter's default entry, so `.entry("src/app.jsx")` is required.
+- The page file and exported component must match the Rust name `Home`.
+- A custom root template is not required; the built-in document supplies the `#app` mount.
+- Deferred props use `Deferred` from `@inertiajs/react`, with a React element passed as `fallback`.
+
+## Production guidance
+
+Commit `pnpm-lock.yaml`, keep Strict Mode issues clean, and test hydration before enabling SSR. The maintained React example builds both client and SSR bundles and runs a browser hydration smoke test; follow that model for production SSR.
+
+## Related guides and examples
+
+- [Deferred and lazy props](/docs/guides/deferred-and-lazy-props)
+- [Forms and validation](/docs/guides/forms-and-validation)
+- [SSR frontend build](/docs/ssr/frontend-build)
+- [Examples reference](/docs/reference/examples)
+- [`axum-react` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-react)

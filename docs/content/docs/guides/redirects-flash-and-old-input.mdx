@@ -1,0 +1,77 @@
+---
+title: Redirects, flash, and old input
+description: Redirect internal visits, send external Inertia locations, and transport one-request data.
+keywords:
+  - flash
+  - redirects
+  - old input
+---
+
+Return `Redirect` for application navigation and `Location` when Inertia must leave
+the application. Attach flash values to redirects when the destination page needs a
+one-request success message or identifier.
+
+## Redirect inside the application
+
+```rust
+use inertia_axum::prelude::*;
+
+async fn store() -> Redirect {
+    Redirect::to("/projects").flash("message", "Project created")
+}
+```
+
+Write methods become `303 See Other`, ensuring the browser follows with `GET`.
+Ordinary `GET` redirects use `302 Found`.
+
+Use `Redirect::back()` to prefer the request `Referer` and fall back to `/`, or
+`Redirect::back_or("/projects")` for an explicit fallback.
+
+## Read flash on the destination
+
+Flash is emitted as top-level `page.flash`, separate from `props`, and is not kept in
+browser history. It is consumed once.
+
+```ts
+const message = page.flash?.message
+```
+
+`DynamicPage::flash(...)` attaches a value only to the current response. It does not
+persist it to the following request.
+
+Both redirect flash and validation errors require
+`.transient(store)`. If no store is configured, the adapter returns an actionable
+`500` instead of silently losing data. Redirects and stale-version conflicts reflash
+unconsumed values so they survive to the eventual page.
+
+## Validation errors and old input
+
+`Validated<T>` failures use the same one-request transport. The next page receives:
+
+- `props.errors`, optionally nested beneath an error bag.
+- `props.oldInput` only when the form derive enabled `old_input`.
+
+Sensitive or redacted fields are omitted before storage. See
+[Forms and validation](/docs/guides/forms-and-validation).
+
+## Leave the Inertia application
+
+```rust
+use inertia_axum::Location;
+
+async fn billing() -> Location {
+    Location::external("https://billing.example.com/portal")
+}
+```
+
+For an Inertia request, a valid external URL returns `409 Conflict` with
+`X-Inertia-Location`; the client performs a full browser visit. A non-Inertia request
+gets an ordinary `302` or method-aware `303` redirect. Any location URI containing a
+fragment uses `X-Inertia-Redirect`; relative or absolute targets without a fragment
+use `X-Inertia-Location`.
+
+Invalid redirect or location values become a generic `500` without copying the
+invalid target into a response header.
+
+See [Protocol behavior](/docs/advanced/protocol-behavior) for the wire response and
+[Transient storage](/docs/guides/transient-storage) for production stores.

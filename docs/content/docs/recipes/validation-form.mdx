@@ -1,0 +1,140 @@
+---
+title: Build a validated form
+description: Add a typed Axum validator and display redirect-backed errors in Svelte, React, or Vue.
+keywords:
+  - validation form
+  - errors
+---
+
+This recipe creates a todo form whose invalid submissions redirect back with errors
+and whose valid submissions flash a success message. It is reduced from the three
+maintained browser examples.
+
+## 1. Define the server form
+
+The default `macros` feature supplies `InertiaForm`.
+
+```rust
+use inertia_axum::{Errors, prelude::*};
+use serde::Deserialize;
+
+#[derive(Deserialize, InertiaForm)]
+#[inertia(validate_with = "validate_todo", old_input)]
+struct CreateTodo {
+    title: String,
+}
+
+fn validate_todo(input: &CreateTodo) -> Result<(), Errors> {
+    let title = input.title.trim();
+    if title.is_empty() {
+        return Err(Errors::field("title", "Enter a todo title"));
+    }
+    if title.len() > 120 {
+        return Err(Errors::field("title", "Use 120 characters or fewer"));
+    }
+    Ok(())
+}
+```
+
+## 2. Extract validated input
+
+```rust
+async fn store(Validated(input): Validated<CreateTodo>) -> Redirect {
+    create_todo(input.title.trim()).await;
+    Redirect::to("/todos").flash("message", "Todo created")
+}
+# async fn create_todo(_: &str) {}
+```
+
+An invalid request redirects before `create_todo` runs. The next page receives
+`errors.title` and `oldInput.title`.
+
+## 3. Configure one-request storage
+
+```rust
+let inertia = InertiaApp::vite("frontend")
+    .transient(MemoryTransient::new())
+    .build()?;
+```
+
+Use memory only for this local example. Select encrypted cookies or Tower Sessions
+for production in [Transient storage](/docs/guides/transient-storage).
+
+## 4. Submit from the frontend
+
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+
+```svelte
+<script>
+  import { router } from '@inertiajs/svelte'
+  let { errors = {}, oldInput = {} } = $props()
+  let title = $state(oldInput.title ?? '')
+
+  function submit(event) {
+    event.preventDefault()
+    router.post('/todos', { title }, { onSuccess: () => (title = '') })
+  }
+</script>
+
+<form onsubmit={submit}>
+  <input bind:value={title} aria-invalid={errors.title ? 'true' : undefined}>
+  {#if errors.title}<p>{errors.title}</p>{/if}
+  <button type="submit">Add todo</button>
+</form>
+```
+
+  </Tab>
+  <Tab value="React">
+
+```jsx
+import { router } from '@inertiajs/react'
+import { useState } from 'react'
+
+export default function Form({ errors = {}, oldInput = {} }) {
+  const [title, setTitle] = useState(oldInput.title ?? '')
+  return <form onSubmit={(event) => {
+    event.preventDefault()
+    router.post('/todos', { title }, { onSuccess: () => setTitle('') })
+  }}>
+    <input value={title} onChange={(event) => setTitle(event.target.value)}
+      aria-invalid={errors.title ? 'true' : undefined} />
+    {errors.title && <p>{errors.title}</p>}
+    <button type="submit">Add todo</button>
+  </form>
+}
+```
+
+  </Tab>
+  <Tab value="Vue">
+
+```vue
+<script setup>
+import { router } from '@inertiajs/vue3'
+import { ref } from 'vue'
+const props = defineProps({ errors: Object, oldInput: Object })
+const title = ref(props.oldInput?.title ?? '')
+function submit() {
+  router.post('/todos', { title: title.value }, {
+    onSuccess: () => { title.value = '' },
+  })
+}
+</script>
+
+<template>
+  <form @submit.prevent="submit">
+    <input v-model="title" :aria-invalid="props.errors?.title ? 'true' : undefined">
+    <p v-if="props.errors?.title">{{ props.errors.title }}</p>
+    <button type="submit">Add todo</button>
+  </form>
+</template>
+```
+
+  </Tab>
+</Tabs>
+
+## Production checks
+
+Redact passwords, tokens, and secrets before enabling old input. Use error bags when
+several forms share a page. Test the redirect and follow-up page with
+`inertia-axum-test`; see [Testing an application](/docs/recipes/testing-an-application).

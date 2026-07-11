@@ -1,0 +1,118 @@
+---
+title: Svelte
+description: Configure a Svelte 5 frontend with Inertia v3, Vite, and an inertia-axum page route.
+keywords:
+  - Svelte 5
+  - Inertia Svelte
+  - Vite
+---
+
+## What you will accomplish
+
+You will render a Rust `Home` page with Svelte 5 using the same client entry and resolver pattern as the maintained `axum-svelte` example.
+
+## Prerequisites and features
+
+- Node.js 22.12 or newer and pnpm.
+- A Rust application with the default `vite` feature.
+- Svelte 5 and `@inertiajs/svelte` 3.
+- The `ssr` Cargo feature is not required for this CSR setup.
+
+## Minimal copyable implementation
+
+<Steps>
+  <Step>
+    ### Install the tested package versions
+
+    ```bash
+    pnpm --dir frontend add @inertiajs/svelte@3.6.1 svelte@5.55.7
+    pnpm --dir frontend add -D @inertiajs/vite@3.6.1 @sveltejs/vite-plugin-svelte@7.1.2 vite@8.1.4
+    ```
+  </Step>
+  <Step>
+    ### Configure the client build
+
+    This is the CSR portion of the maintained example's Vite configuration, using the adapter's conventional `frontend/dist` output:
+
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import { svelte } from '@sveltejs/vite-plugin-svelte'
+    import { defineConfig } from 'vite'
+
+    export default defineConfig({
+      plugins: [svelte({ prebundleSvelteLibraries: true }), inertia()],
+      build: {
+        manifest: true,
+        rollupOptions: {
+          input: 'src/app.js',
+        },
+      },
+    })
+    ```
+  </Step>
+  <Step>
+    ### Boot Inertia
+
+    ```js title="frontend/src/app.js"
+    import { createInertiaApp } from '@inertiajs/svelte'
+
+    const pages = import.meta.glob('./Pages/**/*.svelte', { eager: true })
+
+    createInertiaApp({
+      resolve: name => pages[`./Pages/${name}.svelte`],
+    })
+    ```
+  </Step>
+  <Step>
+    ### Add the page component
+
+    ```svelte title="frontend/src/Pages/Home.svelte"
+    <script>
+      let { greeting = 'Hello' } = $props()
+    </script>
+
+    <main>
+      <h1>{greeting} from inertia-axum</h1>
+    </main>
+    ```
+  </Step>
+  <Step>
+    ### Match the entry and page in Rust
+
+    ```rust
+    async fn index() -> DynamicPage {
+        page!("Home", { greeting: "Hello" })
+    }
+
+    let inertia = InertiaApp::vite("frontend")
+        .entry("src/app.js")
+        .build()?;
+    ```
+
+    Build with `pnpm --dir frontend exec vite build`, then run the Rust server.
+  </Step>
+</Steps>
+
+## How it works
+
+The explicit glob maps the Rust component name `Home` to `Pages/Home.svelte`. Svelte's `$props()` receives the serialized page props. The Vite manifest identifies `src/app.js`, and inertia-axum emits and serves its generated browser assets.
+
+## Defaults and edge cases
+
+- Svelte 5 runes syntax is required by the current Inertia v3 adapter generation.
+- The eager resolver is intentional in the maintained universal-entry example. Change loading strategy only after testing both CSR and SSR builds.
+- The `greeting` default makes the component tolerant of an absent prop, but the Rust route normally supplies it.
+- A custom root component or HTML template is not required.
+- Deferred props use `Deferred` from `@inertiajs/svelte`; see the dedicated guide before adding them.
+
+## Production guidance
+
+Commit `pnpm-lock.yaml` and build the manifest from a clean install. For SSR, enable the Rust `ssr` feature, make the production script build both `vite build` and `vite build --ssr`, and use asynchronous `start()` as shown in the SSR guides.
+
+## Related guides and examples
+
+- [Deferred and lazy props](/docs/guides/deferred-and-lazy-props)
+- [Forms and validation](/docs/guides/forms-and-validation)
+- [SSR frontend build](/docs/ssr/frontend-build)
+- [Examples reference](/docs/reference/examples)
+- [`axum-svelte` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-svelte)

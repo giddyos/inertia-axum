@@ -1,0 +1,86 @@
+---
+title: CLI
+description: Exact cargo inertia init, dev, and check commands, defaults, generated files, and validation limits.
+---
+
+`cargo-inertia` is optional project tooling. It is a separate binary crate and is not built by the workspace's default-member commands.
+
+From a repository checkout, install it into Cargo's binary directory:
+
+```sh
+cargo install --path crates/cargo-inertia
+```
+
+The executable accepts both `cargo inertia ...` and direct `cargo-inertia ...` invocation.
+
+## Command summary
+
+```text
+cargo inertia init --frontend <svelte|react|vue> [--path <root>]
+cargo inertia dev [--frontend <directory>] [--port <port>]
+cargo inertia check [--path <root>] [--frontend <directory>]
+```
+
+Errors are written to stderr with a `cargo inertia:` prefix and a non-zero exit code.
+
+## `init`
+
+`init` creates a minimal Vite frontend at `<path>/frontend`. `--frontend` is required; `--path` defaults to the current directory.
+
+| Framework | Inertia adapter | Page file |
+| --- | --- | --- |
+| Svelte | `@inertiajs/svelte` `^3.0.0` | `src/Pages/Home.svelte` |
+| React | `@inertiajs/react` `^3.0.0` | `src/Pages/Home.tsx` |
+| Vue | `@inertiajs/vue3` `^3.0.0` | `src/Pages/Home.vue` |
+
+Every scaffold contains:
+
+```text
+frontend/
+├── package.json
+├── vite.config.ts
+└── src/
+    ├── main.ts
+    └── Pages/
+        └── Home.<framework-extension>
+```
+
+The generated Vite config enables the framework plugin, `build.manifest`, and `src/main.ts` as the Rollup input. `package.json` uses `vite` for `dev` and `build`; framework, Vite, plugin, and TypeScript versions other than the Inertia v3 range are generated as `latest`.
+
+The command refuses to overwrite an existing `<path>/frontend`. It creates frontend files only; add Rust dependencies, a page handler, and `.inertia(InertiaApp::vite("frontend").build()?)` separately. See the [quick start](/docs/getting-started/quick-start).
+
+## `dev`
+
+Defaults:
+
+- frontend directory: `frontend`;
+- Vite port: `5173`;
+- bind host: `127.0.0.1`.
+
+The command requires `<frontend>/package.json`, then runs:
+
+```text
+npm run dev -- --host 127.0.0.1 --port <port>
+cargo run
+```
+
+The Rust process receives `VITE_DEV_SERVER_URL=http://127.0.0.1:<port>`. Standard input/output/error are inherited. When either child exits, the CLI stops and waits for the peer; a non-success child status makes the command fail.
+
+`dev` currently invokes npm even if the project lockfile uses another package manager. Run your own two-process supervisor when you need pnpm-specific commands, extra Cargo arguments, TLS, a non-loopback Vite host, or restart/watch behavior beyond what Vite provides.
+
+## `check`
+
+`check` defaults to root `.` and frontend directory `frontend` relative to that root. It verifies:
+
+1. the frontend directory and `src/main.ts` exist;
+2. `vite.config.ts` contains `src/main.ts`;
+3. an existing `dist/.vite/manifest.json` or `dist/manifest.json` is valid JSON;
+4. literal `#[inertia(component = "...")]` declarations below the root use safe relative component paths;
+5. each declaration is unique and has a matching page below `src/Pages`;
+6. frontend page names are unique across `.svelte`, `.tsx`, `.jsx`, and `.vue` files.
+
+Component paths may contain normal slash-separated segments such as `Todos/Index`. Empty segments, parent traversal, absolute paths, and backslashes are rejected.
+
+The checker is intentionally lightweight. It recursively scans `.rs` source text, excluding `target` and `node_modules`; it does not expand macros or query rustc's type information. Only literal component attributes are discovered. It also does not reject frontend pages that have no Rust declaration.
+
+Use `cargo check` and application tests in addition to this command. See [typed pages and props](/docs/guides/typed-pages-and-props) for the compiler-checked boundary.
