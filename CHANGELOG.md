@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
   through the common finalizer.
 - Set the workspace MSRV to Rust 1.88 and the package edition to 2024.
 
-See [the migration guide](docs/migration-from-0.5.md) for mechanical upgrades.
+See [the migration guide](docs/content/docs/migrations/from-0-5.mdx) for mechanical upgrades.
 
 ## 0.5.0 - 2026-07-10
 
