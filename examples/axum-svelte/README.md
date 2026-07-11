@@ -6,6 +6,8 @@
 - Load one deferred prop through Svelte's `Deferred` component.
 - Validate one form and display `errors.title`.
 - Refresh a deferred summary explicitly after its automatic initial load.
+- Build client and SSR artifacts and run managed Node SSR in production mode.
+- Disable SSR for one route and select it conditionally for another with `ssr_when`.
 
 ## Important files
 
@@ -22,6 +24,8 @@ svelte-app/src/app.js                    Inertia client and plugin-generated SSR
 | --- | --- | --- | --- |
 | GET | `/todos` | `index` | Render the Todo page |
 | POST | `/todos` | `store` | Validate and create a Todo |
+| GET | `/todos/private` | `private_todos` | Render without SSR |
+| GET | `/todos/preview` | `preview` | Render with conditional SSR |
 
 ## Run
 

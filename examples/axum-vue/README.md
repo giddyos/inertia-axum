@@ -6,14 +6,16 @@
 - Load one deferred prop through Vue's `Deferred` component.
 - Validate one form and display `errors.title`.
 - Refresh a deferred summary explicitly after its automatic initial load.
+- Build client and SSR artifacts and run managed Node SSR in production mode.
+- Disable SSR for one route and select it conditionally for another with `ssr_when`.
 
 ## Important files
 
 ```text
 src/lib.rs                               State, typed page, handlers, and shared app builder
 src/main.rs                              Production server startup
-vue-app/src/Pages/Todos/Index.vue  Deferred data and validation UI
-vue-app/src/app.js                    Inertia client and plugin-generated SSR entry
+vue-app/src/Pages/Todos/Index.vue      Deferred data and validation UI
+vue-app/src/app.js                     Inertia client and plugin-generated SSR entry
 ```
 
 ## Routes
@@ -64,4 +66,3 @@ title redirects back and displays `Enter a todo title`; valid titles are added.
 Todos and transient validation data are stored in memory. Production apps
 should persist domain state and use encrypted cookie or session-backed
 transient storage.
-

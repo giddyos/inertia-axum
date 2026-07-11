@@ -6,13 +6,15 @@
 - Load one deferred prop through React's `Deferred` component.
 - Validate one form and display `errors.title`.
 - Refresh a deferred summary explicitly after its automatic initial load.
+- Build client and SSR artifacts and run managed Node SSR in production mode.
+- Disable SSR for one route and select it conditionally for another with `ssr_when`.
 
 ## Important files
 
 ```text
 src/lib.rs                               State, typed page, handlers, and shared app builder
 src/main.rs                              Production server startup
-react-app/src/Pages/Todos/Index.jsx  Deferred data and validation UI
+react-app/src/Pages/Todos/Index.jsx      Deferred data and validation UI
 react-app/src/app.jsx                    Inertia client and plugin-generated SSR entry
 ```
 
@@ -64,4 +66,3 @@ title redirects back and displays `Enter a todo title`; valid titles are added.
 Todos and transient validation data are stored in memory. Production apps
 should persist domain state and use encrypted cookie or session-backed
 transient storage.
-
