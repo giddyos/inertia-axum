@@ -3,6 +3,12 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 frontend="$root/examples/axum-svelte/svelte-app"
+scope="${1:-all}"
+
+if [[ "$scope" != "all" && "$scope" != "--example-only" ]]; then
+  echo "usage: $0 [--example-only]" >&2
+  exit 2
+fi
 
 node -e '
 const major = Number(process.versions.node.split(".")[0])
@@ -25,14 +31,16 @@ pnpm --dir "$frontend" build
 test -f "$root/examples/axum-svelte/public/build/.vite/manifest.json"
 test -f "$frontend/dist/ssr/app.js"
 
-cargo test \
-  --locked \
-  -p inertia-axum \
-  --features ssr \
-  --test ssr_node_lifecycle \
-  -- \
-  --ignored \
-  --test-threads=1
+if [[ "$scope" == "all" ]]; then
+  cargo test \
+    --locked \
+    -p inertia-axum \
+    --features ssr \
+    --test ssr_node_lifecycle \
+    -- \
+    --ignored \
+    --test-threads=1
+fi
 
 cargo test \
   --locked \

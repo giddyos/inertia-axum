@@ -126,8 +126,8 @@ jobs:
 
       - run: cargo check --locked --workspace --all-targets
 
-  example:
-    name: Frontend example
+  frontend-build:
+    name: Frontend build
     runs-on: ubuntu-latest
 
     defaults:
@@ -152,11 +152,51 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Test frontend
-        run: pnpm test
+      - name: Delete prior frontend outputs
+        run: rm -rf ../public/build dist
 
-  live-ssr:
-    name: Live SSR
+      - name: Build frontend
+        run: pnpm check:build
+
+      - name: Verify client and SSR artifacts
+        run: |
+          test -f ../public/build/.vite/manifest.json
+          test -f dist/ssr/app.js
+
+  ssr-node-lifecycle:
+    name: Managed Node lifecycle
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore stable Cargo cache
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          shared-key: stable
+          workspaces: ". -> target"
+          save-if: false
+
+      - name: Test managed Node lifecycle
+        run: |
+          cargo test \
+          --locked \
+          -p inertia-axum \
+          --features ssr \
+          --test ssr_node_lifecycle \
+          -- \
+          --ignored \
+          --test-threads=1
+
+  production-example:
+    name: Production example SSR
     runs-on: ubuntu-latest
 
     steps:
@@ -183,18 +223,57 @@ jobs:
           workspaces: ". -> target"
           save-if: false
 
-      - name: Install frontend dependencies
+      - name: Clean-build and test production example
+        run: ./scripts/test-live-ssr.sh --example-only
+
+  browser-smoke:
+    name: Browser hydration smoke
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
         working-directory: examples/axum-svelte/svelte-app
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: examples/axum-svelte/svelte-app/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore stable Cargo cache
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          shared-key: stable
+          workspaces: ". -> target"
+          save-if: false
+
+      - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Delete prior frontend outputs
+        run: rm -rf ../public/build dist
+
       - name: Build frontend
-        working-directory: examples/axum-svelte/svelte-app
         run: pnpm build
 
-      - name: Test live SSR
-        run: >-
-          cargo test
-          --locked
-          -p inertia-axum
-          --features ssr,live-ssr
-          --test ssr_managed_node
+      - name: Verify client and SSR artifacts
+        run: |
+          test -f ../public/build/.vite/manifest.json
+          test -f dist/ssr/app.js
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test production hydration
+        run: pnpm test:e2e
