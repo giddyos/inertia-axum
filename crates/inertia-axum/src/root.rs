@@ -231,12 +231,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ssr")]
     fn ssr_mount_preserves_backend_body_exactly() {
         let body = r#"<script data-page="app">{}</script><div id="app" data-server-rendered="true">rendered</div>"#;
         assert_eq!(MountMarkup::ssr(body.to_owned()).to_string(), body);
     }
 
     #[test]
+    #[cfg(feature = "ssr")]
     fn default_root_places_ssr_head_inside_head_element() {
         let assets = AssetTags::empty();
         let head = HeadMarkup::from_fragments([

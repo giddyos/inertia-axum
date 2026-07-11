@@ -86,6 +86,7 @@ mod tests {
             serde_json::to_value(&context).unwrap(),
             json!({"data_page": context.data_page()})
         );
+        #[cfg(feature = "ssr")]
         assert_eq!(context.data_page_bytes(), context.data_page().as_bytes());
     }
 
