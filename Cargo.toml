@@ -58,3 +58,7 @@ harness = false
 [[bench]]
 name = "version_layer"
 harness = false
+
+[[bench]]
+name = "pending_page_finalize"
+harness = false

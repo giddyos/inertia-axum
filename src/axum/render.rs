@@ -6,14 +6,12 @@ pub use super::shared::{SharedProps, SharedRequest};
 pub use super::version::{InertiaVersion, VersionLayer, VersionService};
 pub use crate::HtmlResponseContext;
 
-use super::response_headers::{
-    add_vary_header, conflict_response, is_write_method, redirect_response,
+use super::response_headers::{conflict_response, is_write_method, redirect_response};
+use crate::{
+    engine::finalize_page_object, Inertia, IntoPageProps, Location, Redirect, RequestContext,
 };
-use crate::html::html_response_context;
-use crate::{Inertia, IntoPageProps, Location, Redirect, RequestContext, X_INERTIA_HEADER};
-use axum::http::{HeaderValue, Method, StatusCode};
+use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 
 impl InertiaRequest {
     /// Returns `true` when the request includes the `X-Inertia` header.
@@ -72,19 +70,9 @@ impl InertiaRequest {
 
         let page = draft.finish();
 
-        if self.context.is_inertia() {
-            let mut response = Json(page).into_response();
-            response
-                .headers_mut()
-                .insert(X_INERTIA_HEADER, HeaderValue::from_static("true"));
-            add_vary_header(&mut response);
-            Ok(response)
-        } else {
-            let context = html_response_context(&page)?;
-            let mut response = html_response(context).into_response();
-            add_vary_header(&mut response);
-            Ok(response)
-        }
+        finalize_page_object(page, self.context.is_inertia(), StatusCode::OK, |context| {
+            Ok(html_response(context).into_response())
+        })
     }
 
     /// Converts an external Inertia location visit into an Axum response.
@@ -105,9 +93,12 @@ impl InertiaRequest {
     /// Converts a method-aware redirect into an Axum response.
     pub fn redirect(&self, redirect: Redirect) -> Result<Response, InertiaError> {
         if is_write_method(&self.method) {
-            redirect_response(StatusCode::SEE_OTHER, redirect.url())
+            redirect_response(
+                StatusCode::SEE_OTHER,
+                redirect.resolve(self.referer.as_deref()),
+            )
         } else {
-            redirect_response(StatusCode::FOUND, redirect.url())
+            redirect_response(StatusCode::FOUND, redirect.resolve(self.referer.as_deref()))
         }
     }
 }

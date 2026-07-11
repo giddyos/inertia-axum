@@ -8,6 +8,7 @@ use super::shared::SharedProps;
 use super::version::{InertiaVersion, InertiaVersionSource};
 use crate::RequestContext;
 use axum::extract::{FromRequestParts, OriginalUri};
+use axum::http::header::REFERER;
 use axum::http::request::Parts;
 use axum::http::Method;
 use std::convert::Infallible;
@@ -19,6 +20,7 @@ pub struct InertiaRequest {
     pub(crate) shared_props: Option<SharedProps>,
     pub(crate) uri: Box<str>,
     pub(crate) version: Option<InertiaVersion>,
+    pub(crate) referer: Option<Box<str>>,
 }
 
 impl fmt::Debug for InertiaRequest {
@@ -28,6 +30,7 @@ impl fmt::Debug for InertiaRequest {
             .field("method", &self.method)
             .field("uri", &self.uri)
             .field("version", &self.version)
+            .field("referer", &self.referer)
             .field("has_shared_props", &self.shared_props.is_some())
             .finish()
     }
@@ -62,6 +65,11 @@ where
                 .map(|original_uri| local_uri(&original_uri.0))
                 .unwrap_or_else(|| local_uri(&parts.uri)),
             version,
+            referer: parts
+                .headers
+                .get(REFERER)
+                .and_then(|value| value.to_str().ok())
+                .map(Into::into),
         })
     }
 }

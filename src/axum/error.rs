@@ -16,6 +16,8 @@ pub enum InertiaError {
     InvalidHeader(InvalidHeaderValue),
     /// A redirect or location URL was not a valid URI reference.
     InvalidUri(ParseError),
+    /// The application root view could not be rendered.
+    Root(Box<dyn Error + Send + Sync>),
 }
 
 impl InertiaError {
@@ -26,6 +28,10 @@ impl InertiaError {
     pub(crate) fn invalid_uri(error: ParseError) -> Self {
         Self::InvalidUri(error)
     }
+
+    pub(crate) fn root(error: Box<dyn Error + Send + Sync>) -> Self {
+        Self::Root(error)
+    }
 }
 
 impl fmt::Display for InertiaError {
@@ -34,6 +40,7 @@ impl fmt::Display for InertiaError {
             Self::Serialization(error) => write!(f, "failed to serialize Inertia page: {error}"),
             Self::InvalidHeader(error) => write!(f, "invalid Inertia response header: {error}"),
             Self::InvalidUri(error) => write!(f, "invalid Inertia URI reference: {error}"),
+            Self::Root(error) => write!(f, "failed to render Inertia root view: {error}"),
         }
     }
 }
@@ -44,6 +51,7 @@ impl Error for InertiaError {
             Self::Serialization(error) => Some(error),
             Self::InvalidHeader(error) => Some(error),
             Self::InvalidUri(error) => Some(error),
+            Self::Root(error) => Some(error.as_ref()),
         }
     }
 }

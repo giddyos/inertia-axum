@@ -1,9 +1,9 @@
 //! Axum integration for `inertia-axum`.
 
-mod error;
+pub(crate) mod error;
 mod extract;
 pub mod render;
-mod response_headers;
+pub(crate) mod response_headers;
 mod shared;
 mod version;
 

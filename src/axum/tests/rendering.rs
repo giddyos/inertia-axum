@@ -853,6 +853,7 @@ async fn empty_shared_props_are_a_noop_for_non_object_props() {
         shared_props: Some(SharedProps::new()),
         uri: "/empty".into(),
         version: None,
+        referer: None,
     };
     let response = request
         .render(Inertia::response("empty", ()), |context| {
