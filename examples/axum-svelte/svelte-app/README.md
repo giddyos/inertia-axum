@@ -2,9 +2,11 @@
 
 Vite frontend for the Axum Inertia example.
 
+From the repository root:
+
 ```sh
-npm install
-npm run build
+npm ci --prefix examples/axum-svelte/svelte-app
+npm run build --prefix examples/axum-svelte/svelte-app
 ```
 
 The production build writes assets and a Vite manifest to `../public/build`.

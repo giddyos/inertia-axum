@@ -1,33 +1,45 @@
-# Axum Minimal Example
+# Axum minimal
 
-Minimal Axum integration example for `inertia-axum`.
+## What this example teaches
 
-Run it with:
+- Build an `InertiaApp` from a Vite manifest.
+- Install Inertia on a normal Axum router.
+- Pass `AppState` through `Router::with_state`.
+- Return a small dynamic page from a named handler.
 
-```sh
-cargo run --manifest-path examples/Cargo.toml -p axum-minimal
+This example is intentionally minimal. Deferred props, validation, and typed
+pages are introduced by the other examples.
+
+## Important files
+
+```text
+src/main.rs                         State, handler, router, and server startup
+frontend/dist/.vite/manifest.json   Committed frontend fixture manifest
+frontend/dist/assets/main.js        Minimal browser entry fixture
 ```
 
-Open `http://127.0.0.1:3001/hello` for the HTML first-page response.
+## Routes
 
-The example also registers an Axum shared prop with `SharedProps`.
+| Method | Path | Handler | Purpose |
+| --- | --- | --- | --- |
+| GET | `/` | `index` | Render the Home page |
 
-An Inertia request with the matching asset version returns JSON:
+## Run
 
-```sh
-curl -H 'X-Inertia: true' -H 'X-Inertia-Version: asset-version-1' \
-  http://127.0.0.1:3001/hello
-```
-
-Deferred and optional props are resolved when a matching partial reload asks
-for them:
+From the repository root:
 
 ```sh
-curl -H 'X-Inertia: true' -H 'X-Inertia-Version: asset-version-1' \
-  -H 'X-Inertia-Partial-Component: Hello' \
-  -H 'X-Inertia-Partial-Data: stats,debug' \
-  http://127.0.0.1:3001/hello
+cargo run -p axum-minimal
 ```
 
-A stale or missing Inertia version returns `409 Conflict` with
-`X-Inertia-Location`.
+Open <http://127.0.0.1:3001/>.
+
+## Expected behavior
+
+The initial HTML response contains the Inertia root element and the Home page
+data. Subsequent Inertia visits receive the JSON page response.
+
+## Production note
+
+The frontend build is a committed fixture, not a complete application. Use a
+real Vite project and development server in production development workflows.
