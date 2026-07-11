@@ -41,6 +41,7 @@ impl Engine {
         pending: PendingResponse,
         shared: Option<crate::Props>,
         transient_seed: Option<crate::transient::TransientSeed>,
+        #[cfg(feature = "ssr")] ssr_override: Option<crate::SsrOverride>,
     ) -> Response {
         if pending.requires_transient() && self.app.inner.transient.is_none() {
             return crate::axum::InertiaError::MissingTransientStore.into_response();
@@ -62,8 +63,15 @@ impl Engine {
         };
         let result = match pending {
             PendingResponse::Page(page) => {
-                self.finalize_page(visit, *page, shared, transient.as_mut())
-                    .await
+                self.finalize_page(
+                    visit,
+                    *page,
+                    shared,
+                    transient.as_mut(),
+                    #[cfg(feature = "ssr")]
+                    ssr_override,
+                )
+                .await
             }
             PendingResponse::Redirect(redirect) => {
                 let destination = redirect.resolve(visit.referer.as_deref()).to_owned();
@@ -119,6 +127,7 @@ impl Engine {
         pending: PendingPage,
         shared: Option<crate::Props>,
         transient: Option<&mut crate::TransientData>,
+        #[cfg(feature = "ssr")] _ssr_override: Option<crate::SsrOverride>,
     ) -> Result<Response, crate::axum::InertiaError> {
         let PendingPage {
             component,

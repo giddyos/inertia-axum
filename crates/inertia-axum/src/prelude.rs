@@ -7,7 +7,7 @@ pub use crate::{
 };
 
 #[cfg(feature = "ssr")]
-pub use crate::Ssr;
+pub use crate::{Ssr, SsrContext, SsrOverride, SsrRouteExt};
 
 #[cfg(feature = "cookies")]
 pub use crate::CookieTransient;

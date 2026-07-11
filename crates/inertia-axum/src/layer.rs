@@ -99,6 +99,8 @@ where
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                     Poll::Ready(Ok(mut response)) => {
+                        #[cfg(feature = "ssr")]
+                        let ssr_override = response.extensions_mut().remove::<crate::SsrOverride>();
                         let Some(handle) =
                             response.extensions_mut().remove::<PendingResponseHandle>()
                         else {
@@ -114,7 +116,14 @@ where
                         self.set(InertiaFuture::Finalizing {
                             future: Box::pin(async move {
                                 engine
-                                    .finalize(&visit, pending, shared, transient_seed)
+                                    .finalize(
+                                        &visit,
+                                        pending,
+                                        shared,
+                                        transient_seed,
+                                        #[cfg(feature = "ssr")]
+                                        ssr_override,
+                                    )
                                     .await
                             }),
                             error: std::marker::PhantomData,
