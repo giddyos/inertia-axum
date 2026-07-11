@@ -1,19 +1,21 @@
 //! Direct Inertia response values and their request-local pending marker.
 
-use crate::{Inertia, Location, Redirect};
+use crate::{props::PendingProp, Location, Redirect};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use serde_json::{Map, Value};
 use std::sync::{Arc, Mutex};
 
 const MISSING_LAYER: &str = "An Inertia page was returned, but the Inertia layer is not installed.\n\nInstall it on the router:\n\nlet app = Router::new()\n    .route(\"/\", get(index))\n    .inertia(inertia);";
 
 /// A page awaiting request-aware Inertia finalization.
 pub struct PendingPage {
-    pub(crate) inertia: Inertia<Value>,
+    pub(crate) component: String,
+    pub(crate) props: Vec<PendingProp>,
+    pub(crate) encrypt_history: bool,
+    pub(crate) clear_history: bool,
     pub(crate) status: StatusCode,
 }
 
@@ -56,7 +58,7 @@ pub(crate) fn pending_response(pending: PendingResponse) -> Response {
 /// An untyped direct page response for small pages and prototypes.
 pub struct DynamicPage {
     component: String,
-    props: Map<String, Value>,
+    props: Vec<PendingProp>,
     encrypt_history: bool,
     clear_history: bool,
     status: StatusCode,
@@ -67,7 +69,7 @@ impl DynamicPage {
     pub fn new(component: impl Into<String>) -> Self {
         Self {
             component: component.into(),
-            props: Map::new(),
+            props: Vec::new(),
             encrypt_history: false,
             clear_history: false,
             status: StatusCode::OK,
@@ -75,9 +77,29 @@ impl DynamicPage {
     }
 
     /// Serializes and adds a route prop.
-    pub fn prop(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
-        let value = serde_json::to_value(value).expect("DynamicPage prop serialization failed");
-        self.props.insert(key.into(), value);
+    pub fn prop(mut self, key: impl Into<String>, value: impl Serialize + Send + 'static) -> Self {
+        use crate::props::prop::IntoPendingProp as _;
+        let mut adapter = crate::props::prop::DynamicPropAdapter::new(value);
+        self.props
+            .push((&mut adapter).into_pending_prop(key.into()));
+        self
+    }
+
+    /// Adds an already erased prop. This is used by [`page!`](crate::page).
+    #[doc(hidden)]
+    pub fn pending_prop(mut self, prop: PendingProp) -> Self {
+        self.props.push(prop);
+        self
+    }
+
+    /// Adds a composable asynchronous prop through the ordinary builder API.
+    pub fn async_prop<T>(mut self, key: impl Into<String>, prop: crate::Prop<T>) -> Self
+    where
+        T: Serialize + Send + 'static,
+    {
+        use crate::props::prop::IntoPendingProp as _;
+        self.props
+            .push(crate::props::prop::DynamicPropAdapter::new(prop).into_pending_prop(key.into()));
         self
     }
 
@@ -99,21 +121,11 @@ impl DynamicPage {
 
     /// Converts this response into its request-aware pending representation.
     pub fn into_pending_page(self) -> PendingPage {
-        let inertia = Inertia::page(self.component).props(Value::Object(self.props));
-        // PageMetadata currently has no direct setter on the compatibility
-        // builder, so carry phase-1 history modifiers through its public API.
-        let inertia = if self.encrypt_history {
-            inertia.encrypt_history()
-        } else {
-            inertia
-        };
-        let inertia = if self.clear_history {
-            inertia.clear_history()
-        } else {
-            inertia
-        };
         PendingPage {
-            inertia,
+            component: self.component,
+            props: self.props,
+            encrypt_history: self.encrypt_history,
+            clear_history: self.clear_history,
             status: self.status,
         }
     }
@@ -140,11 +152,17 @@ macro_rules! page {
 macro_rules! __inertia_page_props {
     ($page:ident;) => { $page };
     ($page:ident; $key:ident : $value:expr $(, $($rest:tt)*)?) => {{
-        let $page = $page.prop(stringify!($key), $value);
+        use $crate::__private::IntoPendingProp as _;
+        let mut adapter = $crate::__private::DynamicPropAdapter::new($value);
+        let prop = adapter.into_pending_prop(stringify!($key).to_owned());
+        let $page = $page.pending_prop(prop);
         $crate::__inertia_page_props!($page; $($($rest)*)?)
     }};
     ($page:ident; $key:ident $(, $($rest:tt)*)?) => {{
-        let $page = $page.prop(stringify!($key), $key);
+        use $crate::__private::IntoPendingProp as _;
+        let mut adapter = $crate::__private::DynamicPropAdapter::new($key);
+        let prop = adapter.into_pending_prop(stringify!($key).to_owned());
+        let $page = $page.pending_prop(prop);
         $crate::__inertia_page_props!($page; $($($rest)*)?)
     }};
 }

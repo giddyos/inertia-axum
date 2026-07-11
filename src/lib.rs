@@ -24,7 +24,7 @@ mod root;
 mod shared;
 mod visit;
 
-pub use app::{InertiaApp, InertiaAppBuilder, RouterInertiaExt};
+pub use app::{ErrorHandler, InertiaApp, InertiaAppBuilder, RouterInertiaExt};
 pub use assets::{
     AssetContext, AssetError, AssetProvider, AssetVersion, ConfigError, StaticAssetService,
 };
@@ -32,18 +32,28 @@ pub use headers::*;
 pub use html::HtmlResponseContext;
 pub use layer::{InertiaLayer, InertiaService};
 pub use page::{Inertia, InertiaPageBuilder, OnceProp, Page, PageMetadata, ScrollProps};
-pub use props::{InertiaProps, IntoPageProps, ScopedInertiaProps};
+pub use props::{
+    always, defer, lazy, merge, once, optional, scroll, InertiaProps, InertiaResult, IntoPageProps,
+    IntoScrollPage, LoadPolicy, MergePolicy, OncePolicy, Prop, PropError, PropOptions,
+    ScopedInertiaProps, ScrollPage, ScrollPolicy,
+};
 pub use redirect::{Location, Redirect};
 pub use request::RequestContext;
 pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
 pub use root::{AssetTags, MountMarkup, RootContext, RootView};
 pub use visit::Visit;
 
+/// Implementation details referenced by exported declarative macros.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::props::prop::{DynamicPropAdapter, IntoPendingProp};
+}
+
 /// Advanced protocol-aware application APIs.
 pub mod advanced {
     pub use crate::{
-        AssetTags, MountMarkup, RequestContext as InertiaRequestContext, RootContext, RootView,
-        Visit,
+        AssetContext, AssetProvider, AssetTags, AssetVersion, ErrorHandler, MountMarkup,
+        RequestContext as InertiaRequestContext, RootContext, RootView, Visit,
     };
 }
 

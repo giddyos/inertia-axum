@@ -29,6 +29,7 @@ tower = "0.5.3"
 [dependencies]
 axum = { workspace = true, features = ["json", "original-uri"] }
 fluent-uri = "0.4.1"
+futures-util = "0.3"
 pin-project-lite = "0.2"
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
@@ -67,4 +68,16 @@ harness = false
 
 [[bench]]
 name = "vite_initial_html"
+harness = false
+
+[[bench]]
+name = "partial_async_prop_selection"
+harness = false
+
+[[bench]]
+name = "selected_async_prop_concurrency"
+harness = false
+
+[[bench]]
+name = "unselected_async_prop"
 harness = false

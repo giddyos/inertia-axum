@@ -65,6 +65,7 @@ pin_project! {
     #[project = InertiaFutureProj]
     pub enum InertiaFuture<F, E> {
         Inner { #[pin] future: F, visit: Option<Visit>, engine: Engine },
+        Finalizing { #[pin] future: std::pin::Pin<Box<dyn Future<Output = Response> + Send>>, error: std::marker::PhantomData<E> },
         Ready { response: Option<Result<Response, E>> },
     }
 }
@@ -75,34 +76,44 @@ where
 {
     type Output = Result<Response, E>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.project() {
-            InertiaFutureProj::Ready { response } => Poll::Ready(
-                response
-                    .take()
-                    .expect("ready Inertia future polled after completion"),
-            ),
-            InertiaFutureProj::Inner {
-                future,
-                visit,
-                engine,
-            } => match future.poll(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
-                Poll::Ready(Ok(mut response)) => {
-                    let Some(handle) = response.extensions_mut().remove::<PendingResponseHandle>()
-                    else {
-                        return Poll::Ready(Ok(response));
-                    };
-                    let Some(pending) = handle.take() else {
-                        return Poll::Ready(Ok(response));
-                    };
-                    Poll::Ready(Ok(engine.finalize(
-                        visit.as_ref().expect("visit available while finalizing"),
-                        pending,
-                    )))
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match self.as_mut().project() {
+                InertiaFutureProj::Ready { response } => {
+                    return Poll::Ready(
+                        response
+                            .take()
+                            .expect("ready Inertia future polled after completion"),
+                    )
                 }
-            },
+                InertiaFutureProj::Finalizing { future, .. } => {
+                    return future.poll(cx).map(Ok);
+                }
+                InertiaFutureProj::Inner {
+                    future,
+                    visit,
+                    engine,
+                } => match future.poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Ready(Ok(mut response)) => {
+                        let Some(handle) =
+                            response.extensions_mut().remove::<PendingResponseHandle>()
+                        else {
+                            return Poll::Ready(Ok(response));
+                        };
+                        let Some(pending) = handle.take() else {
+                            return Poll::Ready(Ok(response));
+                        };
+                        let visit = visit.take().expect("visit available while finalizing");
+                        let engine = engine.clone();
+                        self.set(InertiaFuture::Finalizing {
+                            future: Box::pin(async move { engine.finalize(&visit, pending).await }),
+                            error: std::marker::PhantomData,
+                        });
+                    }
+                },
+            }
         }
     }
 }

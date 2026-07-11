@@ -17,6 +17,7 @@ pub struct InertiaApp {
 pub(crate) struct InertiaAppInner {
     pub(crate) root: SharedRootView,
     pub(crate) assets: AssetRuntime,
+    pub(crate) error_handler: Option<Arc<dyn ErasedErrorHandler>>,
 }
 
 /// Builds an [`InertiaApp`].
@@ -26,6 +27,23 @@ pub struct InertiaAppBuilder {
     vite: Option<ViteConfig>,
     asset_provider: Option<Arc<dyn ErasedAssetProvider>>,
     public_path: String,
+    error_handler: Option<Arc<dyn ErasedErrorHandler>>,
+}
+
+/// Receives deterministic reports for rescued asynchronous prop failures.
+pub trait ErrorHandler: Clone + Send + Sync + 'static {
+    /// Reports a resolver failure after its prop has been identified.
+    fn handle(&self, prop: &str, error: &crate::PropError);
+}
+
+pub(crate) trait ErasedErrorHandler: Send + Sync {
+    fn handle(&self, prop: &str, error: &crate::PropError);
+}
+
+impl<T: ErrorHandler> ErasedErrorHandler for T {
+    fn handle(&self, prop: &str, error: &crate::PropError) {
+        ErrorHandler::handle(self, prop, error);
+    }
 }
 
 impl InertiaApp {
@@ -37,6 +55,7 @@ impl InertiaApp {
             vite: None,
             asset_provider: None,
             public_path: "/build".to_owned(),
+            error_handler: None,
         }
     }
 
@@ -48,6 +67,7 @@ impl InertiaApp {
             vite: None,
             asset_provider: None,
             public_path: "/build".to_owned(),
+            error_handler: None,
         }
     }
 
@@ -65,6 +85,7 @@ impl InertiaApp {
             }),
             asset_provider: None,
             public_path: "/build".to_owned(),
+            error_handler: None,
         }
     }
 }
@@ -123,6 +144,12 @@ impl InertiaAppBuilder {
         self
     }
 
+    /// Installs the application-wide rescued-prop error reporter.
+    pub fn error_handler<E: ErrorHandler>(mut self, handler: E) -> Self {
+        self.error_handler = Some(Arc::new(handler));
+        self
+    }
+
     /// Overrides the Vite development server URL.
     pub fn dev_server(mut self, url: impl Into<String>) -> Self {
         if let Some(vite) = &mut self.vite {
@@ -142,6 +169,7 @@ impl InertiaAppBuilder {
             inner: Arc::new(InertiaAppInner {
                 root: self.root,
                 assets: self.assets,
+                error_handler: self.error_handler,
             }),
         })
     }

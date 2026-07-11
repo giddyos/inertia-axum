@@ -48,3 +48,20 @@ benchmarks the complete initial-page router path. The saved `phase2-vite`
 baseline measured 2.98 us. Manifest I/O, parsing, graph traversal, and stable
 version hashing are intentionally absent from the request-time measurement
 because production setup performs them once during `InertiaApp::build()`.
+
+## Phase 3 asynchronous prop checkpoint
+
+The saved `phase3-props` measurements are 22.81 us for selecting one optional
+prop from 128 declarations, 9.87 us for concurrently polling 16 selected async
+props, and 2.73 us for a page whose optional async prop is not selected. The
+last benchmark also asserts that the resolver closure never runs.
+
+Compared with the pre-async phase-1 finalizer baseline, initial HTML remained
+statistically unchanged. The small Inertia JSON fixture moved from 3.54 us to
+3.71 us (about 0.17 us, or 6%). This is the measured cost of the request-local
+async finalization state and policy selection on a two-prop response. Immediate
+values avoid resolver futures, while async futures are allocated only after
+selection and are polled with a concurrency bound of 16. The regression is
+recorded as the deliberate fixed cost of adding request-aware async resolution,
+not left silent; larger serialization-heavy page benchmarks remain the wire
+performance guardrail.

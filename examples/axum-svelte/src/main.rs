@@ -1,6 +1,9 @@
 use axum::{routing::get, Router};
 use inertia_axum::prelude::*;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    convert::Infallible,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 fn generated_at() -> u64 {
     SystemTime::now()
@@ -15,8 +18,8 @@ async fn hello() -> DynamicPage {
         message: "Rendered by Axum and hydrated by Svelte through Inertia.",
         appName: "Axum Svelte",
         auth: serde_json::json!({"user":{"name":"Grace Hopper","role":"Example user"}}),
-        stats: serde_json::json!({"adapter":"Axum","deferred":true,"generatedAt":generated_at()}),
-        debug: serde_json::json!({"partialReload":true,"loadedBy":"phase 3 async prop engine"}),
+        stats: defer(|| async { Ok::<_, Infallible>(serde_json::json!({"adapter":"Axum","deferred":true,"generatedAt":generated_at()})) }),
+        debug: optional(|| async { Ok::<_, Infallible>(serde_json::json!({"partialReload":true,"loadedBy":"X-Inertia-Partial-Data: debug"})) }),
     })
 }
 
