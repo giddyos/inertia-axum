@@ -3,299 +3,284 @@
 [![CI](https://github.com/giddyos/inertia-axum/actions/workflows/ci.yaml/badge.svg)](https://github.com/giddyos/inertia-axum/actions/workflows/ci.yaml)
 
 [Inertia.js](https://inertiajs.com/) adapter support for Axum applications.
-The crate provides Inertia protocol models, request extraction, page rendering,
-shared props, asset version handling, and redirect helpers for Axum.
+Build server-driven applications with the Axum routing, state, extractors, and
+middleware you already use—without maintaining a separate JSON API.
 
-## Status
-
-inertia-axum supports the core Inertia response flow for Axum:
-
-- HTML first-page responses and JSON Inertia responses.
-- Asset version checks and stale-visit handling.
-- Inertia v3 metadata for partial reloads, merge props, deferred props, once
-  props, history flags, and infinite-scroll metadata.
-- Concurrent lazy, optional, deferred, rescued, and once prop resolvers.
-- Shared props with request-aware providers.
-- External-location and method-aware redirect helpers.
-
-The minimum supported Rust version is 1.88.
-
-See the [protocol support matrix](docs/protocol-support.md) for representative
-tests and current limitations.
+`inertia-axum` provides Axum responses, typed and dynamic pages, shared data,
+deferred and partial props, redirect-based form validation, in-process testing,
+and Inertia v3 protocol support. The minimum supported Rust version is 1.88.
+See the [protocol support matrix](docs/protocol-support.md) for current coverage.
 
 ## Installation
 
 ```toml
 [dependencies]
-inertia-axum = "1.0.0-alpha.1"
 axum = "0.8.9"
+inertia-axum = "1.0.0-alpha.1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync"] }
+
+[dev-dependencies]
+inertia-axum-test = "1.0.0-alpha.1"
 ```
 
-## Minimal Todo application
+## A stateful Todo application
 
-With a conventional Vite project in `frontend`, the complete server setup is:
+This is an ordinary stateful Axum application. Inertia supplies typed responses,
+form extraction, and a router layer; it does not replace Axum's application
+structure. The compiled version lives in
+[`examples/todo/src/lib.rs`](examples/todo/src/lib.rs).
 
-```rust,no_run
-use axum::{routing::get, Router};
-use inertia_axum::prelude::*;
+```rust
+use axum::{extract::State, routing::get, Router};
+use inertia_axum::{Errors, prelude::*};
+use serde::{Deserialize, Serialize};
+use std::{convert::Infallible, sync::Arc};
+use tokio::sync::RwLock;
 
-async fn index() -> DynamicPage {
-    let todos = [
-        "Design the public API",
-        "Build the response finalizer",
-        "Add integration tests",
-    ];
-
-    page!("Todos/Index", { todos })
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Todo {
+    pub id: u64,
+    pub title: String,
+    pub completed: bool,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let app = Router::new()
-        .route("/todos", get(index))
-        .inertia(InertiaApp::vite("frontend").build()?);
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TodoStats {
+    pub total: usize,
+    pub completed: usize,
+    pub remaining: usize,
+}
 
+#[derive(Clone)]
+pub struct AppState {
+    todos: Arc<RwLock<Vec<Todo>>>,
+}
+
+impl AppState {
+    pub fn seeded() -> Self {
+        Self {
+            todos: Arc::new(RwLock::new(vec![Todo {
+                id: 1,
+                title: "Rewrite the examples".to_owned(),
+                completed: false,
+            }])),
+        }
+    }
+}
+
+#[derive(InertiaPage)]
+#[inertia(component = "Todos/Index", rename_all = "camelCase")]
+pub struct TodosPage {
+    pub todos: Vec<Todo>,
+    pub stats: Prop<TodoStats>,
+}
+
+async fn index(State(state): State<AppState>) -> TodosPage {
+    let todos = state.todos.read().await.clone();
+    let stats_state = state.clone();
+
+    TodosPage {
+        todos,
+        // Inertia loads this prop after the initial page has rendered.
+        stats: defer(move || async move {
+            let todos = stats_state.todos.read().await;
+            let completed = todos.iter().filter(|todo| todo.completed).count();
+
+            Ok::<_, Infallible>(TodoStats {
+                total: todos.len(),
+                completed,
+                remaining: todos.len() - completed,
+            })
+        }),
+    }
+}
+
+#[derive(Deserialize, InertiaForm)]
+#[inertia(validate_with = "validate_todo")]
+struct CreateTodo {
+    title: String,
+}
+
+fn validate_todo(input: &CreateTodo) -> Result<(), Errors> {
+    let title = input.title.trim();
+    if title.is_empty() {
+        return Err(Errors::field("title", "Enter a todo title"));
+    }
+    if title.len() > 120 {
+        return Err(Errors::field(
+            "title",
+            "Todo titles must be 120 characters or fewer",
+        ));
+    }
+    Ok(())
+}
+
+async fn store(
+    State(state): State<AppState>,
+    // Invalid input redirects back before this handler body runs.
+    Validated(input): Validated<CreateTodo>,
+) -> Redirect {
+    let mut todos = state.todos.write().await;
+    let id = todos.last().map_or(1, |todo| todo.id + 1);
+    todos.push(Todo {
+        id,
+        title: input.title.trim().to_owned(),
+        completed: false,
+    });
+
+    Redirect::to("/todos").flash("message", "Todo created")
+}
+
+pub fn app(state: AppState, inertia: InertiaApp) -> Router {
+    Router::new()
+        .route("/todos", get(index).post(store))
+        .with_state(state)
+        .inertia(inertia)
+}
+```
+
+## Start the server
+
+Keep runtime configuration outside `app` so the same router is reusable in
+tests.
+
+```rust,ignore
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let inertia = InertiaApp::vite("frontend")
+        // Keeps validation errors and flash data across redirects.
+        // Use an encrypted or session-backed store in production.
+        .transient(MemoryTransient::new())
+        .build()?;
+
+    let app = app(AppState::seeded(), inertia);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     axum::serve(listener, app).await?;
     Ok(())
 }
 ```
 
-The default Vite conventions are `src/main.ts`, `dist/.vite/manifest.json`, and
-the `/build` public path. `VITE_DEV_SERVER_URL` switches startup to development
-tags without requiring a manifest. Entry, build directory, public path, root
-view, and development URL can all be overridden on the builder.
+`MemoryTransient` is useful for examples and deterministic tests. Production
+applications should use encrypted cookie or session-backed transient storage;
+the crate intentionally has no insecure default.
 
-## Typed pages
+## Deferred props on the client
 
-With the default `macros` feature, a page struct is itself an Axum response.
-The derive registers fields individually, so `Prop<T>` policies remain lazy
-and typed prop-key constants are available to tests and partial requests.
+The first response contains `todos` and advertises `stats` as deferred. The
+Inertia client then requests `stats` after the page renders. The server does not
+calculate it during the initial response.
 
-```rust
-use inertia_axum::prelude::*;
+```svelte
+<script>
+    import { Deferred } from '@inertiajs/svelte'
 
-#[derive(InertiaPage)]
-#[inertia(component = "Todos/Index", rename_all = "camelCase")]
-struct TodosPage {
-    todos: Vec<String>,
-    stats: Prop<u64>,
-}
+    let { todos = [], stats, errors = {} } = $props()
+</script>
 
-async fn todos() -> TodosPage {
-    TodosPage {
-        todos: vec!["Ship typed pages".to_owned()],
-        stats: defer(|| async { Ok::<_, std::convert::Infallible>(7) }),
-    }
-}
+<ul>
+    {#each todos as todo}
+        <li>{todo.title}</li>
+    {/each}
+</ul>
 
-assert_eq!(TodosPage::TODOS.name(), "todos");
-assert_eq!(TodosPage::STATS.component().as_str(), "Todos/Index");
+<Deferred data="stats">
+    {#snippet fallback()}
+        <p>Loading summary…</p>
+    {/snippet}
+
+    <p>{stats.remaining} remaining</p>
+</Deferred>
 ```
+
+## Validation
+
+```svelte
+<script>
+    import { router } from '@inertiajs/svelte'
+
+    let { errors = {} } = $props()
+    let title = $state('')
+
+    function submit(event) {
+        event.preventDefault()
+        router.post('/todos', { title }, { onSuccess: () => { title = '' } })
+    }
+</script>
+
+<form onsubmit={submit}>
+    <input bind:value={title} aria-label="Todo title">
+    {#if errors.title}<p>{errors.title}</p>{/if}
+    <button type="submit">Add todo</button>
+</form>
+```
+
+Validation failures redirect back and populate `page.props.errors`; they are
+not returned as a special `422` Inertia JSON response. Use
+`error_bag = "createTodo"` when a page contains multiple forms with overlapping
+field names.
+
+## Test the same application
+
+`TestApp` makes real in-process requests, preserves redirect cookies, and uses
+the prop keys generated by `InertiaPage`.
+
+```rust,ignore
+let initial = app.inertia_get("/todos").send().await.assert_page::<TodosPage>();
+initial
+    .assert_deferred("default", TodosPage::STATS)
+    .assert_missing(TodosPage::STATS);
+
+let partial = app
+    .inertia_get("/todos")
+    .only(TodosPage::STATS)
+    .send()
+    .await
+    .assert_page::<TodosPage>();
+let stats: TodoStats = partial.prop(TodosPage::STATS);
+assert_eq!(stats.remaining, 1);
+partial.assert_missing(TodosPage::TODOS);
+
+let redirect = app
+    .inertia_post("/todos")
+    .header("referer", "/todos")
+    .form(&[("title", "")])
+    .send()
+    .await
+    .assert_see_other("/todos");
+redirect.follow().await.assert_page::<TodosPage>().assert_error("title");
+```
+
+Run the complete focused tests with
+`cargo test -p inertia-axum-example-todo`.
 
 ## Examples
 
-- [`examples/axum-minimal`](examples/axum-minimal): the Todo setup above.
-- [`examples/axum-svelte`](examples/axum-svelte): Axum + Svelte 5 + Vite using
-  the same convention-based application setup.
-- [`examples/todo`](examples/todo): typed partial and optional loading.
-- [`examples/incident-board`](examples/incident-board): deferred groups,
-  validation, flash, rescue, merge, scroll, and external locations.
-- [`examples/observatory`](examples/observatory): the same advanced policies in
-  an alternate domain.
+The first two examples run in a browser; the remaining examples are compact
+in-process applications exercised through tests.
 
-## Optional project commands
+| Example | Purpose | Command |
+| --- | --- | --- |
+| [`axum-minimal`](examples/axum-minimal) | Smallest Axum router, `AppState`, initial HTML, and Inertia JSON | `cargo run -p axum-minimal` |
+| [`axum-svelte`](examples/axum-svelte) | Axum, Vite, Svelte 5, automatic deferred loading, and validation UI | `cargo run -p axum-svelte` |
+| [`todo`](examples/todo) | Canonical typed page, validation, deferred prop, and `TestApp` tests | `cargo test -p inertia-axum-example-todo` |
+| [`incident-board`](examples/incident-board) | Advanced rescue, merge, scroll, flash, and external-location behavior | `cargo test -p inertia-axum-example-incident-board` |
+| [`observatory`](examples/observatory) | Protocol regression fixture for once props, reset, deep merge, and redaction | `cargo test -p inertia-axum-example-observatory` |
 
-The library works with ordinary Cargo and Vite commands. The small optional
-`cargo-inertia` package adds three conveniences:
+## More APIs and reference material
 
-```bash
-cargo install cargo-inertia --version 1.0.0-alpha.1
-cargo inertia init --frontend svelte # or react / vue
-cargo inertia check
-cargo inertia dev
-```
+The API documentation covers [typed shared data](https://docs.rs/inertia-axum/latest/inertia_axum/trait.Share.html),
+[optional and partial props](https://docs.rs/inertia-axum/latest/inertia_axum/struct.Prop.html),
+[merge and infinite-scroll props](https://docs.rs/inertia-axum/latest/inertia_axum/struct.ScrollPage.html),
+[once props](https://docs.rs/inertia-axum/latest/inertia_axum/fn.once.html),
+[rescued prop errors](https://docs.rs/inertia-axum/latest/inertia_axum/struct.Prop.html),
+[custom asset providers](https://docs.rs/inertia-axum/latest/inertia_axum/trait.AssetProvider.html),
+and [custom root views](https://docs.rs/inertia-axum/latest/inertia_axum/trait.RootView.html).
+Also see the [migration guide](docs/migration-from-0.5.md) and
+[protocol support matrix](docs/protocol-support.md).
 
-`init` creates a conventional `frontend` directory and prints the matching
-Rust setup. `check` verifies component declarations and frontend pages. `dev`
-runs Vite beside `cargo run` and sets `VITE_DEV_SERVER_URL` for the server.
+### Compatibility API
 
-## In-process application tests
-
-Add the separate test package as a development dependency:
-
-```toml
-[dev-dependencies]
-inertia-axum-test = "1.0.0-alpha.1"
-```
-
-Typed prop keys build partial visits and decode responses without stringly
-typed heterogeneous arrays:
-
-```rust,ignore
-let page = TestApp::new(router)
-    .inertia_get("/todos")
-    .only(TodosIndexPage::STATS)
-    .send()
-    .await
-    .assert_page::<TodosIndexPage>();
-
-let stats: TodoStats = page.prop(TodosIndexPage::STATS);
-page.assert_missing(TodosIndexPage::TODOS);
-```
-
-See [the 0.5 to 1.0 alpha migration guide](docs/migration-from-0.5.md) for
-mechanical before-and-after conversions.
-
-## Compatibility API
-
-The `InertiaRequest`, `VersionLayer`, and `SharedProps` APIs remain available
-through `inertia_axum::compat` during the 1.0 alpha migration.
-
-## Typed shared data
-
-Install one small typed provider with `InertiaAppBuilder::share`. Its `share`
-method runs synchronously while request headers and extensions can be borrowed;
-put database or network work in `Prop<T>` fields so the common selection engine
-can skip it.
-
-Authentication and similar middleware must wrap the Inertia layer so its
-extensions exist during shared preparation. With Axum's layer ordering, add it
-after `.inertia(...)`:
-
-```rust,ignore
-Router::new()
-    .route("/", get(index))
-    .inertia(inertia)
-    .layer(authentication_layer)
-```
-
-Route-owned roots always win over route-local and global shared values,
-including when a partial reload omits the concrete route value.
-
-## Flash and transient state
-
-Redirect and page flash values use `page.flash`, separately from props and
-browser history. Configure `MemoryTransient::new()` for deterministic tests or
-enable the `cookies` feature and use `CookieTransient::encrypted(app_key)` for
-an authenticated, encrypted production cookie. There is no insecure default.
-
-```rust,ignore
-let inertia = InertiaApp::vite("frontend")
-    .transient(CookieTransient::encrypted(app_key))
-    .build()?;
-
-Redirect::to("/todos")
-    .flash("toast", "Todo created")
-    .flash("todoId", todo_id)
-```
-
-The optional `tower-sessions` feature provides `TowerSessionTransient` when an
-application already installs `SessionManagerLayer` outside the Inertia layer.
-
-## Forms and validation
-
-`Validated<T>` supports JSON and URL-encoded bodies. Semantic validation
-failures are stored transiently and redirected back with `303 See Other`; they
-are never returned as protocol-incompatible `422` Inertia JSON.
-
-```rust,ignore
-#[derive(serde::Deserialize, InertiaForm)]
-#[inertia(validate_with = "validate_todo", error_bag = "createTodo")]
-struct CreateTodo {
-    title: String,
-}
-
-async fn store(Validated(input): Validated<CreateTodo>) -> Redirect {
-    save(input).await;
-    Redirect::to("/todos").flash("toast", "Todo created")
-}
-```
-
-The request's `X-Inertia-Error-Bag` takes precedence over the derive fallback.
-Old input is disabled by default; `#[inertia(old_input, redact = "token")]`
-opts in while guaranteeing that listed or `#[inertia(sensitive)]` fields are
-not persisted. Enable `garde` or `validator` for their derive adapters, or use
-the lower-level `InertiaForm<T>::validate_with` path.
-
-Use `VersionLayer::dynamic` for a request-time asset version provider. Keep the
-provider fast and read a cached value rather than doing blocking I/O there.
-
-## Inertia v3 Helpers
-
-```rust
-use inertia_axum::{Inertia, InertiaProps};
-
-let props = InertiaProps::new()
-    .value("user", user)
-    .lazy("companies", || load_companies())
-    .optional("auditTrail", || load_audit_trail())
-    .defer("analytics", || load_analytics())
-    .once("plans", || load_plans());
-
-Inertia::response("Users/Index", props)
-    .always("auth")
-    .merge("users");
-```
-
-The runtime crate also exposes `Page`, `PageMetadata`, `RequestContext`,
-`InertiaProps`, and `ScopedInertiaProps` for framework-neutral protocol work.
-
-## Shared Props
-
-Register `SharedProps` through an Axum `Extension` layer. Providers receive the
-extracted `InertiaRequest` and can read values inserted by other Axum layers.
-
-```rust
-use axum::{Extension, Router};
-use inertia_axum::axum::SharedProps;
-
-let shared_props = SharedProps::new()
-    .value("appName", "My App")
-    .prop("auth.user", |request| {
-        request.extension::<User>().map(|user| user.summary())
-    });
-
-let app = Router::new().layer(Extension(shared_props));
-```
-
-Shared props are merged into HTML and JSON page responses. Route props win on
-key collisions, and dotted keys such as `auth.user` become nested objects.
-
-## Redirect Helpers
-
-Use `InertiaRequest::location` for external redirects from Inertia visits:
-
-```rust
-async fn billing(request: InertiaRequest) -> Result<Response, InertiaError> {
-    request.location(Inertia::location("https://billing.example.com"))
-}
-```
-
-Use `InertiaRequest::redirect` for method-aware application redirects:
-
-```rust
-async fn create_user(request: InertiaRequest) -> Result<Response, InertiaError> {
-    request.redirect(Inertia::redirect("/users"))
-}
-```
-
-The Axum integration returns `302 Found` for read-style requests and `303 See
-Other` for `POST`, `PUT`, `PATCH`, and `DELETE`.
-
-## Request Helpers
-
-```rust
-use inertia_axum::axum::InertiaRequest;
-
-async fn debug(request: InertiaRequest) -> String {
-    format!(
-        "is_inertia={}, version={:?}",
-        request.is_inertia(),
-        request.asset_version()
-    )
-}
-```
-
-Raw protocol header constants are available from the crate root, for example
-`inertia_axum::X_INERTIA` and `inertia_axum::X_INERTIA_VERSION`.
+`InertiaRequest`, `SharedProps`, and `VersionLayer` remain available for
+migration compatibility. New applications should begin with `InertiaApp`, typed
+pages, typed sharing, and the response helpers exported by the prelude.
