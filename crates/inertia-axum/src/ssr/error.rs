@@ -18,6 +18,20 @@ pub enum SsrStartError {
     InvalidConcurrency,
     /// Response limits must be greater than zero.
     InvalidResponseLimit,
+    /// Managed Node startup is implemented in Phase 6.
+    ManagedNodeNotImplemented,
+    /// A configured external bundle could not be validated.
+    BundleUnavailable {
+        /// Resolved bundle path.
+        path: std::path::PathBuf,
+        /// Filesystem validation failure.
+        source: std::io::Error,
+    },
+    /// The backend did not become healthy before startup timed out.
+    HealthTimeout {
+        /// Configured startup timeout.
+        timeout: std::time::Duration,
+    },
 }
 
 impl fmt::Display for SsrStartError {
@@ -39,6 +53,22 @@ impl fmt::Display for SsrStartError {
             Self::InvalidResponseLimit => {
                 formatter.write_str("SSR maximum response size must be greater than zero")
             }
+            Self::ManagedNodeNotImplemented => {
+                formatter.write_str("managed Node SSR startup is not implemented")
+            }
+            Self::BundleUnavailable { path, source } => {
+                write!(
+                    formatter,
+                    "SSR bundle {} is unavailable: {source}",
+                    path.display()
+                )
+            }
+            Self::HealthTimeout { timeout } => {
+                write!(
+                    formatter,
+                    "SSR backend did not become healthy within {timeout:?}"
+                )
+            }
         }
     }
 }
@@ -47,13 +77,50 @@ impl std::error::Error for SsrStartError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidEndpoint { source, .. } => Some(source),
+            Self::BundleUnavailable { source, .. } => Some(source),
             _ => None,
         }
     }
 }
 
+/// Application startup failure from asset or SSR configuration.
 #[derive(Debug)]
-pub(crate) enum SsrFailure {
+pub enum StartError {
+    /// Asset configuration failed.
+    Config(crate::ConfigError),
+    /// SSR startup failed.
+    Ssr(SsrStartError),
+}
+
+impl fmt::Display for StartError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(error) => error.fmt(formatter),
+            Self::Ssr(error) => error.fmt(formatter),
+        }
+    }
+}
+impl std::error::Error for StartError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Config(error) => Some(error),
+            Self::Ssr(error) => Some(error),
+        }
+    }
+}
+impl From<crate::ConfigError> for StartError {
+    fn from(error: crate::ConfigError) -> Self {
+        Self::Config(error)
+    }
+}
+impl From<SsrStartError> for StartError {
+    fn from(error: SsrStartError) -> Self {
+        Self::Ssr(error)
+    }
+}
+
+#[derive(Debug)]
+pub enum SsrFailure {
     Request(String),
     Service(String),
     Transport(String),

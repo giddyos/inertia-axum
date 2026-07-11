@@ -117,6 +117,8 @@ impl<P: AssetProvider> ErasedAssetProvider for P {
             static_mount: self
                 .static_service()
                 .map(|service| (public_path.to_owned(), service)),
+            #[cfg(feature = "vite")]
+            vite_dev_server: None,
         })
     }
 }
@@ -128,6 +130,8 @@ pub(crate) struct AssetRuntime {
     pub(crate) tags: AssetTags,
     #[cfg(feature = "vite")]
     pub(crate) static_mount: Option<(String, StaticAssetService)>,
+    #[cfg(feature = "vite")]
+    pub(crate) vite_dev_server: Option<Arc<str>>,
 }
 
 impl Default for AssetRuntime {
@@ -138,6 +142,8 @@ impl Default for AssetRuntime {
             tags: AssetTags::empty(),
             #[cfg(feature = "vite")]
             static_mount: None,
+            #[cfg(feature = "vite")]
+            vite_dev_server: None,
         }
     }
 }
@@ -215,6 +221,7 @@ impl ViteConfig {
             header_version: None,
             tags,
             static_mount: None,
+            vite_dev_server: Some(Arc::from(url.trim_end_matches('/'))),
         })
     }
 
@@ -284,6 +291,7 @@ impl ViteConfig {
             header_version: Some(header_version),
             tags: AssetTags::new(tags),
             static_mount: Some((self.public_path.clone(), StaticAssetService::new(build_dir))),
+            vite_dev_server: None,
         })
     }
 }

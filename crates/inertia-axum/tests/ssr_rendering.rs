@@ -1,0 +1,282 @@
+#![cfg(feature = "ssr")]
+
+use axum::{
+    Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode},
+    routing::{get, post},
+};
+use inertia_axum::{DynamicPage, InertiaApp, RouterInertiaExt as _, Ssr, SsrRouteExt as _};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+use tower::ServiceExt as _;
+
+async fn fake(render_status: StatusCode, render_body: &'static str) -> (String, Arc<AtomicUsize>) {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let app = Router::new()
+        .route("/health", get(|| async { StatusCode::OK }))
+        .route(
+            "/render",
+            post(move || {
+                count.fetch_add(1, Ordering::SeqCst);
+                async move { (render_status, render_body) }
+            }),
+        )
+        .route(
+            "/__inertia_ssr",
+            post(move || async move { (render_status, render_body) }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{address}"), calls)
+}
+
+async fn external(base: &str, config: Ssr, route: axum::routing::MethodRouter) -> Router {
+    let inertia = InertiaApp::default_root()
+        .ssr(config)
+        .start()
+        .await
+        .unwrap();
+    Router::new().route("/", route).inertia(inertia)
+}
+
+async fn body(response: axum::response::Response) -> String {
+    String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap()
+}
+
+fn page() -> DynamicPage {
+    DynamicPage::new("Home").prop("message", "hello")
+}
+
+#[tokio::test]
+async fn external_ssr_renders_unmarked_initial_get() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":["<title>SSR</title>"],"body":"<div id=\"app\" data-server-rendered=\"true\">SSR</div>"}"#).await;
+    let app = external(&base, Ssr::external(&base), get(|| async { page() })).await;
+    let html = body(
+        app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(html.contains("data-server-rendered"));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn inertia_json_request_never_invokes_ssr() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
+    let app = external(&base, Ssr::external(&base), get(|| async { page() })).await;
+    let response = app
+        .oneshot(
+            Request::get("/")
+                .header("x-inertia", "true")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.headers().get("x-inertia").unwrap(), "true");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn non_get_request_never_invokes_ssr() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
+    let app = external(&base, Ssr::external(&base), post(|| async { page() })).await;
+    let html = body(
+        app.oneshot(Request::post("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(html.contains("data-page=\"app\""));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn without_ssr_route_skips_rendering() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
+    let app = external(
+        &base,
+        Ssr::external(&base),
+        get(|| async { page() }).without_ssr(),
+    )
+    .await;
+    let html = body(
+        app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(html.contains("<div id=\"app\"></div>"));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn with_ssr_route_renders_in_opt_in_mode() {
+    let (base, calls) = fake(
+        StatusCode::OK,
+        r#"{"head":[],"body":"<div id=\"app\">SSR</div>"}"#,
+    )
+    .await;
+    let app = external(
+        &base,
+        Ssr::external(&base).opt_in(),
+        get(|| async { page() }).with_ssr(),
+    )
+    .await;
+    assert!(
+        body(
+            app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap()
+        )
+        .await
+        .contains("SSR")
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn ssr_when_selects_per_request() {
+    let (base, calls) = fake(
+        StatusCode::OK,
+        r#"{"head":[],"body":"<div id=\"app\">SSR</div>"}"#,
+    )
+    .await;
+    let app = external(
+        &base,
+        Ssr::external(&base),
+        get(|| async { page() }).ssr_when(|context| context.headers().contains_key("x-ssr")),
+    )
+    .await;
+    let csr = body(
+        app.clone()
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    let ssr = body(
+        app.oneshot(
+            Request::get("/")
+                .header("x-ssr", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert!(csr.contains("data-page=\"app\""));
+    assert!(ssr.contains(">SSR</div>"));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn opt_in_default_skips_unmarked_route() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
+    let app = external(
+        &base,
+        Ssr::external(&base).opt_in(),
+        get(|| async { page() }),
+    )
+    .await;
+    app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn router_group_policy_is_respected() {
+    let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
+    let inertia = InertiaApp::default_root()
+        .ssr(Ssr::external(&base))
+        .start()
+        .await
+        .unwrap();
+    let group = Router::new()
+        .route("/", get(|| async { page() }))
+        .without_ssr();
+    let app = Router::new().nest("/group", group).inertia(inertia);
+    app.oneshot(Request::get("/group/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn ssr_head_body_and_status_are_preserved_without_double_wrap() {
+    let (base, _) = fake(StatusCode::OK, r#"{"head":["<title>Server title</title>"],"body":"<div id=\"app\" data-server-rendered=\"true\">SSR</div>"}"#).await;
+    let app = external(
+        &base,
+        Ssr::external(&base),
+        get(|| async { page().status(StatusCode::CREATED) }),
+    )
+    .await;
+    let response = app
+        .oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let html = body(response).await;
+    assert!(html.contains("<title>Server title</title></head>"));
+    assert_eq!(html.matches("id=\"app\"").count(), 1);
+}
+
+#[tokio::test]
+async fn vite_warmup_null_falls_back_to_csr() {
+    let (base, _) = fake(StatusCode::OK, "null").await;
+    let inertia = InertiaApp::vite("missing-production-build")
+        .dev_server(&base)
+        .ssr("missing-bundle.js")
+        .start()
+        .await
+        .unwrap();
+    let app = Router::new()
+        .route("/", get(|| async { page() }))
+        .inertia(inertia);
+    let html = body(
+        app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(html.contains("<div id=\"app\"></div>"));
+}
+
+#[tokio::test]
+async fn failure_modes_fallback_or_return_internal_error() {
+    let (base, _) = fake(StatusCode::INTERNAL_SERVER_ERROR, "broken").await;
+    let fallback = external(&base, Ssr::external(&base), get(|| async { page() })).await;
+    let strict = external(
+        &base,
+        Ssr::external(&base).strict(),
+        get(|| async { page() }),
+    )
+    .await;
+    let fallback_response = fallback
+        .oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let strict_response = strict
+        .oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(fallback_response.status(), StatusCode::OK);
+    assert_eq!(strict_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!body(strict_response).await.contains("broken"));
+}

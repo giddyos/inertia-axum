@@ -270,19 +270,93 @@ impl Engine {
         page_flash.extend(flash);
         page.set_flash(page_flash);
         let page = PageDraft::new(page, route_roots).finish();
-        finalize_page_object(page, visit.is_inertia(), status, |serialized| {
-            let assets = self.app.inner.assets.tags.clone();
-            let head = HeadMarkup::empty();
-            let mount = MountMarkup::csr(serialized.data_page());
-            let html = self
+        if visit.is_inertia() {
+            return Ok(finalize_json_page(page, status));
+        }
+        self.finalize_initial_page(
+            visit,
+            page,
+            status,
+            #[cfg(feature = "ssr")]
+            _ssr_override,
+        )
+        .await
+    }
+
+    async fn finalize_initial_page(
+        &self,
+        visit: &Visit,
+        page: Page<Value>,
+        status: StatusCode,
+        #[cfg(feature = "ssr")] route: Option<crate::SsrOverride>,
+    ) -> Result<Response, crate::axum::InertiaError> {
+        let serialized = html_response_context(&page)?;
+        let assets = self.app.inner.assets.tags.clone();
+
+        #[cfg(feature = "ssr")]
+        if should_render_ssr(&self.app, visit, route) {
+            let runtime = self
                 .app
                 .inner
-                .root
-                .render(RootContext::new(&assets, &head, &mount))
-                .map_err(crate::axum::InertiaError::root)?;
-            Ok(Html(html).into_response())
-        })
+                .ssr
+                .as_ref()
+                .expect("eligible SSR runtime exists");
+            match runtime.render(serialized.data_page_bytes()).await {
+                Ok(Some(rendered)) => {
+                    let head = HeadMarkup::from_fragments(rendered.head);
+                    let mount = MountMarkup::ssr(rendered.body);
+                    return render_root(&self.app, &assets, &head, &mount, status);
+                }
+                Ok(None) => {}
+                Err(error) if matches!(runtime.failure_mode(), crate::ssr::FailureMode::Strict) => {
+                    return Err(crate::axum::InertiaError::ssr(error));
+                }
+                Err(error) => {
+                    tracing::warn!(error = %error, component = page.component(), url = page.url(), "SSR failed; falling back to CSR")
+                }
+            }
+        }
+
+        let head = HeadMarkup::empty();
+        let mount = MountMarkup::csr(serialized.data_page());
+        render_root(&self.app, &assets, &head, &mount, status)
     }
+}
+
+#[cfg(feature = "ssr")]
+fn should_render_ssr(app: &InertiaApp, visit: &Visit, route: Option<crate::SsrOverride>) -> bool {
+    let Some(runtime) = app.inner.ssr.as_ref() else {
+        return false;
+    };
+    !visit.is_inertia() && visit.method == axum::http::Method::GET && runtime.is_enabled(route)
+}
+
+fn finalize_json_page<T: Serialize>(page: T, status: StatusCode) -> Response {
+    let mut response = Json(page).into_response();
+    response
+        .headers_mut()
+        .insert(X_INERTIA_HEADER, HeaderValue::from_static("true"));
+    *response.status_mut() = status;
+    add_vary_header(&mut response);
+    response
+}
+
+fn render_root(
+    app: &InertiaApp,
+    assets: &crate::AssetTags,
+    head: &HeadMarkup,
+    mount: &MountMarkup,
+    status: StatusCode,
+) -> Result<Response, crate::axum::InertiaError> {
+    let html = app
+        .inner
+        .root
+        .render(RootContext::new(assets, head, mount))
+        .map_err(crate::axum::InertiaError::root)?;
+    let mut response = Html(html).into_response();
+    *response.status_mut() = status;
+    add_vary_header(&mut response);
+    Ok(response)
 }
 
 pub(crate) fn finalize_page_object<T, F>(

@@ -50,7 +50,10 @@ pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHan
 pub use root::{AssetTags, HeadMarkup, MountMarkup, RootContext, RootView};
 pub use share::{Share, ShareContext};
 #[cfg(feature = "ssr")]
-pub use ssr::{Ssr, SsrContext, SsrOverride, SsrRouteExt};
+pub use ssr::{
+    Ssr, SsrBackendKind, SsrContext, SsrFailure, SsrFailureKind, SsrHealth, SsrOverride,
+    SsrRouteExt, SsrStartError, StartError,
+};
 #[cfg(feature = "cookies")]
 pub use transient::CookieTransient;
 #[cfg(feature = "tower-sessions")]

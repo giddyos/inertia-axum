@@ -27,6 +27,9 @@ pub enum InertiaError {
     MissingTransientStore,
     /// Transient storage failed.
     Transient(Box<dyn Error + Send + Sync>),
+    /// Server-side rendering failed in strict mode.
+    #[cfg(feature = "ssr")]
+    Ssr(crate::ssr::SsrFailure),
 }
 
 impl InertiaError {
@@ -50,6 +53,10 @@ impl InertiaError {
     pub(crate) fn transient(error: Box<dyn Error + Send + Sync>) -> Self {
         Self::Transient(error)
     }
+    #[cfg(feature = "ssr")]
+    pub(crate) fn ssr(error: crate::ssr::SsrFailure) -> Self {
+        Self::Ssr(error)
+    }
 }
 
 impl fmt::Display for InertiaError {
@@ -69,6 +76,8 @@ impl fmt::Display for InertiaError {
                 f,
                 "failed to load or commit Inertia transient state: {error}"
             ),
+            #[cfg(feature = "ssr")]
+            Self::Ssr(error) => write!(f, "server-side rendering failed: {error}"),
         }
     }
 }
@@ -84,6 +93,8 @@ impl Error for InertiaError {
             Self::Shared(error) => Some(error.as_ref()),
             Self::MissingTransientStore => None,
             Self::Transient(error) => Some(error.as_ref()),
+            #[cfg(feature = "ssr")]
+            Self::Ssr(error) => Some(error),
         }
     }
 }

@@ -24,6 +24,8 @@ pub(crate) struct InertiaAppInner {
     pub(crate) error_handler: Option<Arc<dyn ErasedErrorHandler>>,
     pub(crate) shared: Option<SharedProvider>,
     pub(crate) transient: Option<SharedTransientStore>,
+    #[cfg(feature = "ssr")]
+    pub(crate) ssr: Option<crate::ssr::runtime::SsrRuntime>,
 }
 
 /// Builds an [`InertiaApp`].
@@ -123,6 +125,37 @@ impl Default for InertiaAppBuilder {
 }
 
 impl InertiaAppBuilder {
+    fn finish_assets(&mut self) -> Result<(), ConfigError> {
+        #[cfg(feature = "vite")]
+        if let Some(vite) = self.vite.take() {
+            self.assets = vite.build()?;
+        } else if let Some(provider) = self.asset_provider.take() {
+            self.assets = provider.build_runtime(&self.public_path)?;
+        }
+        #[cfg(not(feature = "vite"))]
+        if let Some(provider) = self.asset_provider.take() {
+            self.assets = provider.build_runtime(&self.public_path)?;
+        }
+        Ok(())
+    }
+
+    fn into_app(
+        self,
+        #[cfg(feature = "ssr")] ssr: Option<crate::ssr::runtime::SsrRuntime>,
+    ) -> InertiaApp {
+        InertiaApp {
+            inner: Arc::new(InertiaAppInner {
+                root: self.root,
+                assets: self.assets,
+                error_handler: self.error_handler,
+                shared: self.shared,
+                transient: self.transient,
+                #[cfg(feature = "ssr")]
+                ssr,
+            }),
+        }
+    }
+
     /// Configures server-side rendering.
     ///
     /// Configuring SSR enables it for all eligible routes by default.
@@ -227,25 +260,28 @@ impl InertiaAppBuilder {
             ));
         }
 
+        self.finish_assets()?;
+        Ok(self.into_app(
+            #[cfg(feature = "ssr")]
+            None,
+        ))
+    }
+
+    /// Builds assets and starts the configured SSR runtime.
+    #[cfg(feature = "ssr")]
+    pub async fn start(mut self) -> Result<InertiaApp, crate::StartError> {
+        let Some(config) = self.ssr.take() else {
+            self.finish_assets()?;
+            return Ok(self.into_app(None));
+        };
         #[cfg(feature = "vite")]
-        if let Some(vite) = self.vite {
-            self.assets = vite.build()?;
-        } else if let Some(provider) = self.asset_provider {
-            self.assets = provider.build_runtime(&self.public_path)?;
-        }
+        let vite_root = self.vite.as_ref().map(|vite| vite.root.clone());
         #[cfg(not(feature = "vite"))]
-        if let Some(provider) = self.asset_provider {
-            self.assets = provider.build_runtime(&self.public_path)?;
-        }
-        Ok(InertiaApp {
-            inner: Arc::new(InertiaAppInner {
-                root: self.root,
-                assets: self.assets,
-                error_handler: self.error_handler,
-                shared: self.shared,
-                transient: self.transient,
-            }),
-        })
+        let vite_root: Option<std::path::PathBuf> = None;
+        self.finish_assets()?;
+        let runtime =
+            crate::ssr::runtime::start_runtime(config, &self.assets, vite_root.as_deref()).await?;
+        Ok(self.into_app(Some(runtime)))
     }
 }
 
