@@ -29,6 +29,7 @@ homepage = "https://github.com/giddyos/inertia-axum"
 authors = ["inertia-axum contributors"]
 
 [workspace.dependencies]
+askama = { version = "0.16", default-features = false, features = ["config", "derive", "std"] }
 axum = { version = "0.8.9", default-features = false }
 bytes = "1"
 cargo_metadata = "0.20"

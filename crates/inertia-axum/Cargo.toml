@@ -16,6 +16,7 @@ readme = "../../README.md"
 workspace = true
 
 [dependencies]
+askama = { workspace = true, optional = true }
 axum = { workspace = true, features = ["json", "original-uri"] }
 bytes.workspace = true
 fluent-uri = "0.4.1"
@@ -41,6 +42,7 @@ tower = { workspace = true, features = ["limit", "load-shed", "timeout", "util"]
 
 [features]
 default = ["macros", "vite"]
+askama = ["dep:askama"]
 macros = ["dep:inertia-axum-macros"]
 vite = ["dep:sha2", "dep:tower-http"]
 cookies = ["dep:base64", "dep:cookie"]
