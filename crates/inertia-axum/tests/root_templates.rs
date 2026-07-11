@@ -6,6 +6,11 @@ use axum::{
     http::Request,
     routing::get,
 };
+#[cfg(feature = "askama")]
+use inertia_axum::{
+    AskamaRoot, AskamaRootContext,
+    askama::{self, Template},
+};
 use inertia_axum::{DynamicPage, InertiaApp, RootContext, RootView, RouterInertiaExt as _};
 use std::{convert::Infallible, fs};
 use tower::ServiceExt as _;
@@ -112,6 +117,34 @@ impl RootView for Custom {
     }
 }
 
+#[cfg(feature = "askama")]
+#[derive(Template)]
+#[template(
+    source = "<html><head>{{ inertia.assets|safe }}{{ inertia.head|safe }}</head><body data-shell=\"{{ shell }}\">{{ inertia.mount|safe }}</body></html>",
+    ext = "html",
+    askama = askama
+)]
+struct AskamaTemplate<'a> {
+    inertia: AskamaRootContext<'a>,
+    shell: &'a str,
+}
+
+#[cfg(feature = "askama")]
+#[derive(Clone)]
+struct AskamaShell(&'static str);
+
+#[cfg(feature = "askama")]
+impl AskamaRoot for AskamaShell {
+    type Template<'a> = AskamaTemplate<'a>;
+
+    fn template<'a>(&'a self, inertia: AskamaRootContext<'a>) -> Self::Template<'a> {
+        AskamaTemplate {
+            inertia,
+            shell: self.0,
+        }
+    }
+}
+
 #[tokio::test]
 async fn root_selection_is_last_call_wins() {
     let path =
@@ -130,6 +163,39 @@ async fn root_selection_is_last_call_wins() {
     fs::remove_file(path).unwrap();
     assert!(
         response_body(router(template), false)
+            .await
+            .contains("data-shell=\"template\"")
+    );
+}
+
+#[cfg(feature = "askama")]
+#[tokio::test]
+async fn askama_root_selection_is_last_call_wins() {
+    let askama = InertiaApp::builder(Custom)
+        .root_template_source(TEMPLATE)
+        .askama_root(AskamaShell("askama"))
+        .build()
+        .unwrap();
+    assert!(
+        response_body(router(askama), false)
+            .await
+            .contains("data-shell=\"askama\"")
+    );
+
+    let custom = InertiaApp::default_root()
+        .askama_root(AskamaShell("askama"))
+        .root(Custom)
+        .build()
+        .unwrap();
+    assert_eq!(response_body(router(custom), false).await, "CUSTOM");
+
+    let marker = InertiaApp::default_root()
+        .askama_root(AskamaShell("askama"))
+        .root_template_source(TEMPLATE)
+        .build()
+        .unwrap();
+    assert!(
+        response_body(router(marker), false)
             .await
             .contains("data-shell=\"template\"")
     );

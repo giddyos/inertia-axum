@@ -213,6 +213,23 @@ impl InertiaAppBuilder {
         self
     }
 
+    /// Uses an Askama template as the application root document.
+    ///
+    /// The template is compiled as part of the application crate. Only
+    /// rendering occurs while handling an initial HTML request.
+    ///
+    /// This method and the other root configuration methods use
+    /// last-call-wins semantics.
+    #[cfg(feature = "askama")]
+    pub fn askama_root<R>(mut self, root: R) -> Self
+    where
+        R: crate::AskamaRoot,
+    {
+        self.root = Arc::new(crate::root::AskamaRootView::new(root));
+        self.root_template = None;
+        self
+    }
+
     /// Loads and compiles a root HTML template during application startup.
     ///
     /// The template must contain exactly one `<!-- inertia:assets -->`,

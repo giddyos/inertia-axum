@@ -6,6 +6,9 @@ pub use crate::{
     lazy, merge, once, optional, page, scroll,
 };
 
+#[cfg(feature = "askama")]
+pub use crate::{AskamaRoot, AskamaRootContext};
+
 #[cfg(feature = "ssr")]
 pub use crate::{Ssr, SsrContext, SsrOverride, SsrRouteExt};
 

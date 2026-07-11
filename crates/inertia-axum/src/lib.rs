@@ -30,6 +30,8 @@ pub mod transient;
 mod typed;
 mod visit;
 
+#[cfg(feature = "askama")]
+pub use ::askama;
 pub use app::{ErrorHandler, InertiaApp, InertiaAppBuilder, RouterInertiaExt};
 #[cfg(feature = "vite")]
 pub use assets::StaticAssetService;
@@ -47,6 +49,8 @@ pub use props::{
 pub use redirect::{Location, Redirect};
 pub use request::RequestContext;
 pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
+#[cfg(feature = "askama")]
+pub use root::{AskamaRoot, AskamaRootContext};
 pub use root::{AssetTags, HeadMarkup, MountMarkup, RootContext, RootView};
 pub use share::{Share, ShareContext};
 #[cfg(feature = "ssr")]
@@ -75,6 +79,8 @@ pub use inertia_axum_macros::{InertiaForm, InertiaPage, InertiaProps};
 
 /// Advanced protocol-aware application APIs.
 pub mod advanced {
+    #[cfg(feature = "askama")]
+    pub use crate::{AskamaRoot, AskamaRootContext};
     pub use crate::{
         AssetContext, AssetProvider, AssetTags, AssetVersion, ErrorHandler, MountMarkup,
         RequestContext as InertiaRequestContext, RootContext, RootView, ShareContext,
