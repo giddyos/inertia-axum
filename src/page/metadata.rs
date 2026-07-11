@@ -23,19 +23,34 @@ fn push_unique_string(values: &mut Vec<String>, value: String) {
 /// Additional Inertia v3 page-object metadata.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PageMetadata {
-    pub(crate) encrypt_history: bool,
-    pub(crate) clear_history: bool,
-    pub(crate) preserve_fragment: bool,
-    pub(crate) always_props: Vec<String>,
-    pub(crate) merge_props: Vec<String>,
-    pub(crate) prepend_props: Vec<String>,
-    pub(crate) deep_merge_props: Vec<String>,
-    pub(crate) match_props_on: Vec<String>,
-    pub(crate) scroll_props: BTreeMap<String, ScrollProps>,
-    pub(crate) deferred_props: BTreeMap<String, Vec<String>>,
-    pub(crate) rescued_props: Vec<String>,
-    pub(crate) shared_props: Vec<String>,
-    pub(crate) once_props: BTreeMap<String, OnceProp>,
+    encrypt_history: bool,
+    clear_history: bool,
+    preserve_fragment: bool,
+    always_props: Vec<String>,
+    merge_props: Vec<String>,
+    prepend_props: Vec<String>,
+    deep_merge_props: Vec<String>,
+    match_props_on: Vec<String>,
+    scroll_props: BTreeMap<String, ScrollProps>,
+    deferred_props: BTreeMap<String, Vec<String>>,
+    rescued_props: Vec<String>,
+    shared_props: Vec<String>,
+    once_props: BTreeMap<String, OnceProp>,
+}
+
+pub(crate) struct PageMetadataParts {
+    pub encrypt_history: bool,
+    pub clear_history: bool,
+    pub preserve_fragment: bool,
+    pub merge_props: Vec<String>,
+    pub prepend_props: Vec<String>,
+    pub deep_merge_props: Vec<String>,
+    pub match_props_on: Vec<String>,
+    pub scroll_props: BTreeMap<String, ScrollProps>,
+    pub deferred_props: BTreeMap<String, Vec<String>>,
+    pub rescued_props: Vec<String>,
+    pub shared_props: Vec<String>,
+    pub once_props: BTreeMap<String, OnceProp>,
 }
 
 impl PageMetadata {
@@ -47,6 +62,22 @@ impl PageMetadata {
     }
     pub(crate) fn add_once(&mut self, key: String, once: OnceProp) {
         self.once_props.insert(key, once);
+    }
+    pub(crate) fn into_parts(self) -> PageMetadataParts {
+        PageMetadataParts {
+            encrypt_history: self.encrypt_history,
+            clear_history: self.clear_history,
+            preserve_fragment: self.preserve_fragment,
+            merge_props: self.merge_props,
+            prepend_props: self.prepend_props,
+            deep_merge_props: self.deep_merge_props,
+            match_props_on: self.match_props_on,
+            scroll_props: self.scroll_props,
+            deferred_props: self.deferred_props,
+            rescued_props: self.rescued_props,
+            shared_props: self.shared_props,
+            once_props: self.once_props,
+        }
     }
     /// Creates empty page metadata.
     pub fn new() -> Self {

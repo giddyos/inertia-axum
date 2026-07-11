@@ -1,6 +1,6 @@
 //! Inertia page models, metadata, and construction.
 
-pub mod builder;
+mod builder;
 mod draft;
 mod metadata;
 mod model;

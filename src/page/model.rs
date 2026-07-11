@@ -76,23 +76,24 @@ impl<T> Page<T> {
         version: Option<Arc<str>>,
         metadata: PageMetadata,
     ) -> Self {
+        let parts = metadata.into_parts();
         Self {
             component: component.into(),
             props,
             url: url.into(),
             version,
-            encrypt_history: metadata.encrypt_history,
-            clear_history: metadata.clear_history,
-            preserve_fragment: metadata.preserve_fragment,
-            merge_props: metadata.merge_props,
-            prepend_props: metadata.prepend_props,
-            deep_merge_props: metadata.deep_merge_props,
-            match_props_on: metadata.match_props_on,
-            scroll_props: metadata.scroll_props,
-            deferred_props: metadata.deferred_props,
-            rescued_props: metadata.rescued_props,
-            shared_props: metadata.shared_props,
-            once_props: metadata.once_props,
+            encrypt_history: parts.encrypt_history,
+            clear_history: parts.clear_history,
+            preserve_fragment: parts.preserve_fragment,
+            merge_props: parts.merge_props,
+            prepend_props: parts.prepend_props,
+            deep_merge_props: parts.deep_merge_props,
+            match_props_on: parts.match_props_on,
+            scroll_props: parts.scroll_props,
+            deferred_props: parts.deferred_props,
+            rescued_props: parts.rescued_props,
+            shared_props: parts.shared_props,
+            once_props: parts.once_props,
         }
     }
 

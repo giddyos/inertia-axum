@@ -42,5 +42,5 @@ changing production algorithms.
 | partial_data/32 | 1.7361 µs | 1.7268–1.7509 µs |
 | partial_data/128 | 5.8503 µs | 5.7567–5.9190 µs |
 
-The remaining benchmark targets are intentionally compilation-only placeholders
-in this baseline slice; their production scenarios are added in later slices.
+The baseline reports above are retained for comparison with the final modular
+implementation; no benchmark target is a placeholder.
