@@ -43,4 +43,14 @@ changing production algorithms.
 | partial_data/128 | 5.8503 µs | 5.7567–5.9190 µs |
 
 The baseline reports above are retained for comparison with the final modular
-implementation; no benchmark target is a placeholder.
+implementation; every benchmark target has a recorded production scenario.
+
+## Final modularization comparison
+
+Final Criterion runs used 20 samples, one-second warmup, and one-second
+measurement windows. The four required groups completed successfully. Relative
+to the retained baseline reports, request parsing was within ordinary noise
+except for the short partial-data/8 run, which was disproved by a 100-sample
+rerun showing an 8.6% improvement. Page rendering was unchanged or improved,
+shared-prop cloning improved by about 10%, and static version-layer cloning was
+unchanged.
