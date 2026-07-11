@@ -178,10 +178,7 @@ const server = http.createServer((req,res) => {{
 async fn official_vite_plugin_bundle_starts_and_renders() {
     let bundle = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/axum-svelte/svelte-app/dist/ssr/app.js");
-    if !bundle.is_file() {
-        // The dedicated live-SSR job builds this bundle before running the test.
-        return;
-    }
+    assert!(bundle.is_file());
     let inertia = InertiaApp::default_root()
         .ssr(Ssr::node(&bundle))
         .start()
