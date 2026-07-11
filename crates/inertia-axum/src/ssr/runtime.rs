@@ -6,11 +6,12 @@ use crate::assets::AssetRuntime;
 
 #[derive(Clone)]
 pub(crate) struct SsrRuntime {
-    client: SsrClient,
-    default: SsrDefault,
-    failure_mode: FailureMode,
-    backend: SsrBackendKind,
-    health: tokio::sync::watch::Receiver<SsrHealth>,
+    pub(crate) client: SsrClient,
+    pub(crate) default: SsrDefault,
+    pub(crate) failure_mode: FailureMode,
+    pub(crate) backend: SsrBackendKind,
+    pub(crate) health: tokio::sync::watch::Receiver<SsrHealth>,
+    pub(crate) lifecycle: Option<tokio::sync::watch::Sender<()>>,
 }
 
 impl SsrRuntime {
@@ -22,6 +23,7 @@ impl SsrRuntime {
             failure_mode: config.failure_mode,
             backend,
             health,
+            lifecycle: None,
         }
     }
 
@@ -76,12 +78,7 @@ pub(crate) async fn start_runtime(
                     bundle.as_deref().expect("checked bundle is configured"),
                     vite_root,
                 );
-                std::fs::metadata(&resolved).map_err(|source| {
-                    SsrStartError::BundleUnavailable {
-                        path: resolved,
-                        source,
-                    }
-                })?;
+                super::verify_bundle(&resolved)?;
             }
             let client = SsrClient::new(
                 SsrEndpoints::node(&endpoint)?,
@@ -89,25 +86,20 @@ pub(crate) async fn start_runtime(
                 config.max_concurrency,
                 config.max_response_bytes,
             )?;
-            check_health_until_ready(&client, config.startup_timeout).await?;
+            super::check_health_until_ready(&client, config.startup_timeout).await?;
             Ok(SsrRuntime::ready(client, config, SsrBackendKind::External))
         }
-        ProductionBackend::ManagedNode { .. } => Err(SsrStartError::ManagedNodeNotImplemented),
-    }
-}
-
-async fn check_health_until_ready(
-    client: &SsrClient,
-    timeout: std::time::Duration,
-) -> Result<(), SsrStartError> {
-    tokio::time::timeout(timeout, async {
-        loop {
-            if client.health().await.is_ok() {
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        ProductionBackend::ManagedNode {
+            bundle,
+            runtime,
+            endpoint,
+        } => {
+            let bundle = Ssr::resolve_bundle(&bundle, vite_root);
+            let working_directory = vite_root
+                .map(std::path::Path::to_owned)
+                .or_else(|| bundle.parent().map(std::path::Path::to_owned))
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            super::start_managed_node(config, bundle, runtime, endpoint, working_directory).await
         }
-    })
-    .await
-    .map_err(|_| SsrStartError::HealthTimeout { timeout })
+    }
 }

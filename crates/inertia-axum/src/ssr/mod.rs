@@ -4,6 +4,7 @@ mod client;
 mod config;
 mod error;
 mod health;
+mod node;
 mod policy;
 pub(crate) mod runtime;
 
@@ -13,6 +14,7 @@ pub(crate) use config::{FailureMode, ProductionBackend, SsrDefault};
 pub use error::SsrFailure;
 pub use error::{SsrStartError, StartError};
 pub use health::{SsrBackendKind, SsrFailureKind, SsrHealth};
+pub(crate) use node::{check_health_until_ready, start_managed_node, verify_bundle};
 pub use policy::{SsrContext, SsrOverride, SsrRouteExt};
 
 use serde::Deserialize;

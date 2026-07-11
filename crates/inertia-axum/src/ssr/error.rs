@@ -18,19 +18,33 @@ pub enum SsrStartError {
     InvalidConcurrency,
     /// Response limits must be greater than zero.
     InvalidResponseLimit,
-    /// Managed Node startup is implemented in Phase 6.
-    ManagedNodeNotImplemented,
     /// A configured external bundle could not be validated.
     BundleUnavailable {
         /// Resolved bundle path.
-        path: std::path::PathBuf,
+        bundle: std::path::PathBuf,
         /// Filesystem validation failure.
         source: std::io::Error,
     },
     /// The backend did not become healthy before startup timed out.
-    HealthTimeout {
-        /// Configured startup timeout.
-        timeout: std::time::Duration,
+    HealthTimeout { source: Option<SsrFailure> },
+    /// Node version output was malformed.
+    InvalidNodeVersion(String),
+    /// The Node executable could not be invoked.
+    NodeUnavailable {
+        runtime: std::path::PathBuf,
+        source: std::io::Error,
+    },
+    /// `node --version` returned a failure status.
+    NodeVersionCommandFailed(std::process::ExitStatus),
+    /// The installed Node major version is too old.
+    UnsupportedNode { found: String, required: u64 },
+    /// The configured bundle path is not a file.
+    BundleIsNotFile(std::path::PathBuf),
+    /// The Node child process could not be spawned.
+    NodeSpawn {
+        runtime: std::path::PathBuf,
+        bundle: std::path::PathBuf,
+        source: std::io::Error,
     },
 }
 
@@ -53,22 +67,42 @@ impl fmt::Display for SsrStartError {
             Self::InvalidResponseLimit => {
                 formatter.write_str("SSR maximum response size must be greater than zero")
             }
-            Self::ManagedNodeNotImplemented => {
-                formatter.write_str("managed Node SSR startup is not implemented")
-            }
-            Self::BundleUnavailable { path, source } => {
+            Self::BundleUnavailable { bundle, source } => {
                 write!(
                     formatter,
                     "SSR bundle {} is unavailable: {source}",
-                    path.display()
+                    bundle.display()
                 )
             }
-            Self::HealthTimeout { timeout } => {
-                write!(
-                    formatter,
-                    "SSR backend did not become healthy within {timeout:?}"
-                )
+            Self::HealthTimeout { .. } => {
+                formatter.write_str("SSR backend did not become healthy before the startup timeout")
             }
+            Self::InvalidNodeVersion(value) => write!(formatter, "invalid Node version: {value}"),
+            Self::NodeUnavailable { runtime, source } => write!(
+                formatter,
+                "Node executable {} is unavailable: {source}",
+                runtime.display()
+            ),
+            Self::NodeVersionCommandFailed(status) => {
+                write!(formatter, "Node version command failed with {status}")
+            }
+            Self::UnsupportedNode { found, required } => write!(
+                formatter,
+                "Node {found} is unsupported; Node {required} or newer is required"
+            ),
+            Self::BundleIsNotFile(bundle) => {
+                write!(formatter, "SSR bundle {} is not a file", bundle.display())
+            }
+            Self::NodeSpawn {
+                runtime,
+                bundle,
+                source,
+            } => write!(
+                formatter,
+                "could not spawn {} with bundle {}: {source}",
+                runtime.display(),
+                bundle.display()
+            ),
         }
     }
 }
@@ -78,6 +112,7 @@ impl std::error::Error for SsrStartError {
         match self {
             Self::InvalidEndpoint { source, .. } => Some(source),
             Self::BundleUnavailable { source, .. } => Some(source),
+            Self::NodeUnavailable { source, .. } | Self::NodeSpawn { source, .. } => Some(source),
             _ => None,
         }
     }
