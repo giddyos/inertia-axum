@@ -1,3 +1,4 @@
 /target
+/specs
 Cargo.lock
 **/*.snap.new
