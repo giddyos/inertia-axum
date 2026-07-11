@@ -62,7 +62,7 @@ fn extract_module_script_path(html: &str) -> &str {
 #[ignore = "requires a pnpm production build and Node 22 or newer"]
 async fn production_example_uses_manifest_ssr_bundle_and_static_assets() {
     require_node_22().await;
-    let frontend = axum_svelte::frontend_root();
+    let frontend = axum_vue::frontend_root();
     let manifest = frontend.join("../public/build/.vite/manifest.json");
     let bundle = frontend.join("dist/ssr/app.js");
     assert!(
@@ -76,8 +76,8 @@ async fn production_example_uses_manifest_ssr_bundle_and_static_assets() {
         bundle.display()
     );
 
-    let inertia = axum_svelte::build_inertia().await.unwrap();
-    let app = axum_svelte::router(axum_svelte::seeded_state(), inertia);
+    let inertia = axum_vue::build_inertia().await.unwrap();
+    let app = axum_vue::router(axum_vue::seeded_state(), inertia);
     let response = app
         .clone()
         .oneshot(Request::get("/todos").body(Body::empty()).unwrap())

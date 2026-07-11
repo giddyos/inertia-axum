@@ -1,8 +1,8 @@
 /target
 /specs
 **/*.snap.new
-examples/axum-svelte/svelte-app/node_modules/
-examples/axum-svelte/svelte-app/dist/
-examples/axum-svelte/svelte-app/playwright-report/
-examples/axum-svelte/svelte-app/test-results/
-examples/axum-svelte/public/build/
+examples/axum-*/**/node_modules/
+examples/axum-*/**/dist/
+examples/axum-*/**/playwright-report/
+examples/axum-*/**/test-results/
+examples/axum-*/public/build/

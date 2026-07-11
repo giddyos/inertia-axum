@@ -34,3 +34,4 @@ test('production SSR hydrates and remains interactive', async ({ page }) => {
   expect(pageErrors).toEqual([])
   expect(consoleErrors).toEqual([])
 })
+

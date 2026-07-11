@@ -187,7 +187,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-react"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "inertia-axum",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "axum-svelte"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "inertia-axum",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+]
+
+[[package]]
+name = "axum-vue"
 version = "0.1.0"
 dependencies = [
  "axum",

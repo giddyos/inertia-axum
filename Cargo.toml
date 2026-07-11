@@ -7,6 +7,8 @@ members = [
     "crates/cargo-inertia",
     "examples/axum-minimal",
     "examples/axum-svelte",
+    "examples/axum-react",
+    "examples/axum-vue",
     "examples/todo",
     "examples/incident-board",
     "examples/observatory",
