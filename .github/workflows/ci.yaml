@@ -127,12 +127,23 @@ jobs:
       - run: cargo check --locked --workspace --all-targets
 
   frontend-build:
-    name: Frontend build
+    name: Frontend build (${{ matrix.crate }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: axum-svelte
+            frontend: svelte-app
+          - crate: axum-react
+            frontend: react-app
+          - crate: axum-vue
+            frontend: vue-app
 
     defaults:
       run:
-        working-directory: examples/axum-svelte/svelte-app
+        working-directory: examples/${{ matrix.crate }}/${{ matrix.frontend }}
 
     steps:
       - uses: actions/checkout@v6
@@ -147,7 +158,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: examples/axum-svelte/svelte-app/pnpm-lock.yaml
+          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
@@ -196,8 +207,19 @@ jobs:
           --test-threads=1
 
   production-example:
-    name: Production example SSR
+    name: Production example SSR (${{ matrix.crate }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: axum-svelte
+            frontend: svelte-app
+          - crate: axum-react
+            frontend: react-app
+          - crate: axum-vue
+            frontend: vue-app
 
     steps:
       - uses: actions/checkout@v6
@@ -212,7 +234,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: examples/axum-svelte/svelte-app/pnpm-lock.yaml
+          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -224,15 +246,26 @@ jobs:
           save-if: false
 
       - name: Clean-build and test production example
-        run: ./scripts/test-live-ssr.sh --example-only
+        run: ./scripts/test-live-ssr.sh --example-only ${{ matrix.crate }}
 
   browser-smoke:
-    name: Browser hydration smoke
+    name: Browser hydration smoke (${{ matrix.crate }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: axum-svelte
+            frontend: svelte-app
+          - crate: axum-react
+            frontend: react-app
+          - crate: axum-vue
+            frontend: vue-app
 
     defaults:
       run:
-        working-directory: examples/axum-svelte/svelte-app
+        working-directory: examples/${{ matrix.crate }}/${{ matrix.frontend }}
 
     steps:
       - uses: actions/checkout@v6
@@ -247,7 +280,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: examples/axum-svelte/svelte-app/pnpm-lock.yaml
+          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@stable
 

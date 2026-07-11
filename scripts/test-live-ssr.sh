@@ -2,11 +2,23 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-frontend="$root/examples/axum-svelte/svelte-app"
-scope="${1:-all}"
+examples=(axum-svelte axum-react axum-vue)
 
-if [[ "$scope" != "all" && "$scope" != "--example-only" ]]; then
-  echo "usage: $0 [--example-only]" >&2
+if (( $# == 0 )); then
+  selected=("${examples[@]}")
+  run_lifecycle=true
+elif (( $# == 2 )) && [[ "$1" == "--example-only" ]]; then
+  case "$2" in
+    axum-svelte|axum-react|axum-vue) selected=("$2") ;;
+    *)
+      echo "unknown example: $2" >&2
+      echo "usage: $0 [--example-only axum-svelte|axum-react|axum-vue]" >&2
+      exit 2
+      ;;
+  esac
+  run_lifecycle=false
+else
+  echo "usage: $0 [--example-only axum-svelte|axum-react|axum-vue]" >&2
   exit 2
 fi
 
@@ -21,17 +33,7 @@ command -v pnpm >/dev/null || {
   exit 1
 }
 
-rm -rf \
-  "$root/examples/axum-svelte/public/build" \
-  "$frontend/dist"
-
-pnpm --dir "$frontend" install --frozen-lockfile --prefer-offline
-pnpm --dir "$frontend" build
-
-test -f "$root/examples/axum-svelte/public/build/.vite/manifest.json"
-test -f "$frontend/dist/ssr/app.js"
-
-if [[ "$scope" == "all" ]]; then
+if [[ "$run_lifecycle" == "true" ]]; then
   cargo test \
     --locked \
     -p inertia-axum \
@@ -42,10 +44,29 @@ if [[ "$scope" == "all" ]]; then
     --test-threads=1
 fi
 
-cargo test \
-  --locked \
-  -p axum-svelte \
-  --test production_ssr \
-  -- \
-  --ignored \
-  --test-threads=1
+for example in "${selected[@]}"; do
+  case "$example" in
+    axum-svelte) app=svelte-app ;;
+    axum-react) app=react-app ;;
+    axum-vue) app=vue-app ;;
+  esac
+  frontend="$root/examples/$example/$app"
+
+  rm -rf \
+    "$root/examples/$example/public/build" \
+    "$frontend/dist"
+
+  pnpm --dir "$frontend" install --frozen-lockfile --prefer-offline
+  pnpm --dir "$frontend" build
+
+  test -f "$root/examples/$example/public/build/.vite/manifest.json"
+  test -f "$frontend/dist/ssr/app.js"
+
+  cargo test \
+    --locked \
+    -p "$example" \
+    --test production_ssr \
+    -- \
+    --ignored \
+    --test-threads=1
+done
