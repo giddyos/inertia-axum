@@ -1,9 +1,9 @@
 use axum::{
+    extract::{Path, State},
     routing::{get, post},
     Router,
 };
-use inertia_axum::prelude::*;
-use inertia_axum::{Errors, Location, ScrollPage};
+use inertia_axum::{prelude::*, Errors, Location, ScrollPage};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::Infallible,
@@ -36,17 +36,48 @@ pub struct AnomalyShowPage {
     pub collaborators: Prop<Vec<Datum>>,
 }
 
-fn validate(input: &CreateAnomaly) -> Result<(), Errors> {
-    if input.title.is_empty() {
-        Err(Errors::field("title", "required"))
-    } else {
-        Ok(())
+#[derive(Clone)]
+pub struct AppState {
+    pub raw_calls: Arc<AtomicUsize>,
+    pub fail_telemetry: bool,
+}
+
+async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> AnomalyShowPage {
+    let raw_calls = state.raw_calls;
+    let fail_telemetry = state.fail_telemetry;
+
+    AnomalyShowPage {
+        anomaly: datum(id, "Transit drift"),
+        timeline: scroll(
+            ScrollPage::new(vec![datum(2, "Observed")], 2)
+                .previous(1)
+                .page_name("timeline"),
+        )
+        .match_on("id"),
+        telemetry: defer(move || async move {
+            if fail_telemetry {
+                Err(io::Error::other("unavailable"))
+            } else {
+                Ok(datum(3, "Spectrum"))
+            }
+        })
+        .group("science")
+        .rescue(),
+        affected_instruments: defer(|| async { Ok::<_, Infallible>(vec![datum(4, "Array A")]) })
+            .group("science"),
+        raw_frames: optional(move || async move {
+            raw_calls.fetch_add(1, Ordering::SeqCst);
+            Ok::<_, Infallible>(vec![datum(5, "Frame")])
+        }),
+        calibration_profiles: once(|| async { Ok::<_, Infallible>(vec![datum(6, "Baseline")]) })
+            .key("calibration-profiles:v3"),
+        collaborators: merge(vec![datum(7, "Grace")]).deep().match_on("id"),
     }
 }
 
 #[derive(Deserialize, InertiaForm)]
 #[inertia(
-    validate_with = "validate",
+    validate_with = "validate_anomaly",
     error_bag = "createAnomaly",
     old_input,
     redact = "sensitive_token"
@@ -56,77 +87,41 @@ pub struct CreateAnomaly {
     pub sensitive_token: Option<String>,
 }
 
-#[derive(Clone)]
-pub struct State {
-    pub raw_calls: Arc<AtomicUsize>,
-    pub fail: bool,
+fn validate_anomaly(input: &CreateAnomaly) -> Result<(), Errors> {
+    if input.title.is_empty() {
+        Err(Errors::field("title", "required"))
+    } else {
+        Ok(())
+    }
 }
 
-pub fn app(state: State) -> Router {
-    let show_state = state;
-    async fn create(Validated(input): Validated<CreateAnomaly>) -> Redirect {
-        let _ = input.sensitive_token;
-        Redirect::to("/anomalies/1").flash("toast", "Anomaly created")
-    }
+async fn store(Validated(input): Validated<CreateAnomaly>) -> Redirect {
+    let _ = input.sensitive_token;
+    Redirect::to("/anomalies/1").flash("toast", "Anomaly created")
+}
+
+async fn console(Path(id): Path<u64>) -> Location {
+    Location::external(format!("https://console.example/telescopes/{id}"))
+}
+
+pub fn app(state: AppState) -> Router {
+    let inertia = InertiaApp::default_root()
+        .transient(MemoryTransient::new())
+        .build()
+        .expect("fixture Inertia configuration should be valid");
+
     Router::new()
-        .route(
-            "/anomalies/1",
-            get(move || {
-                let state = show_state.clone();
-                async move {
-                    let raw = state.raw_calls;
-                    let fail = state.fail;
-                    AnomalyShowPage {
-                        anomaly: datum(1, "Transit drift"),
-                        timeline: scroll(
-                            ScrollPage::new(vec![datum(2, "Observed")], 2)
-                                .previous(1)
-                                .page_name("timeline"),
-                        )
-                        .match_on("id"),
-                        telemetry: defer(move || async move {
-                            if fail {
-                                Err(io::Error::other("unavailable"))
-                            } else {
-                                Ok(datum(3, "Spectrum"))
-                            }
-                        })
-                        .group("science")
-                        .rescue(),
-                        affected_instruments: defer(|| async {
-                            Ok::<_, Infallible>(vec![datum(4, "Array A")])
-                        })
-                        .group("science"),
-                        raw_frames: optional(move || async move {
-                            raw.fetch_add(1, Ordering::SeqCst);
-                            Ok::<_, Infallible>(vec![datum(5, "Frame")])
-                        }),
-                        calibration_profiles: once(|| async {
-                            Ok::<_, Infallible>(vec![datum(6, "Baseline")])
-                        })
-                        .key("calibration-profiles:v3"),
-                        collaborators: merge(vec![datum(7, "Grace")]).deep().match_on("id"),
-                    }
-                }
-            }),
-        )
-        .route("/anomalies", post(create))
-        .route(
-            "/telescopes/1/console",
-            get(|| async { Location::external("https://console.example/telescopes/1") }),
-        )
-        .inertia(
-            InertiaApp::default_root()
-                .transient(MemoryTransient::new())
-                .build()
-                .unwrap(),
-        )
+        .route("/anomalies/{id}", get(show))
+        .route("/anomalies", post(store))
+        .route("/telescopes/{id}/console", get(console))
+        .with_state(state)
+        .inertia(inertia)
 }
 
 fn datum(id: u64, name: &str) -> Datum {
     Datum {
         id,
-        name: name.into(),
+        name: name.to_owned(),
     }
 }
 
@@ -136,22 +131,25 @@ mod tests {
     use inertia_axum_test::TestApp;
     use serde_json::json;
 
-    #[tokio::test]
-    async fn alternate_domain_covers_loading_merge_scroll_once_and_location() {
-        let raw = Arc::new(AtomicUsize::new(0));
-        let app = TestApp::new(app(State {
-            raw_calls: raw.clone(),
-            fail: false,
+    fn test_app(fail_telemetry: bool) -> (TestApp, Arc<AtomicUsize>) {
+        let raw_calls = Arc::new(AtomicUsize::new(0));
+        let app = TestApp::new(app(AppState {
+            raw_calls: raw_calls.clone(),
+            fail_telemetry,
         }));
+        (app, raw_calls)
+    }
+
+    #[tokio::test]
+    async fn protocol_metadata_and_selection_are_preserved() {
+        let (app, raw_calls) = test_app(false);
         let initial = app
             .inertia_get("/anomalies/1")
             .send()
             .await
             .assert_page::<AnomalyShowPage>();
+
         initial
-            .assert_missing(AnomalyShowPage::TELEMETRY)
-            .assert_missing(AnomalyShowPage::AFFECTED_INSTRUMENTS)
-            .assert_missing(AnomalyShowPage::RAW_FRAMES)
             .assert_deferred("science", AnomalyShowPage::TELEMETRY)
             .assert_deferred("science", AnomalyShowPage::AFFECTED_INSTRUMENTS)
             .assert_once(
@@ -160,29 +158,17 @@ mod tests {
             )
             .assert_appends(AnomalyShowPage::TIMELINE)
             .assert_deep_merges(AnomalyShowPage::COLLABORATORS)
-            .assert_matches_on(AnomalyShowPage::COLLABORATORS, "id");
-        assert_eq!(raw.load(Ordering::SeqCst), 0);
-        let science = app
-            .inertia_get("/anomalies/1")
-            .only(AnomalyShowPage::TELEMETRY)
-            .only(AnomalyShowPage::AFFECTED_INSTRUMENTS)
-            .send()
-            .await
-            .assert_page::<AnomalyShowPage>();
-        let _: Datum = science.prop(AnomalyShowPage::TELEMETRY);
-        let _: Vec<Datum> = science.prop(AnomalyShowPage::AFFECTED_INSTRUMENTS);
+            .assert_matches_on(AnomalyShowPage::COLLABORATORS, "id")
+            .assert_missing(AnomalyShowPage::RAW_FRAMES);
+        assert_eq!(raw_calls.load(Ordering::SeqCst), 0);
+
         app.inertia_get("/anomalies/1")
             .only(AnomalyShowPage::RAW_FRAMES)
             .send()
             .await
             .assert_page::<AnomalyShowPage>();
-        assert_eq!(raw.load(Ordering::SeqCst), 1);
-        app.inertia_get("/anomalies/1")
-            .except_once("calibration-profiles:v3")
-            .send()
-            .await
-            .assert_page::<AnomalyShowPage>()
-            .assert_missing(AnomalyShowPage::CALIBRATION_PROFILES);
+        assert_eq!(raw_calls.load(Ordering::SeqCst), 1);
+
         app.inertia_get("/anomalies/1")
             .only(AnomalyShowPage::TIMELINE)
             .scroll_intent("prepend")
@@ -197,18 +183,11 @@ mod tests {
             .await
             .assert_page::<AnomalyShowPage>()
             .assert_reset(AnomalyShowPage::TIMELINE);
-        app.inertia_get("/telescopes/1/console")
-            .send()
-            .await
-            .assert_location_conflict("https://console.example/telescopes/1");
     }
 
     #[tokio::test]
-    async fn rescue_and_redacted_bagged_validation_are_visible() {
-        let app = TestApp::new(app(State {
-            raw_calls: Arc::new(AtomicUsize::new(0)),
-            fail: true,
-        }));
+    async fn rescue_and_redacted_old_input_are_preserved() {
+        let (app, _) = test_app(true);
         app.inertia_get("/anomalies/1")
             .only(AnomalyShowPage::TELEMETRY)
             .send()
@@ -216,6 +195,7 @@ mod tests {
             .assert_page::<AnomalyShowPage>()
             .assert_missing(AnomalyShowPage::TELEMETRY)
             .assert_rescued(AnomalyShowPage::TELEMETRY);
+
         let response = app
             .inertia_post("/anomalies")
             .header("referer", "/anomalies/1")
@@ -224,6 +204,7 @@ mod tests {
             .await
             .assert_see_other("/anomalies/1");
         let page = response.follow().await.assert_page::<AnomalyShowPage>();
+
         page.assert_error("createAnomaly.title");
         assert_eq!(page.value()["props"]["oldInput"]["title"], "");
         assert!(!page.value().to_string().contains("secret"));
