@@ -31,47 +31,51 @@ inertia-axum = { git = "https://github.com/giddyos/inertia-axum" }
 axum = "0.8.9"
 ```
 
+## Minimal Todo application
+
+With a conventional Vite project in `frontend`, the complete server setup is:
+
+```rust,no_run
+use axum::{routing::get, Router};
+use inertia_axum::prelude::*;
+
+async fn index() -> DynamicPage {
+    let todos = [
+        "Design the public API",
+        "Build the response finalizer",
+        "Add integration tests",
+    ];
+
+    page!("Todos/Index", { todos })
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let app = Router::new()
+        .route("/todos", get(index))
+        .inertia(InertiaApp::vite("frontend").build()?);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+```
+
+The default Vite conventions are `src/main.ts`, `dist/.vite/manifest.json`, and
+the `/build` public path. `VITE_DEV_SERVER_URL` switches startup to development
+tags without requiring a manifest. Entry, build directory, public path, root
+view, and development URL can all be overridden on the builder.
+
 ## Examples
 
-- [`examples/axum-minimal`](examples/axum-minimal): minimal HTML and JSON
-  Inertia responses.
-- [`examples/axum-svelte`](examples/axum-svelte): Axum + Svelte 5 + Vite with
-  shared props, deferred props, optional props, partial reloads, and
-  manifest-derived asset versioning.
+- [`examples/axum-minimal`](examples/axum-minimal): the Todo setup above.
+- [`examples/axum-svelte`](examples/axum-svelte): Axum + Svelte 5 + Vite using
+  the same convention-based application setup.
 
-## Usage
+## Compatibility API
 
-`InertiaRequest` extracts the request context, current URI, request method, and
-optional asset version. Add `VersionLayer` for asset-version checks and render
-through `InertiaRequest::render`.
-
-```rust
-use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
-use axum::{Extension, Router};
-use inertia_axum::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use inertia_axum::Inertia;
-
-#[derive(serde::Serialize)]
-struct Hello {
-    name: String,
-}
-
-async fn hello(request: InertiaRequest) -> Result<Response, InertiaError> {
-    request.render(
-        Inertia::response("Hello", Hello { name: "world".into() }),
-        |context| Html(format!(
-            r#"<script data-page="app" type="application/json">{}</script>"#,
-            context.data_page()
-        )).into_response(),
-    )
-}
-
-let app = Router::new()
-    .route("/hello", get(hello))
-    .layer(Extension(SharedProps::new().value("appName", "Demo")))
-    .layer(VersionLayer::new("asset-version-1"));
-```
+The `InertiaRequest`, `VersionLayer`, and `SharedProps` APIs remain available
+through `inertia_axum::compat` during the 1.0 alpha migration.
 
 Use `VersionLayer::dynamic` for a request-time asset version provider. Keep the
 provider fast and read a cached value rather than doing blocking I/O there.

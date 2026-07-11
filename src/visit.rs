@@ -16,7 +16,6 @@ pub struct Visit {
     pub(crate) context: RequestContext,
     pub(crate) method: Method,
     pub(crate) uri: Box<str>,
-    pub(crate) version: Option<Box<str>>,
     pub(crate) referer: Option<Box<str>>,
 }
 
@@ -81,7 +80,6 @@ where
                 .get::<OriginalUri>()
                 .map(|original| local_uri(&original.0))
                 .unwrap_or_else(|| local_uri(&parts.uri)),
-            version: None,
             referer: parts
                 .headers
                 .get(axum::http::header::REFERER)

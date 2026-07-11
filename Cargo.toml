@@ -35,6 +35,8 @@ serde_json.workspace = true
 tower-layer = "0.3"
 tower-service = "0.3"
 tracing = "0.1"
+sha2 = "0.10"
+tower-http = { version = "0.6", features = ["fs"] }
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }
@@ -61,4 +63,8 @@ harness = false
 
 [[bench]]
 name = "pending_page_finalize"
+harness = false
+
+[[bench]]
+name = "vite_initial_html"
 harness = false

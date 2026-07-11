@@ -7,6 +7,10 @@ use std::{convert::Infallible, fmt, sync::Arc};
 pub struct AssetTags(String);
 
 impl AssetTags {
+    /// Wraps trusted, pre-rendered asset markup from an [`AssetProvider`](crate::AssetProvider).
+    pub fn new(markup: String) -> Self {
+        Self(markup)
+    }
     pub(crate) fn empty() -> Self {
         Self(String::new())
     }

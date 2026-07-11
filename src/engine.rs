@@ -7,7 +7,7 @@ use crate::{
     },
     html::html_response_context,
     response::{PendingPage, PendingResponse},
-    root::{AssetTags, MountMarkup, RootContext},
+    root::{MountMarkup, RootContext},
     visit::Visit,
     X_INERTIA_HEADER,
 };
@@ -60,15 +60,15 @@ impl Engine {
         visit: &Visit,
         pending: PendingPage,
     ) -> Result<Response, crate::axum::InertiaError> {
-        let draft = pending.inertia.into_page_draft(
+        let draft = pending.inertia.into_page_draft_version(
             &visit.uri,
-            visit.version.as_deref().map(std::sync::Arc::from),
+            self.app.inner.assets.version.clone(),
             &visit.context,
             visit.method == axum::http::Method::GET,
         )?;
         let page = draft.finish();
         finalize_page_object(page, visit.is_inertia(), pending.status, |serialized| {
-            let assets = AssetTags::empty();
+            let assets = self.app.inner.assets.tags.clone();
             let mount = MountMarkup::new(serialized.data_page());
             let html = self
                 .app

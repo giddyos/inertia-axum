@@ -40,3 +40,11 @@ Phase 1 adds `pending_page_finalize`. Its first saved
 response and 3.40 us for an initial HTML response. Both exercise the router,
 concrete middleware future, request-local pending handle, existing page draft,
 serialization, and final response construction.
+
+## Phase 2 Vite checkpoint
+
+`vite_initial_html` builds the Vite provider once before measurement, then
+benchmarks the complete initial-page router path. The saved `phase2-vite`
+baseline measured 2.98 us. Manifest I/O, parsing, graph traversal, and stable
+version hashing are intentionally absent from the request-time measurement
+because production setup performs them once during `InertiaApp::build()`.

@@ -1,53 +1,22 @@
-use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
-use axum::Extension;
-use axum::Router;
-use inertia_axum::axum::{InertiaError, InertiaRequest, SharedProps, VersionLayer};
-use inertia_axum::{Inertia, InertiaProps};
+use axum::{routing::get, Router};
+use inertia_axum::prelude::*;
 
-async fn hello(request: InertiaRequest) -> Result<Response, InertiaError> {
-    request.render(
-        Inertia::response(
-            "Hello",
-            InertiaProps::new()
-                .value("name", "world")
-                .defer("stats", || 1)
-                .optional("debug", || "partial"),
-        ),
-        |context| {
-            Html(format!(
-                r#"<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Axum Inertia Example</title>
-  </head>
-  <body>
-    <script data-page="app" type="application/json">{}</script>
-    <main id="app">Open this route with an Inertia request to receive JSON.</main>
-  </body>
-</html>"#,
-                context.data_page()
-            ))
-            .into_response()
-        },
-    )
+async fn index() -> DynamicPage {
+    let todos = [
+        "Design the public API",
+        "Build the response finalizer",
+        "Add integration tests",
+    ];
+    page!("Todos/Index", { todos })
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
+    let frontend = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend");
     let app = Router::new()
-        .route("/hello", get(hello))
-        .layer(Extension(SharedProps::new().value("appName", "Axum Demo")))
-        .layer(VersionLayer::new("asset-version-1"));
-    let addr = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:3001".to_owned());
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .expect("failed to bind Axum example listener");
-
-    println!("listening on http://{addr}/hello");
-
-    axum::serve(listener, app)
-        .await
-        .expect("Axum example server failed");
+        .route("/todos", get(index))
+        .inertia(InertiaApp::vite(frontend).build()?);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3001").await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }

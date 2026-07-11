@@ -4,11 +4,14 @@
 //! format and are intentionally preserved here.
 
 use super::metadata::{OnceProp, PageMetadata, ScrollProps};
-use crate::shared::{ensure_errors_prop, insert_shared_prop_path, prop_root};
+use crate::{
+    shared::{ensure_errors_prop, insert_shared_prop_path, prop_root},
+    AssetVersion,
+};
 use serde::Serialize;
 use serde_json::{Map, Value};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 fn is_false(value: &bool) -> bool {
     !value
@@ -25,7 +28,7 @@ pub struct Page<T> {
     pub(crate) props: T,
     pub(crate) url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) version: Option<Arc<str>>,
+    pub(crate) version: Option<AssetVersion>,
     #[serde(skip_serializing_if = "is_false")]
     pub(crate) encrypt_history: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -66,14 +69,20 @@ impl<T> Page<T> {
         version: Option<String>,
         metadata: PageMetadata,
     ) -> Self {
-        Self::from_parts_arc(component, props, url, version.map(Arc::from), metadata)
+        Self::from_parts_version(
+            component,
+            props,
+            url,
+            version.map(AssetVersion::from),
+            metadata,
+        )
     }
 
-    pub(crate) fn from_parts_arc<C: Into<String>, U: Into<String>>(
+    pub(crate) fn from_parts_version<C: Into<String>, U: Into<String>>(
         component: C,
         props: T,
         url: U,
-        version: Option<Arc<str>>,
+        version: Option<AssetVersion>,
         metadata: PageMetadata,
     ) -> Self {
         let parts = metadata.into_parts();
@@ -98,8 +107,8 @@ impl<T> Page<T> {
     }
 
     /// Sets the page object's asset version.
-    pub fn version<V: Into<String>>(mut self, version: V) -> Self {
-        self.version = Some(Arc::from(version.into()));
+    pub fn version<V: Into<AssetVersion>>(mut self, version: V) -> Self {
+        self.version = Some(version.into());
         self
     }
 
@@ -119,8 +128,8 @@ impl<T> Page<T> {
     }
 
     /// Returns the asset version, if present.
-    pub fn asset_version(&self) -> Option<&str> {
-        self.version.as_deref()
+    pub fn asset_version(&self) -> Option<Cow<'_, str>> {
+        self.version.as_ref().map(AssetVersion::header_value)
     }
 }
 

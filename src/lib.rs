@@ -10,6 +10,7 @@ pub mod axum;
 pub mod prelude;
 
 mod app;
+pub mod assets;
 mod engine;
 mod headers;
 mod html;
@@ -24,6 +25,9 @@ mod shared;
 mod visit;
 
 pub use app::{InertiaApp, InertiaAppBuilder, RouterInertiaExt};
+pub use assets::{
+    AssetContext, AssetError, AssetProvider, AssetVersion, ConfigError, StaticAssetService,
+};
 pub use headers::*;
 pub use html::HtmlResponseContext;
 pub use layer::{InertiaLayer, InertiaService};

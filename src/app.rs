@@ -1,6 +1,7 @@
 //! Immutable application configuration and Axum router installation.
 
 use crate::{
+    assets::{AssetProvider, AssetRuntime, ConfigError, ErasedAssetProvider, ViteConfig},
     layer::InertiaLayer,
     root::{DefaultRoot, RootView, SharedRootView},
 };
@@ -15,13 +16,16 @@ pub struct InertiaApp {
 
 pub(crate) struct InertiaAppInner {
     pub(crate) root: SharedRootView,
-    pub(crate) version: Option<Arc<str>>,
+    pub(crate) assets: AssetRuntime,
 }
 
 /// Builds an [`InertiaApp`].
 pub struct InertiaAppBuilder {
     root: SharedRootView,
-    version: Option<Arc<str>>,
+    assets: AssetRuntime,
+    vite: Option<ViteConfig>,
+    asset_provider: Option<Arc<dyn ErasedAssetProvider>>,
+    public_path: String,
 }
 
 impl InertiaApp {
@@ -29,7 +33,10 @@ impl InertiaApp {
     pub fn builder(root: impl RootView) -> InertiaAppBuilder {
         InertiaAppBuilder {
             root: Arc::new(root),
-            version: None,
+            assets: AssetRuntime::default(),
+            vite: None,
+            asset_provider: None,
+            public_path: "/build".to_owned(),
         }
     }
 
@@ -37,7 +44,27 @@ impl InertiaApp {
     pub fn default_root() -> InertiaAppBuilder {
         InertiaAppBuilder {
             root: Arc::new(DefaultRoot),
-            version: None,
+            assets: AssetRuntime::default(),
+            vite: None,
+            asset_provider: None,
+            public_path: "/build".to_owned(),
+        }
+    }
+
+    /// Starts a convention-based Vite setup rooted at `root`.
+    pub fn vite(root: impl Into<std::path::PathBuf>) -> InertiaAppBuilder {
+        InertiaAppBuilder {
+            root: Arc::new(DefaultRoot),
+            assets: AssetRuntime::default(),
+            vite: Some(ViteConfig {
+                root: root.into(),
+                entry: "src/main.ts".into(),
+                build_dir: "dist".into(),
+                public_path: "/build".to_owned(),
+                dev_server: None,
+            }),
+            asset_provider: None,
+            public_path: "/build".to_owned(),
         }
     }
 }
@@ -57,16 +84,64 @@ impl InertiaAppBuilder {
 
     /// Sets the string asset version used for pre-handler version checks.
     pub fn version(mut self, version: impl Into<Arc<str>>) -> Self {
-        self.version = Some(version.into());
+        let version = version.into();
+        self.assets.version = Some(version.clone().into());
+        self.assets.header_version = Some(version);
+        self
+    }
+
+    /// Overrides the Vite entry path relative to its root.
+    pub fn entry(mut self, entry: impl Into<std::path::PathBuf>) -> Self {
+        if let Some(vite) = &mut self.vite {
+            vite.entry = entry.into();
+        }
+        self
+    }
+
+    /// Overrides the Vite build directory relative to its root.
+    pub fn build_dir(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        if let Some(vite) = &mut self.vite {
+            vite.build_dir = path.into();
+        }
+        self
+    }
+
+    /// Overrides the URL prefix used to serve production assets.
+    pub fn public_path(mut self, path: impl Into<String>) -> Self {
+        let path = path.into();
+        self.public_path.clone_from(&path);
+        if let Some(vite) = &mut self.vite {
+            vite.public_path = path;
+        }
+        self
+    }
+
+    /// Uses an application-defined asset provider instead of Vite.
+    pub fn assets<P: AssetProvider>(mut self, provider: P) -> Self {
+        self.vite = None;
+        self.asset_provider = Some(Arc::new(provider));
+        self
+    }
+
+    /// Overrides the Vite development server URL.
+    pub fn dev_server(mut self, url: impl Into<String>) -> Self {
+        if let Some(vite) = &mut self.vite {
+            vite.dev_server = Some(url.into());
+        }
         self
     }
 
     /// Builds the immutable application object.
-    pub fn build(self) -> Result<InertiaApp, std::convert::Infallible> {
+    pub fn build(mut self) -> Result<InertiaApp, ConfigError> {
+        if let Some(vite) = self.vite {
+            self.assets = vite.build()?;
+        } else if let Some(provider) = self.asset_provider {
+            self.assets = provider.build_runtime(&self.public_path)?;
+        }
         Ok(InertiaApp {
             inner: Arc::new(InertiaAppInner {
                 root: self.root,
-                version: self.version,
+                assets: self.assets,
             }),
         })
     }
@@ -83,6 +158,12 @@ where
     S: Clone + Send + Sync + 'static,
 {
     fn inertia(self, app: InertiaApp) -> Self {
-        self.layer(InertiaLayer::new(app))
+        let static_mount = app.inner.assets.static_mount.clone();
+        let router = if let Some((path, service)) = static_mount {
+            self.nest_service(&path, service)
+        } else {
+            self
+        };
+        router.layer(InertiaLayer::new(app))
     }
 }

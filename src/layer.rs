@@ -1,5 +1,6 @@
 //! Thin Tower layer for request setup and pending-response finalization.
 
+use crate::axum::InertiaVersion;
 use crate::{
     app::InertiaApp,
     axum::{
@@ -120,7 +121,7 @@ where
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
         let context = request_context(request.headers());
-        let configured_version = self.app.inner.version.clone();
+        let configured_version = self.app.inner.assets.header_version.clone();
         if request.method() == Method::GET && context.is_inertia() {
             if let Some(version) = configured_version.as_deref() {
                 if header(request.headers(), X_INERTIA_VERSION) != Some(version) {
@@ -141,7 +142,6 @@ where
             context,
             method: request.method().clone(),
             uri,
-            version: configured_version.map(|version| version.as_ref().into()),
             referer: request
                 .headers()
                 .get(REFERER)
@@ -149,6 +149,11 @@ where
                 .map(Into::into),
         };
         request.extensions_mut().insert(visit.clone());
+        if let Some(version) = configured_version {
+            request
+                .extensions_mut()
+                .insert(InertiaVersion::new(version));
+        }
         InertiaFuture::Inner {
             future: self.inner.call(request),
             visit: Some(visit),

@@ -374,6 +374,21 @@ impl<T: IntoPageProps> Inertia<T> {
         request: &RequestContext,
         partial_reload_enabled: bool,
     ) -> Result<PageDraft, serde_json::Error> {
+        self.into_page_draft_version(
+            default_url,
+            version.map(crate::AssetVersion::from),
+            request,
+            partial_reload_enabled,
+        )
+    }
+
+    pub(crate) fn into_page_draft_version(
+        self,
+        default_url: &str,
+        version: Option<crate::AssetVersion>,
+        request: &RequestContext,
+        partial_reload_enabled: bool,
+    ) -> Result<PageDraft, serde_json::Error> {
         let component = self.component;
         let url = self.url.unwrap_or_else(|| default_url.to_owned());
         let (props, metadata, route_props) = self.props.into_page_props(
@@ -383,7 +398,7 @@ impl<T: IntoPageProps> Inertia<T> {
             self.metadata,
         )?;
         let mut draft = PageDraft::new(
-            Page::from_parts_arc(component, props, url, version, metadata),
+            Page::from_parts_version(component, props, url, version, metadata),
             route_props,
         );
         for (key, value) in self.local_shared {
