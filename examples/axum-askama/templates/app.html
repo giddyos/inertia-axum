@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="{{ locale }}">
+  <head>
+    <meta charset="utf-8">
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+
+    {# Apply the saved or system appearance before the page is painted. #}
+    <script>
+      (() => {
+        const appearance =
+          localStorage.getItem("appearance") ?? "system";
+
+        const prefersDark =
+          window
+            .matchMedia("(prefers-color-scheme: dark)")
+            .matches;
+
+        const dark =
+          appearance === "dark" ||
+          (appearance === "system" && prefersDark);
+
+        document.documentElement.classList.toggle(
+          "dark",
+          dark,
+        );
+      })();
+    </script>
+
+    {# Keep the initial canvas consistent while application CSS loads. #}
+    <style>
+      html {
+        background-color: #ffffff;
+      }
+
+      html.dark {
+        background-color: #171717;
+      }
+    </style>
+
+    <link
+      rel="icon"
+      href="/favicon.ico"
+      sizes="any"
+    >
+
+    <link
+      rel="apple-touch-icon"
+      href="/apple-touch-icon.png"
+    >
+
+    {# SSR head output should replace the fallback document title. #}
+    {% if !inertia.has_ssr_head %}
+      <title>{{ app_name }}</title>
+    {% endif %}
+
+    <meta
+      name="description"
+      content="{{ description }}"
+    >
+
+    <meta
+      property="og:type"
+      content="website"
+    >
+
+    <meta
+      property="og:title"
+      content="{{ app_name }}"
+    >
+
+    <meta
+      property="og:description"
+      content="{{ description }}"
+    >
+
+    <meta
+      property="og:image"
+      content="{{ social_image_url }}"
+    >
+
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    >
+
+    <meta
+      name="twitter:title"
+      content="{{ app_name }}"
+    >
+
+    <meta
+      name="twitter:description"
+      content="{{ description }}"
+    >
+
+    <meta
+      name="twitter:image"
+      content="{{ social_image_url }}"
+    >
+
+    {{ inertia.assets|safe }}
+    {{ inertia.head|safe }}
+  </head>
+
+  <body class="font-sans antialiased">
+    {{ inertia.mount|safe }}
+  </body>
+</html>
