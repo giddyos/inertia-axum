@@ -157,10 +157,18 @@ impl<'a> RootContext<'a> {
 
 /// Renders the application-wide initial HTML document.
 ///
-/// Implementations control their own rendering strategy and performance. For a
-/// startup-compiled template using `<!-- inertia:assets -->`,
-/// `<!-- inertia:head -->`, and `<!-- inertia:mount -->`, use
+/// For the built-in root, use
+/// [`InertiaApp::default_root`](crate::InertiaApp::default_root) or
+/// `InertiaApp::vite(...)`.
+///
+/// For a startup-compiled marker template, use
 /// [`InertiaAppBuilder::root_template`](crate::InertiaAppBuilder::root_template).
+///
+/// With the `askama` feature enabled, typed Askama templates can be configured
+/// with `InertiaAppBuilder::askama_root(...)`.
+///
+/// Custom implementations control their own rendering strategy and
+/// performance.
 pub trait RootView: Clone + Send + Sync + 'static {
     /// Rendering failure.
     type Error: std::error::Error + Send + Sync + 'static;

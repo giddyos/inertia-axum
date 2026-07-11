@@ -215,11 +215,20 @@ impl InertiaAppBuilder {
 
     /// Uses an Askama template as the application root document.
     ///
-    /// The template is compiled as part of the application crate. Only
-    /// rendering occurs while handling an initial HTML request.
+    /// This method is available with the `askama` feature. The template is
+    /// compiled as part of the application crate; only rendering occurs while
+    /// handling an initial HTML request. Later Inertia JSON requests bypass
+    /// the root renderer.
+    ///
+    /// CSR and SSR use this same root. On successful SSR, the template receives
+    /// the backend's head and mount markup through
+    /// [`AskamaRootContext`](crate::AskamaRootContext).
     ///
     /// This method and the other root configuration methods use
     /// last-call-wins semantics.
+    ///
+    /// Template rendering errors follow the existing root-view error path and
+    /// are reported as `failed to render Inertia root view: ...`.
     #[cfg(feature = "askama")]
     pub fn askama_root<R>(mut self, root: R) -> Self
     where
