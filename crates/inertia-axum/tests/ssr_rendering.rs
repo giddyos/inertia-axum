@@ -11,6 +11,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use std::time::Duration;
 use tower::ServiceExt as _;
 
 async fn fake(render_status: StatusCode, render_body: &'static str) -> (String, Arc<AtomicUsize>) {
@@ -279,4 +280,126 @@ async fn failure_modes_fallback_or_return_internal_error() {
     assert_eq!(fallback_response.status(), StatusCode::OK);
     assert_eq!(strict_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert!(!body(strict_response).await.contains("broken"));
+}
+
+#[tokio::test]
+async fn timeout_and_malformed_or_large_response_fall_back_to_csr() {
+    async fn run(body_value: &'static str, timeout: Duration, limit: usize) -> StatusCode {
+        let app = Router::new()
+            .route("/health", get(|| async { StatusCode::OK }))
+            .route(
+                "/render",
+                post(move || async move {
+                    if body_value == "slow" {
+                        tokio::time::sleep(Duration::from_millis(75)).await;
+                    }
+                    if body_value == "slow" {
+                        "null"
+                    } else {
+                        body_value
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let base = format!("http://{address}");
+        let inertia = InertiaApp::default_root()
+            .ssr(
+                Ssr::external(&base)
+                    .timeout(timeout)
+                    .max_response_bytes(limit),
+            )
+            .start()
+            .await
+            .unwrap();
+        Router::new()
+            .route("/", get(|| async { page() }))
+            .inertia(inertia)
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+    assert_eq!(
+        run("slow", Duration::from_millis(5), 1024).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        run("not-json", Duration::from_secs(1), 1024).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        run("xxxxxxxxxxxxxxxxxxxxxxxx", Duration::from_secs(1), 8).await,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn strict_timeout_returns_error() {
+    let app = Router::new()
+        .route("/health", get(|| async { StatusCode::OK }))
+        .route(
+            "/render",
+            post(|| async {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                "null"
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let base = format!("http://{address}");
+    let app = external(
+        &base,
+        Ssr::external(&base)
+            .timeout(Duration::from_millis(5))
+            .strict(),
+        get(|| async { page() }),
+    )
+    .await;
+    assert_eq!(
+        app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
+}
+
+#[tokio::test]
+async fn successful_render_restores_ready_health_and_accessor_is_local() {
+    use inertia_axum::{SsrBackendKind, SsrHealth};
+    let (base, _) = fake(
+        StatusCode::OK,
+        r#"{"head":[],"body":"<div id=\"app\">SSR</div>"}"#,
+    )
+    .await;
+    let inertia = InertiaApp::default_root()
+        .ssr(Ssr::external(&base))
+        .start()
+        .await
+        .unwrap();
+    assert_eq!(
+        inertia.ssr_health(),
+        SsrHealth::Ready {
+            backend: SsrBackendKind::External
+        }
+    );
+    let app = Router::new()
+        .route("/", get(|| async { page() }))
+        .inertia(inertia.clone());
+    app.oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        inertia.ssr_health(),
+        SsrHealth::Ready {
+            backend: SsrBackendKind::External
+        }
+    );
 }

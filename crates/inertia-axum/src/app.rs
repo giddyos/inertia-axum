@@ -60,6 +60,15 @@ impl<T: ErrorHandler> ErasedErrorHandler for T {
 }
 
 impl InertiaApp {
+    /// Returns the latest locally recorded SSR health without network I/O.
+    #[cfg(feature = "ssr")]
+    pub fn ssr_health(&self) -> crate::SsrHealth {
+        self.inner
+            .ssr
+            .as_ref()
+            .map(crate::ssr::runtime::SsrRuntime::health)
+            .unwrap_or(crate::SsrHealth::Disabled)
+    }
     /// Starts an application setup with a custom root renderer.
     pub fn builder(root: impl RootView) -> InertiaAppBuilder {
         InertiaAppBuilder {

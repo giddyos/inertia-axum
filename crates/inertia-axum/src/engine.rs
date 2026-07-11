@@ -24,6 +24,8 @@ use axum::{
 use futures_util::{StreamExt, stream};
 use serde::Serialize;
 use serde_json::{Map, Value};
+#[cfg(feature = "ssr")]
+use tracing::Instrument as _;
 
 #[derive(Clone)]
 pub(crate) struct Engine {
@@ -301,18 +303,46 @@ impl Engine {
                 .ssr
                 .as_ref()
                 .expect("eligible SSR runtime exists");
-            match runtime.render(serialized.data_page_bytes()).await {
+            let page_bytes = serialized.data_page_bytes();
+            let started = std::time::Instant::now();
+            let span = tracing::info_span!("inertia.ssr.render",
+                component = page.component(), url = page.url(), backend = ?runtime.backend(),
+                outcome = tracing::field::Empty, request_bytes = page_bytes.len(),
+                response_bytes = tracing::field::Empty, duration_ms = tracing::field::Empty);
+            match runtime.render(page_bytes).instrument(span.clone()).await {
                 Ok(Some(rendered)) => {
+                    runtime.record_success();
+                    span.record("outcome", "rendered");
+                    span.record("response_bytes", rendered.body.len());
+                    span.record("duration_ms", started.elapsed().as_millis() as u64);
                     let head = HeadMarkup::from_fragments(rendered.head);
                     let mount = MountMarkup::ssr(rendered.body);
                     return render_root(&self.app, &assets, &head, &mount, status);
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    span.record("outcome", "vite_warmup");
+                    span.record("duration_ms", started.elapsed().as_millis() as u64);
+                }
                 Err(error) if matches!(runtime.failure_mode(), crate::ssr::FailureMode::Strict) => {
+                    runtime.record_failure(error.kind());
+                    span.record("outcome", "strict_error");
+                    span.record("duration_ms", started.elapsed().as_millis() as u64);
                     return Err(crate::axum::InertiaError::ssr(error));
                 }
                 Err(error) => {
-                    tracing::warn!(error = %error, component = page.component(), url = page.url(), "SSR failed; falling back to CSR")
+                    runtime.record_failure(error.kind());
+                    let outcome = match error.kind() {
+                        crate::SsrFailureKind::Unavailable => "fallback_unavailable",
+                        crate::SsrFailureKind::Overloaded => "fallback_overloaded",
+                        crate::SsrFailureKind::Timeout => "fallback_timeout",
+                        crate::SsrFailureKind::Transport => "fallback_transport",
+                        crate::SsrFailureKind::InvalidResponse
+                        | crate::SsrFailureKind::ResponseTooLarge => "fallback_invalid_response",
+                        _ => "fallback_render",
+                    };
+                    span.record("outcome", outcome);
+                    span.record("duration_ms", started.elapsed().as_millis() as u64);
+                    tracing::warn!(error = %error, kind = ?error.kind(), "SSR failed; falling back to CSR")
                 }
             }
         }

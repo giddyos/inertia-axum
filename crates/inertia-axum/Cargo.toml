@@ -36,7 +36,7 @@ tower-sessions = { version = "0.14", optional = true }
 http-body-util = { workspace = true, optional = true }
 hyper = { workspace = true, features = ["client", "http1"], optional = true }
 hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"], optional = true }
-tokio = { workspace = true, features = ["io-util", "process", "rt", "sync", "time"], optional = true }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"], optional = true }
 tower = { workspace = true, features = ["limit", "load-shed", "timeout", "util"], optional = true }
 
 [features]

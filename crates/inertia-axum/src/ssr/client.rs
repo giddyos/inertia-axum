@@ -250,7 +250,7 @@ mod tests {
             .render(Bytes::new())
             .await
             .unwrap_err();
-        assert!(matches!(error, SsrFailure::ResponseBody(_)));
+        assert!(matches!(error, SsrFailure::ResponseTooLarge));
     }
 
     #[tokio::test]
@@ -267,7 +267,7 @@ mod tests {
             .render(Bytes::new())
             .await
             .unwrap_err();
-        assert!(matches!(error, SsrFailure::Service(_)));
+        assert!(matches!(error, SsrFailure::Timeout));
     }
 
     #[tokio::test]
@@ -298,7 +298,7 @@ mod tests {
         });
         entered.notified().await;
         let second = client.render(Bytes::new()).await;
-        assert!(matches!(second, Err(SsrFailure::Service(_))));
+        assert!(matches!(second, Err(SsrFailure::Overloaded)));
         release.notify_one();
         assert!(first.await.unwrap().unwrap().is_none());
     }

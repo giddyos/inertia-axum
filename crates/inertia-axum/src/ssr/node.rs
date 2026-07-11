@@ -155,6 +155,75 @@ async fn stop_child(child: &mut Child, client: &SsrClient) {
     }
 }
 
+#[derive(Clone)]
+struct NodeLaunchConfig {
+    runtime: PathBuf,
+    bundle: PathBuf,
+    working_directory: PathBuf,
+    startup_timeout: std::time::Duration,
+}
+
+async fn relaunch(launch: &NodeLaunchConfig) -> Result<Child, SsrStartError> {
+    let mut child = spawn_node(&launch.runtime, &launch.bundle, &launch.working_directory).await?;
+    let pid = child.id();
+    forward_output(
+        pid,
+        child.stdout.take().expect("piped stdout exists"),
+        child.stderr.take().expect("piped stderr exists"),
+    );
+    Ok(child)
+}
+
+async fn supervise(
+    mut child: Child,
+    client: SsrClient,
+    launch: NodeLaunchConfig,
+    health: tokio::sync::watch::Sender<SsrHealth>,
+    mut lifecycle: tokio::sync::watch::Receiver<()>,
+) {
+    const RESTART_DELAYS: &[std::time::Duration] = &[
+        std::time::Duration::from_millis(100),
+        std::time::Duration::from_millis(250),
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(1),
+        std::time::Duration::from_secs(2),
+        std::time::Duration::from_secs(5),
+    ];
+    let mut restart_attempt = 0usize;
+    loop {
+        tokio::select! {
+            shutdown = lifecycle.changed() => {
+                if shutdown.is_err() { stop_child(&mut child, &client).await; break; }
+            }
+            result = child.wait() => {
+                tracing::error!(result = ?result, "Inertia SSR Node process exited");
+                let _ = health.send(SsrHealth::Unavailable { backend: SsrBackendKind::ManagedNode });
+                loop {
+                    let delay = RESTART_DELAYS[restart_attempt.min(RESTART_DELAYS.len() - 1)];
+                    restart_attempt = restart_attempt.saturating_add(1);
+                    tokio::select! {
+                        shutdown = lifecycle.changed() => { if shutdown.is_err() { return; } }
+                        () = tokio::time::sleep(delay) => {}
+                    }
+                    let _ = health.send(SsrHealth::Starting { backend: SsrBackendKind::ManagedNode });
+                    match relaunch(&launch).await {
+                        Ok(new_child) => {
+                            child = new_child;
+                            if check_health_until_ready(&client, launch.startup_timeout).await.is_ok() {
+                                restart_attempt = 0;
+                                let _ = health.send(SsrHealth::Ready { backend: SsrBackendKind::ManagedNode });
+                                break;
+                            }
+                            let _ = child.start_kill(); let _ = child.wait().await;
+                        }
+                        Err(error) => tracing::error!(error = %error, "failed to restart SSR process"),
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(crate) async fn start_managed_node(
     config: Ssr,
     bundle: PathBuf,
@@ -183,21 +252,29 @@ pub(crate) async fn start_managed_node(
         let _ = child.wait().await;
         return Err(error);
     }
-    let (_, health) = tokio::sync::watch::channel(SsrHealth::Ready {
+    let (health_tx, health) = tokio::sync::watch::channel(SsrHealth::Ready {
         backend: SsrBackendKind::ManagedNode,
     });
-    let (lifecycle, mut lifecycle_rx) = tokio::sync::watch::channel(());
-    let supervisor_client = client.clone();
-    tokio::spawn(async move {
-        let _ = lifecycle_rx.changed().await;
-        stop_child(&mut child, &supervisor_client).await;
-    });
+    let (lifecycle, lifecycle_rx) = tokio::sync::watch::channel(());
+    tokio::spawn(supervise(
+        child,
+        client.clone(),
+        NodeLaunchConfig {
+            runtime,
+            bundle,
+            working_directory,
+            startup_timeout: config.startup_timeout,
+        },
+        health_tx.clone(),
+        lifecycle_rx,
+    ));
     Ok(SsrRuntime {
         client,
         default: config.default,
         failure_mode: config.failure_mode,
         backend: SsrBackendKind::ManagedNode,
         health,
+        health_tx,
         lifecycle: Some(lifecycle),
     })
 }

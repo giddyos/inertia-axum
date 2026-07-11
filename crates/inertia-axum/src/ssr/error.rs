@@ -154,62 +154,86 @@ impl From<SsrStartError> for StartError {
     }
 }
 
+/// A classified SSR render/runtime failure.
 #[derive(Debug)]
 pub enum SsrFailure {
-    Request(String),
-    Service(String),
+    Unavailable,
+    Overloaded,
+    Timeout,
     Transport(String),
-    ResponseBody(String),
-    Render { status: StatusCode, body: Bytes },
-    InvalidResponse(serde_json::Error),
-    Health(StatusCode),
-    Shutdown(StatusCode),
+    InvalidResponse(String),
+    Render { status: StatusCode, body: String },
+    ResponseTooLarge,
+    ProcessExited,
 }
 
 impl SsrFailure {
     pub(crate) fn request(error: axum::http::Error) -> Self {
-        Self::Request(error.to_string())
+        Self::Transport(error.to_string())
     }
     pub(crate) fn service(error: tower::BoxError) -> Self {
-        Self::Service(error.to_string())
+        if error.is::<tower::load_shed::error::Overloaded>() {
+            Self::Overloaded
+        } else if error.is::<tower::timeout::error::Elapsed>() {
+            Self::Timeout
+        } else {
+            Self::Transport(error.to_string())
+        }
     }
     pub(crate) fn transport(error: hyper_util::client::legacy::Error) -> Self {
         Self::Transport(error.to_string())
     }
-    pub(crate) fn response_body(error: impl fmt::Display) -> Self {
-        Self::ResponseBody(error.to_string())
+    pub(crate) fn response_body(_error: impl fmt::Display) -> Self {
+        Self::ResponseTooLarge
     }
     pub(crate) fn render_response(status: StatusCode, body: Bytes) -> Self {
-        Self::Render { status, body }
+        Self::Render {
+            status,
+            body: String::from_utf8_lossy(&body).into_owned(),
+        }
     }
     pub(crate) fn invalid_response(error: serde_json::Error) -> Self {
-        Self::InvalidResponse(error)
+        Self::InvalidResponse(error.to_string())
     }
     pub(crate) fn health(status: StatusCode) -> Self {
-        Self::Health(status)
+        Self::Transport(format!("SSR health endpoint returned {status}"))
     }
     pub(crate) fn shutdown(status: StatusCode) -> Self {
-        Self::Shutdown(status)
+        Self::Transport(format!("SSR shutdown endpoint returned {status}"))
+    }
+    pub(crate) fn unavailable() -> Self {
+        Self::Unavailable
+    }
+    /// Returns the stable failure classification.
+    pub fn kind(&self) -> crate::SsrFailureKind {
+        match self {
+            Self::Unavailable => crate::SsrFailureKind::Unavailable,
+            Self::Overloaded => crate::SsrFailureKind::Overloaded,
+            Self::Timeout => crate::SsrFailureKind::Timeout,
+            Self::Transport(_) => crate::SsrFailureKind::Transport,
+            Self::InvalidResponse(_) => crate::SsrFailureKind::InvalidResponse,
+            Self::Render { .. } => crate::SsrFailureKind::Render,
+            Self::ResponseTooLarge => crate::SsrFailureKind::ResponseTooLarge,
+            Self::ProcessExited => crate::SsrFailureKind::ProcessExited,
+        }
     }
 }
 
 impl fmt::Display for SsrFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Request(message) => write!(formatter, "failed to build SSR request: {message}"),
-            Self::Service(message) => write!(formatter, "SSR render service failed: {message}"),
+            Self::Unavailable => formatter.write_str("SSR backend is unavailable"),
+            Self::Overloaded => formatter.write_str("SSR backend is overloaded"),
+            Self::Timeout => formatter.write_str("SSR render timed out"),
             Self::Transport(message) => write!(formatter, "SSR transport failed: {message}"),
-            Self::ResponseBody(message) => {
-                write!(formatter, "failed to read SSR response: {message}")
+            Self::Render { status, body } => {
+                write!(formatter, "SSR server returned {status}: {body}")
             }
-            Self::Render { status, body } => write!(
-                formatter,
-                "SSR server returned {status}: {}",
-                String::from_utf8_lossy(body)
-            ),
             Self::InvalidResponse(error) => write!(formatter, "invalid SSR response: {error}"),
-            Self::Health(status) => write!(formatter, "SSR health endpoint returned {status}"),
-            Self::Shutdown(status) => write!(formatter, "SSR shutdown endpoint returned {status}"),
+            Self::ResponseTooLarge => {
+                formatter.write_str("SSR response exceeded the configured limit")
+            }
+            Self::ProcessExited => formatter.write_str("SSR process exited"),
         }
     }
 }

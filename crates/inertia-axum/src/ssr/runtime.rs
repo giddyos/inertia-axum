@@ -11,18 +11,20 @@ pub(crate) struct SsrRuntime {
     pub(crate) failure_mode: FailureMode,
     pub(crate) backend: SsrBackendKind,
     pub(crate) health: tokio::sync::watch::Receiver<SsrHealth>,
+    pub(crate) health_tx: tokio::sync::watch::Sender<SsrHealth>,
     pub(crate) lifecycle: Option<tokio::sync::watch::Sender<()>>,
 }
 
 impl SsrRuntime {
     fn ready(client: SsrClient, config: Ssr, backend: SsrBackendKind) -> Self {
-        let (_, health) = tokio::sync::watch::channel(SsrHealth::Ready { backend });
+        let (health_tx, health) = tokio::sync::watch::channel(SsrHealth::Ready { backend });
         Self {
             client,
             default: config.default,
             failure_mode: config.failure_mode,
             backend,
             health,
+            health_tx,
             lifecycle: None,
         }
     }
@@ -47,7 +49,21 @@ impl SsrRuntime {
         &self,
         page: bytes::Bytes,
     ) -> Result<Option<SsrResponse>, SsrFailure> {
-        self.client.render(page).await
+        match self.health() {
+            SsrHealth::Ready { .. } | SsrHealth::Degraded { .. } => self.client.render(page).await,
+            _ => Err(SsrFailure::unavailable()),
+        }
+    }
+    pub(crate) fn record_success(&self) {
+        let _ = self.health_tx.send(SsrHealth::Ready {
+            backend: self.backend,
+        });
+    }
+    pub(crate) fn record_failure(&self, last_failure: crate::SsrFailureKind) {
+        let _ = self.health_tx.send(SsrHealth::Degraded {
+            backend: self.backend,
+            last_failure,
+        });
     }
 }
 
