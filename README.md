@@ -125,6 +125,26 @@ Router::new()
 Route-owned roots always win over route-local and global shared values,
 including when a partial reload omits the concrete route value.
 
+## Flash and transient state
+
+Redirect and page flash values use `page.flash`, separately from props and
+browser history. Configure `MemoryTransient::new()` for deterministic tests or
+enable the `cookies` feature and use `CookieTransient::encrypted(app_key)` for
+an authenticated, encrypted production cookie. There is no insecure default.
+
+```rust,ignore
+let inertia = InertiaApp::vite("frontend")
+    .transient(CookieTransient::encrypted(app_key))
+    .build()?;
+
+Redirect::to("/todos")
+    .flash("toast", "Todo created")
+    .flash("todoId", todo_id)
+```
+
+The optional `tower-sessions` feature provides `TowerSessionTransient` when an
+application already installs `SessionManagerLayer` outside the Inertia layer.
+
 Use `VersionLayer::dynamic` for a request-time asset version provider. Keep the
 provider fast and read a cached value rather than doing blocking I/O there.
 

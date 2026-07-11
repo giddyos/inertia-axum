@@ -40,16 +40,45 @@ impl Engine {
         visit: &Visit,
         pending: PendingResponse,
         shared: Option<crate::Props>,
+        transient_seed: Option<crate::transient::TransientSeed>,
     ) -> Response {
+        if pending.requires_transient() && self.app.inner.transient.is_none() {
+            return crate::axum::InertiaError::MissingTransientStore.into_response();
+        }
+        let mut transient = if pending.uses_transient() {
+            if let (Some(store), Some(seed)) = (&self.app.inner.transient, transient_seed.as_ref())
+            {
+                match store.load(seed.request()).await {
+                    Ok(data) => Some(data),
+                    Err(error) => {
+                        return crate::axum::InertiaError::transient(error).into_response()
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let result = match pending {
-            PendingResponse::Page(page) => self.finalize_page(visit, *page, shared).await,
+            PendingResponse::Page(page) => {
+                self.finalize_page(visit, *page, shared, transient.as_mut())
+                    .await
+            }
             PendingResponse::Redirect(redirect) => {
+                let destination = redirect.resolve(visit.referer.as_deref()).to_owned();
+                if let Some(data) = transient.as_mut() {
+                    data.reflash();
+                    for (key, value) in redirect.flash {
+                        data.flash_next_value(key, value);
+                    }
+                }
                 let status = if is_write_method(&visit.method) {
                     StatusCode::SEE_OTHER
                 } else {
                     StatusCode::FOUND
                 };
-                redirect_response(status, redirect.resolve(visit.referer.as_deref()))
+                redirect_response(status, &destination)
             }
             PendingResponse::Location(location) => {
                 if visit.is_inertia() {
@@ -64,7 +93,13 @@ impl Engine {
                 }
             }
         };
-        result.unwrap_or_else(crate::axum::error::internal_error_response)
+        let mut response = result.unwrap_or_else(crate::axum::error::internal_error_response);
+        if let (Some(store), Some(data)) = (&self.app.inner.transient, transient) {
+            if let Err(error) = store.commit(&mut response, data).await {
+                return crate::axum::InertiaError::transient(error).into_response();
+            }
+        }
+        response
     }
 
     async fn finalize_page(
@@ -72,6 +107,7 @@ impl Engine {
         visit: &Visit,
         pending: PendingPage,
         shared: Option<crate::Props>,
+        transient: Option<&mut crate::TransientData>,
     ) -> Result<Response, crate::axum::InertiaError> {
         let PendingPage {
             component,
@@ -79,6 +115,7 @@ impl Engine {
             encrypt_history,
             clear_history,
             preserve_fragment,
+            flash,
             status,
         } = pending;
         let mut metadata = PageMetadata::new();
@@ -192,13 +229,18 @@ impl Engine {
             }
         }
         metadata = metadata.into_response_metadata(&visit.context, &component, Some(&values));
-        let page = Page::from_parts_version(
+        let mut page = Page::from_parts_version(
             component,
             Value::Object(values),
             visit.uri.to_string(),
             self.app.inner.assets.version.clone(),
             metadata,
         );
+        let mut page_flash = transient
+            .as_ref()
+            .map_or_else(Map::new, |data| data.incoming_flash().clone());
+        page_flash.extend(flash);
+        page.set_flash(page_flash);
         let page = PageDraft::new(page, route_roots).finish();
         finalize_page_object(page, visit.is_inertia(), status, |serialized| {
             let assets = self.app.inner.assets.tags.clone();

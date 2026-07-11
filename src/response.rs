@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use serde_json::{Map, Value};
 use std::sync::{Arc, Mutex};
 
 const MISSING_LAYER: &str = "An Inertia page was returned, but the Inertia layer is not installed.\n\nInstall it on the router:\n\nlet app = Router::new()\n    .route(\"/\", get(index))\n    .inertia(inertia);";
@@ -17,6 +18,7 @@ pub struct PendingPage {
     pub(crate) encrypt_history: bool,
     pub(crate) clear_history: bool,
     pub(crate) preserve_fragment: bool,
+    pub(crate) flash: Map<String, Value>,
     pub(crate) status: StatusCode,
 }
 
@@ -34,6 +36,19 @@ pub enum PendingResponse {
     Redirect(Redirect),
     /// An external location visit.
     Location(Location),
+}
+
+impl PendingResponse {
+    pub(crate) fn uses_transient(&self) -> bool {
+        matches!(self, Self::Page(_) | Self::Redirect(_))
+    }
+    pub(crate) fn requires_transient(&self) -> bool {
+        match self {
+            Self::Page(page) => !page.flash.is_empty(),
+            Self::Redirect(redirect) => !redirect.flash.is_empty(),
+            Self::Location(_) => false,
+        }
+    }
 }
 
 /// Cloneable request-local one-shot storage for a pending response.
@@ -69,6 +84,7 @@ pub struct DynamicPage {
     encrypt_history: bool,
     clear_history: bool,
     preserve_fragment: bool,
+    flash: Map<String, Value>,
     status: StatusCode,
 }
 
@@ -81,6 +97,7 @@ impl DynamicPage {
             encrypt_history: false,
             clear_history: false,
             preserve_fragment: false,
+            flash: Map::new(),
             status: StatusCode::OK,
         }
     }
@@ -132,6 +149,14 @@ impl DynamicPage {
         self.preserve_fragment = true;
         self
     }
+    /// Attaches a flash value to this page outside the props/history namespace.
+    pub fn flash(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
+        self.flash.insert(
+            key.into(),
+            serde_json::to_value(value).expect("DynamicPage flash serialization failed"),
+        );
+        self
+    }
 
     /// Converts this response into its request-aware pending representation.
     pub fn into_pending_page(self) -> PendingPage {
@@ -141,6 +166,7 @@ impl DynamicPage {
             encrypt_history: self.encrypt_history,
             clear_history: self.clear_history,
             preserve_fragment: self.preserve_fragment,
+            flash: self.flash,
             status: self.status,
         }
     }

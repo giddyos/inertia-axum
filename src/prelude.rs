@@ -2,8 +2,12 @@
 
 pub use crate::{
     always, defer, lazy, merge, once, optional, page, scroll, DynamicPage, InertiaApp,
-    InertiaResult, Location, Prop, Redirect, RouterInertiaExt, Share, ShareContext,
+    InertiaResult, Location, MemoryTransient, Prop, Redirect, RouterInertiaExt, Share,
+    ShareContext, TransientStore,
 };
+
+#[cfg(feature = "cookies")]
+pub use crate::CookieTransient;
 
 #[cfg(feature = "macros")]
 pub use crate::{InertiaPage, InertiaProps};

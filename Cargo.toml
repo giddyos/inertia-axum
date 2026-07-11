@@ -40,10 +40,14 @@ tracing = "0.1"
 sha2 = "0.10"
 tower-http = { version = "0.6", features = ["fs"] }
 inertia-axum-macros = { path = "crates/inertia-axum-macros", version = "1.0.0-alpha.1", optional = true }
+cookie = { version = "0.18", features = ["secure"], optional = true }
+tower-sessions = { version = "0.14", optional = true }
 
 [features]
 default = ["macros"]
 macros = ["dep:inertia-axum-macros"]
+cookies = ["dep:cookie"]
+tower-sessions = ["dep:tower-sessions"]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }
@@ -87,3 +91,8 @@ harness = false
 [[bench]]
 name = "unselected_async_prop"
 harness = false
+
+[[bench]]
+name = "transient_cookie_commit"
+harness = false
+required-features = ["cookies"]

@@ -149,6 +149,7 @@ impl PendingPage {
             encrypt_history: options.encrypt_history_enabled(),
             clear_history: options.clear_history_enabled(),
             preserve_fragment: options.preserve_fragment_enabled(),
+            flash: serde_json::Map::new(),
             status: axum::http::StatusCode::OK,
         }
     }

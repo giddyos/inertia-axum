@@ -64,7 +64,7 @@ pin_project! {
     /// Concrete future used by [`InertiaService`].
     #[project = InertiaFutureProj]
     pub enum InertiaFuture<F, E> {
-        Inner { #[pin] future: F, visit: Option<Visit>, shared: Option<crate::Props>, engine: Engine },
+        Inner { #[pin] future: F, visit: Option<Visit>, shared: Option<crate::Props>, transient_seed: Option<crate::transient::TransientSeed>, engine: Engine },
         Finalizing { #[pin] future: std::pin::Pin<Box<dyn Future<Output = Response> + Send>>, error: std::marker::PhantomData<E> },
         Ready { response: Option<Result<Response, E>> },
     }
@@ -93,6 +93,7 @@ where
                     future,
                     visit,
                     shared,
+                    transient_seed,
                     engine,
                 } => match future.poll(cx) {
                     Poll::Pending => return Poll::Pending,
@@ -108,10 +109,13 @@ where
                         };
                         let visit = visit.take().expect("visit available while finalizing");
                         let shared = shared.take();
+                        let transient_seed = transient_seed.take();
                         let engine = engine.clone();
                         self.set(InertiaFuture::Finalizing {
                             future: Box::pin(async move {
-                                engine.finalize(&visit, pending, shared).await
+                                engine
+                                    .finalize(&visit, pending, shared, transient_seed)
+                                    .await
                             }),
                             error: std::marker::PhantomData,
                         });
@@ -135,6 +139,12 @@ where
     }
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
+        let transient_seed = self
+            .app
+            .inner
+            .transient
+            .as_ref()
+            .map(|_| crate::transient::TransientSeed::capture(&request));
         let context = request_context(request.headers());
         let configured_version = self.app.inner.assets.header_version.clone();
         if request.method() == Method::GET && context.is_inertia() {
@@ -142,6 +152,31 @@ where
                 if header(request.headers(), X_INERTIA_VERSION) != Some(version) {
                     let response = conflict_response(original_local_uri(&request))
                         .unwrap_or_else(internal_error_response);
+                    if let (Some(store), Some(seed)) =
+                        (self.app.inner.transient.clone(), transient_seed.clone())
+                    {
+                        return InertiaFuture::Finalizing {
+                            future: Box::pin(async move {
+                                let mut response = response;
+                                match store.load(seed.request()).await {
+                                    Ok(mut data) => {
+                                        data.reflash();
+                                        if let Err(error) = store.commit(&mut response, data).await
+                                        {
+                                            return internal_error_response(
+                                                crate::axum::InertiaError::transient(error),
+                                            );
+                                        }
+                                        response
+                                    }
+                                    Err(error) => internal_error_response(
+                                        crate::axum::InertiaError::transient(error),
+                                    ),
+                                }
+                            }),
+                            error: std::marker::PhantomData,
+                        };
+                    }
                     return InertiaFuture::Ready {
                         response: Some(Ok(response)),
                     };
@@ -193,6 +228,7 @@ where
             future: self.inner.call(request),
             visit: Some(visit),
             shared,
+            transient_seed,
             engine: self.engine.clone(),
         }
     }

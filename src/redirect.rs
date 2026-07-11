@@ -30,6 +30,7 @@ impl Location {
 pub struct Redirect {
     url: String,
     use_referrer: bool,
+    pub(crate) flash: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Redirect {
@@ -38,6 +39,7 @@ impl Redirect {
         Self {
             url: url.into(),
             use_referrer: false,
+            flash: serde_json::Map::new(),
         }
     }
 
@@ -51,6 +53,7 @@ impl Redirect {
         Self {
             url: "/".to_owned(),
             use_referrer: true,
+            flash: serde_json::Map::new(),
         }
     }
 
@@ -59,6 +62,7 @@ impl Redirect {
         Self {
             url: fallback.into(),
             use_referrer: true,
+            flash: serde_json::Map::new(),
         }
     }
 
@@ -73,6 +77,15 @@ impl Redirect {
         } else {
             self.url()
         }
+    }
+
+    /// Flashes a serialized value to the page reached by this redirect.
+    pub fn flash(mut self, key: impl Into<String>, value: impl serde::Serialize) -> Self {
+        self.flash.insert(
+            key.into(),
+            serde_json::to_value(value).expect("Redirect flash serialization failed"),
+        );
+        self
     }
 }
 

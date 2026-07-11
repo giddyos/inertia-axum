@@ -5,6 +5,7 @@ use crate::{
     layer::InertiaLayer,
     root::{DefaultRoot, RootView, SharedRootView},
     share::{Share, SharedProvider},
+    transient::{SharedTransientStore, TransientStore},
 };
 use axum::Router;
 use std::sync::Arc;
@@ -20,6 +21,7 @@ pub(crate) struct InertiaAppInner {
     pub(crate) assets: AssetRuntime,
     pub(crate) error_handler: Option<Arc<dyn ErasedErrorHandler>>,
     pub(crate) shared: Option<SharedProvider>,
+    pub(crate) transient: Option<SharedTransientStore>,
 }
 
 /// Builds an [`InertiaApp`].
@@ -31,6 +33,7 @@ pub struct InertiaAppBuilder {
     public_path: String,
     error_handler: Option<Arc<dyn ErasedErrorHandler>>,
     shared: Option<SharedProvider>,
+    transient: Option<SharedTransientStore>,
 }
 
 /// Receives deterministic reports for rescued asynchronous prop failures.
@@ -60,6 +63,7 @@ impl InertiaApp {
             public_path: "/build".to_owned(),
             error_handler: None,
             shared: None,
+            transient: None,
         }
     }
 
@@ -73,6 +77,7 @@ impl InertiaApp {
             public_path: "/build".to_owned(),
             error_handler: None,
             shared: None,
+            transient: None,
         }
     }
 
@@ -92,6 +97,7 @@ impl InertiaApp {
             public_path: "/build".to_owned(),
             error_handler: None,
             shared: None,
+            transient: None,
         }
     }
 }
@@ -162,6 +168,12 @@ impl InertiaAppBuilder {
         self
     }
 
+    /// Installs request-to-request transient storage.
+    pub fn transient<T: TransientStore>(mut self, store: T) -> Self {
+        self.transient = Some(Arc::new(store));
+        self
+    }
+
     /// Overrides the Vite development server URL.
     pub fn dev_server(mut self, url: impl Into<String>) -> Self {
         if let Some(vite) = &mut self.vite {
@@ -183,6 +195,7 @@ impl InertiaAppBuilder {
                 assets: self.assets,
                 error_handler: self.error_handler,
                 shared: self.shared,
+                transient: self.transient,
             }),
         })
     }

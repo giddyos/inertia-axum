@@ -65,3 +65,10 @@ selection and are polled with a concurrency bound of 16. The regression is
 recorded as the deliberate fixed cost of adding request-aware async resolution,
 not left silent; larger serialization-heavy page benchmarks remain the wire
 performance guardrail.
+
+## Phase 6 transient checkpoint
+
+The saved `phase6-transient` `transient_cookie_commit` measurement is 5.91 us
+for a method-aware redirect carrying two flash values through authenticated
+encryption and `Set-Cookie` construction. Ordinary non-pending routes retain a
+separate execution-count test proving zero transient loads and commits.

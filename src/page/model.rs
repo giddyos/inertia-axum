@@ -26,6 +26,8 @@ fn empty_map<K, V>(map: &BTreeMap<K, V>) -> bool {
 pub struct Page<T> {
     pub(crate) component: String,
     pub(crate) props: T,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub(crate) flash: Map<String, Value>,
     pub(crate) url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) version: Option<AssetVersion>,
@@ -89,6 +91,7 @@ impl<T> Page<T> {
         Self {
             component: component.into(),
             props,
+            flash: Map::new(),
             url: url.into(),
             version,
             encrypt_history: parts.encrypt_history,
@@ -120,6 +123,10 @@ impl<T> Page<T> {
     /// Returns the page props.
     pub fn props(&self) -> &T {
         &self.props
+    }
+
+    pub(crate) fn set_flash(&mut self, flash: Map<String, Value>) {
+        self.flash = flash;
     }
 
     /// Returns the page URL.

@@ -22,6 +22,10 @@ pub enum InertiaError {
     Prop(crate::PropError),
     /// Typed shared-data preparation failed.
     Shared(Box<dyn Error + Send + Sync>),
+    /// Flash or redirected errors were used without a transient store.
+    MissingTransientStore,
+    /// Transient storage failed.
+    Transient(Box<dyn Error + Send + Sync>),
 }
 
 impl InertiaError {
@@ -42,6 +46,9 @@ impl InertiaError {
     pub(crate) fn shared(error: Box<dyn Error + Send + Sync>) -> Self {
         Self::Shared(error)
     }
+    pub(crate) fn transient(error: Box<dyn Error + Send + Sync>) -> Self {
+        Self::Transient(error)
+    }
 }
 
 impl fmt::Display for InertiaError {
@@ -53,6 +60,8 @@ impl fmt::Display for InertiaError {
             Self::Root(error) => write!(f, "failed to render Inertia root view: {error}"),
             Self::Prop(error) => write!(f, "failed to resolve Inertia prop: {error}"),
             Self::Shared(error) => write!(f, "failed to prepare Inertia shared data: {error}"),
+            Self::MissingTransientStore => write!(f, "Inertia flash or redirected error state requires a transient store; configure InertiaAppBuilder::transient(...)"),
+            Self::Transient(error) => write!(f, "failed to load or commit Inertia transient state: {error}"),
         }
     }
 }
@@ -66,6 +75,8 @@ impl Error for InertiaError {
             Self::Root(error) => Some(error.as_ref()),
             Self::Prop(error) => Some(error),
             Self::Shared(error) => Some(error.as_ref()),
+            Self::MissingTransientStore => None,
+            Self::Transient(error) => Some(error.as_ref()),
         }
     }
 }
@@ -78,11 +89,11 @@ impl From<serde_json::Error> for InertiaError {
 
 impl IntoResponse for InertiaError {
     fn into_response(self) -> Response {
+        let actionable = matches!(self, Self::MissingTransientStore).then(|| self.to_string());
         error!(error = %self, "failed to build Axum Inertia response");
-
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to build Inertia response",
+            actionable.unwrap_or_else(|| "failed to build Inertia response".to_owned()),
         )
             .into_response()
     }

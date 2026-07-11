@@ -23,6 +23,7 @@ mod response;
 mod root;
 mod share;
 mod shared;
+pub mod transient;
 mod typed;
 mod visit;
 
@@ -44,6 +45,11 @@ pub use request::RequestContext;
 pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
 pub use root::{AssetTags, MountMarkup, RootContext, RootView};
 pub use share::{Share, ShareContext};
+#[cfg(feature = "cookies")]
+pub use transient::CookieTransient;
+#[cfg(feature = "tower-sessions")]
+pub use transient::TowerSessionTransient;
+pub use transient::{MemoryTransient, TransientData, TransientRequest, TransientStore};
 pub use typed::{Component, InertiaPage, IntoInertiaProps, PageOptions, PropKey, Props};
 pub use visit::Visit;
 
@@ -61,7 +67,8 @@ pub use inertia_axum_macros::{InertiaPage, InertiaProps};
 pub mod advanced {
     pub use crate::{
         AssetContext, AssetProvider, AssetTags, AssetVersion, ErrorHandler, MountMarkup,
-        RequestContext as InertiaRequestContext, RootContext, RootView, Visit,
+        RequestContext as InertiaRequestContext, RootContext, RootView, ShareContext,
+        TransientStore, Visit,
     };
 }
 
