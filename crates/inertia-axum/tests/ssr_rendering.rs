@@ -81,6 +81,30 @@ async fn external_ssr_renders_unmarked_initial_get() {
 }
 
 #[tokio::test]
+async fn root_template_places_ssr_head_and_mount_once() {
+    let (base, _) = fake(
+        StatusCode::OK,
+        r#"{"head":["<title>SSR</title>"],"body":"<div id=\"app\">SSR body</div>"}"#,
+    )
+    .await;
+    let inertia = InertiaApp::default_root()
+        .root_template_source("<html><head><!-- inertia:assets --><!-- inertia:head --></head><body data-template><!-- inertia:mount --></body></html>")
+        .ssr(Ssr::external(&base)).start().await.unwrap();
+    let html = body(
+        Router::new()
+            .route("/", get(|| async { page() }))
+            .inertia(inertia)
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(html.matches("<title>SSR</title>").count(), 1);
+    assert_eq!(html.matches("<div id=\"app\">SSR body</div>").count(), 1);
+    assert!(html.contains("<body data-template>"));
+}
+
+#[tokio::test]
 async fn inertia_json_request_never_invokes_ssr() {
     let (base, calls) = fake(StatusCode::OK, r#"{"head":[],"body":"SSR"}"#).await;
     let app = external(&base, Ssr::external(&base), get(|| async { page() })).await;

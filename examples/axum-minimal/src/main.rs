@@ -22,8 +22,10 @@ fn app(state: AppState, inertia: InertiaApp) -> Router {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let frontend = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend");
-    let inertia = InertiaApp::vite(frontend).build()?;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let inertia = InertiaApp::vite(root.join("frontend"))
+        .root_template(root.join("templates/app.html"))
+        .build()?;
     let state = AppState {
         app_name: "Inertia Axum",
     };

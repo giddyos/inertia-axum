@@ -2,6 +2,10 @@
 
 use std::{convert::Infallible, fmt, sync::Arc};
 
+mod template;
+
+pub(crate) use template::CompiledRootTemplate;
+
 /// Pre-rendered application asset markup.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AssetTags(String);
@@ -13,6 +17,11 @@ impl AssetTags {
     }
     pub(crate) fn empty() -> Self {
         Self(String::new())
+    }
+
+    /// Returns the trusted markup as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -34,6 +43,16 @@ impl HeadMarkup {
     #[cfg(feature = "ssr")]
     pub(crate) fn from_fragments(fragments: impl IntoIterator<Item = String>) -> Self {
         Self(fragments.into_iter().collect())
+    }
+
+    /// Returns the trusted markup as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(markup: &str) -> Self {
+        Self(markup.to_owned())
     }
 }
 
@@ -57,6 +76,16 @@ impl MountMarkup {
     #[cfg(feature = "ssr")]
     pub(crate) fn ssr(body: String) -> Self {
         Self(body)
+    }
+
+    /// Returns the trusted markup as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(markup: &str) -> Self {
+        Self(markup.to_owned())
     }
 }
 
@@ -116,6 +145,11 @@ impl<'a> RootContext<'a> {
 }
 
 /// Renders the application-wide initial HTML document.
+///
+/// Implementations control their own rendering strategy and performance. For a
+/// startup-compiled template using `<!-- inertia:assets -->`,
+/// `<!-- inertia:head -->`, and `<!-- inertia:mount -->`, use
+/// [`InertiaAppBuilder::root_template`](crate::InertiaAppBuilder::root_template).
 pub trait RootView: Clone + Send + Sync + 'static {
     /// Rendering failure.
     type Error: std::error::Error + Send + Sync + 'static;

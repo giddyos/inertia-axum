@@ -3,6 +3,7 @@
 ## What this example teaches
 
 - Build an `InertiaApp` from a Vite manifest.
+- Compile an application-owned root HTML template at startup.
 - Install Inertia on a normal Axum router.
 - Pass `AppState` through `Router::with_state`.
 - Return a small dynamic page from a named handler.
@@ -14,6 +15,7 @@ pages are introduced by the other examples.
 
 ```text
 src/main.rs                         State, handler, router, and server startup
+templates/app.html                  Root document template
 frontend/dist/.vite/manifest.json   Committed frontend fixture manifest
 frontend/dist/assets/main.js        Minimal browser entry fixture
 ```

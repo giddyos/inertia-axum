@@ -5,12 +5,17 @@ use crate::assets::ViteConfig;
 use crate::{
     assets::{AssetProvider, AssetRuntime, ConfigError, ErasedAssetProvider},
     layer::InertiaLayer,
-    root::{DefaultRoot, RootView, SharedRootView},
+    root::{CompiledRootTemplate, DefaultRoot, RootView, SharedRootView},
     share::{Share, SharedProvider},
     transient::{SharedTransientStore, TransientStore},
 };
 use axum::Router;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
+
+enum RootTemplateSource {
+    File(PathBuf),
+    Inline(Arc<str>),
+}
 
 /// Immutable application-wide Inertia configuration.
 #[derive(Clone)]
@@ -31,6 +36,7 @@ pub(crate) struct InertiaAppInner {
 /// Builds an [`InertiaApp`].
 pub struct InertiaAppBuilder {
     root: SharedRootView,
+    root_template: Option<RootTemplateSource>,
     assets: AssetRuntime,
     #[cfg(feature = "vite")]
     vite: Option<ViteConfig>,
@@ -73,6 +79,7 @@ impl InertiaApp {
     pub fn builder(root: impl RootView) -> InertiaAppBuilder {
         InertiaAppBuilder {
             root: Arc::new(root),
+            root_template: None,
             assets: AssetRuntime::default(),
             #[cfg(feature = "vite")]
             vite: None,
@@ -90,6 +97,7 @@ impl InertiaApp {
     pub fn default_root() -> InertiaAppBuilder {
         InertiaAppBuilder {
             root: Arc::new(DefaultRoot),
+            root_template: None,
             assets: AssetRuntime::default(),
             #[cfg(feature = "vite")]
             vite: None,
@@ -108,6 +116,7 @@ impl InertiaApp {
     pub fn vite(root: impl Into<std::path::PathBuf>) -> InertiaAppBuilder {
         InertiaAppBuilder {
             root: Arc::new(DefaultRoot),
+            root_template: None,
             assets: AssetRuntime::default(),
             vite: Some(ViteConfig {
                 root: root.into(),
@@ -134,6 +143,26 @@ impl Default for InertiaAppBuilder {
 }
 
 impl InertiaAppBuilder {
+    fn finish_root(&mut self) -> Result<(), ConfigError> {
+        let Some(source) = self.root_template.take() else {
+            return Ok(());
+        };
+        let (source, name) = match source {
+            RootTemplateSource::File(path) => {
+                let contents = std::fs::read_to_string(&path).map_err(|error| {
+                    ConfigError::new(format!(
+                        "inertia-axum root template configuration error\n\nCould not read template {}: {error}",
+                        path.display()
+                    ))
+                })?;
+                (Arc::<str>::from(contents), path.display().to_string())
+            }
+            RootTemplateSource::Inline(source) => (source, "<inline>".to_owned()),
+        };
+        self.root = Arc::new(CompiledRootTemplate::compile(source, &name)?);
+        Ok(())
+    }
+
     fn finish_assets(&mut self) -> Result<(), ConfigError> {
         #[cfg(feature = "vite")]
         if let Some(vite) = self.vite.take() {
@@ -175,8 +204,30 @@ impl InertiaAppBuilder {
     }
 
     /// Replaces the application root renderer.
+    ///
+    /// Custom renderers are responsible for their own performance. This and
+    /// the template methods use last-call-wins semantics.
     pub fn root(mut self, root: impl RootView) -> Self {
         self.root = Arc::new(root);
+        self.root_template = None;
+        self
+    }
+
+    /// Loads and compiles a root HTML template during application startup.
+    ///
+    /// The template must contain exactly one `<!-- inertia:assets -->`,
+    /// `<!-- inertia:head -->`, and `<!-- inertia:mount -->` marker.
+    pub fn root_template(mut self, path: impl Into<PathBuf>) -> Self {
+        self.root_template = Some(RootTemplateSource::File(path.into()));
+        self
+    }
+
+    /// Compiles an in-memory root HTML template during application startup.
+    ///
+    /// The template must contain exactly one `<!-- inertia:assets -->`,
+    /// `<!-- inertia:head -->`, and `<!-- inertia:mount -->` marker.
+    pub fn root_template_source(mut self, source: impl Into<Arc<str>>) -> Self {
+        self.root_template = Some(RootTemplateSource::Inline(source.into()));
         self
     }
 
@@ -269,6 +320,7 @@ impl InertiaAppBuilder {
             ));
         }
 
+        self.finish_root()?;
         self.finish_assets()?;
         Ok(self.into_app(
             #[cfg(feature = "ssr")]
@@ -279,6 +331,7 @@ impl InertiaAppBuilder {
     /// Builds assets and starts the configured SSR runtime.
     #[cfg(feature = "ssr")]
     pub async fn start(mut self) -> Result<InertiaApp, crate::StartError> {
+        self.finish_root()?;
         let Some(config) = self.ssr.take() else {
             self.finish_assets()?;
             return Ok(self.into_app(None));

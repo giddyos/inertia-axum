@@ -296,7 +296,7 @@ impl Engine {
         #[cfg(not(feature = "ssr"))]
         let _ = visit;
         let serialized = html_response_context(&page)?;
-        let assets = self.app.inner.assets.tags.clone();
+        let assets = &self.app.inner.assets.tags;
 
         #[cfg(feature = "ssr")]
         if should_render_ssr(&self.app, visit, route) {
@@ -323,7 +323,7 @@ impl Engine {
                     );
                     let head = HeadMarkup::from_fragments(rendered.head);
                     let mount = MountMarkup::ssr(rendered.body);
-                    return render_root(&self.app, &assets, &head, &mount, status);
+                    return render_root(&self.app, assets, &head, &mount, status);
                 }
                 Ok(None) => {
                     span.record("outcome", "vite_warmup");
@@ -364,7 +364,7 @@ impl Engine {
 
         let head = HeadMarkup::empty();
         let mount = MountMarkup::csr(serialized.data_page());
-        render_root(&self.app, &assets, &head, &mount, status)
+        render_root(&self.app, assets, &head, &mount, status)
     }
 }
 
