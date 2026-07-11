@@ -2,8 +2,14 @@
 
 use std::{convert::Infallible, fmt, sync::Arc};
 
+#[cfg(feature = "askama")]
+mod askama;
 mod template;
 
+#[cfg(feature = "askama")]
+pub(crate) use askama::AskamaRootView;
+#[cfg(feature = "askama")]
+pub use askama::{AskamaRoot, AskamaRootContext};
 pub(crate) use template::CompiledRootTemplate;
 
 /// Pre-rendered application asset markup.
@@ -141,6 +147,11 @@ impl<'a> RootContext<'a> {
     /// Returns the optional content-security-policy nonce.
     pub fn nonce(&self) -> Option<&str> {
         self.nonce
+    }
+
+    #[cfg(feature = "askama")]
+    pub(crate) fn fragment_len(&self) -> usize {
+        self.assets.as_str().len() + self.head.as_str().len() + self.mount.as_str().len()
     }
 }
 
