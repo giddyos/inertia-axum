@@ -1,6 +1,6 @@
 [package]
 name = "inertia-axum"
-version = "0.5.0"
+version = "1.0.0-alpha.1"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
@@ -15,8 +15,12 @@ readme = "README.md"
 resolver = "2"
 members = [
     "crates/inertia-axum-macros",
+    "crates/inertia-axum-test",
     "examples/axum-minimal",
     "examples/axum-svelte",
+    "examples/todo",
+    "examples/incident-board",
+    "examples/observatory",
 ]
 default-members = ["."]
 
@@ -51,6 +55,7 @@ cookies = ["dep:cookie"]
 tower-sessions = ["dep:tower-sessions"]
 garde = []
 validator = []
+test-support = []
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }

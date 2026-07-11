@@ -116,8 +116,8 @@ impl InertiaAppBuilder {
     }
 
     /// Sets the string asset version used for pre-handler version checks.
-    pub fn version(mut self, version: impl Into<Arc<str>>) -> Self {
-        let version = version.into();
+    pub fn version(mut self, version: impl ToString) -> Self {
+        let version: Arc<str> = Arc::from(version.to_string());
         self.assets.version = Some(version.clone().into());
         self.assets.header_version = Some(version);
         self

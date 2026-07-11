@@ -26,11 +26,19 @@ impl Deref for Component {
 }
 
 /// A component-qualified, typed top-level prop name.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PropKey<T> {
     component: Component,
     name: &'static str,
     marker: PhantomData<fn() -> T>,
+}
+
+impl<T> Copy for PropKey<T> {}
+
+impl<T> Clone for PropKey<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<T> PropKey<T> {

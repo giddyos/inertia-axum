@@ -1,0 +1,16 @@
+[package]
+name = "inertia-axum-example-observatory"
+version = "1.0.0-alpha.1"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+axum = { workspace = true }
+inertia-axum = { path = "../..", features = ["macros"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+inertia-axum-test = { path = "../../crates/inertia-axum-test" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
