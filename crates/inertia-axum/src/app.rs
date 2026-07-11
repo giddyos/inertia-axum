@@ -37,6 +37,8 @@ pub struct InertiaAppBuilder {
     error_handler: Option<Arc<dyn ErasedErrorHandler>>,
     shared: Option<SharedProvider>,
     transient: Option<SharedTransientStore>,
+    #[cfg(feature = "ssr")]
+    ssr: Option<crate::Ssr>,
 }
 
 /// Receives deterministic reports for rescued asynchronous prop failures.
@@ -68,6 +70,8 @@ impl InertiaApp {
             error_handler: None,
             shared: None,
             transient: None,
+            #[cfg(feature = "ssr")]
+            ssr: None,
         }
     }
 
@@ -83,6 +87,8 @@ impl InertiaApp {
             error_handler: None,
             shared: None,
             transient: None,
+            #[cfg(feature = "ssr")]
+            ssr: None,
         }
     }
 
@@ -104,6 +110,8 @@ impl InertiaApp {
             error_handler: None,
             shared: None,
             transient: None,
+            #[cfg(feature = "ssr")]
+            ssr: None,
         }
     }
 }
@@ -115,6 +123,15 @@ impl Default for InertiaAppBuilder {
 }
 
 impl InertiaAppBuilder {
+    /// Configures server-side rendering.
+    ///
+    /// Configuring SSR enables it for all eligible routes by default.
+    #[cfg(feature = "ssr")]
+    pub fn ssr(mut self, config: impl Into<crate::Ssr>) -> Self {
+        self.ssr = Some(config.into());
+        self
+    }
+
     /// Replaces the application root renderer.
     pub fn root(mut self, root: impl RootView) -> Self {
         self.root = Arc::new(root);
@@ -197,6 +214,19 @@ impl InertiaAppBuilder {
 
     /// Builds the immutable application object.
     pub fn build(mut self) -> Result<InertiaApp, ConfigError> {
+        #[cfg(feature = "ssr")]
+        if self.ssr.is_some() {
+            return Err(ConfigError::new(
+                "inertia-axum SSR configuration error\n\n\
+                 SSR was configured with InertiaAppBuilder::ssr(...), but build() cannot start an SSR runtime.\n\n\
+                 Use:\n\n\
+                 let inertia = InertiaApp::vite(\"frontend\")\n\
+                     .ssr(\"dist/ssr/ssr.js\")\n\
+                     .start()\n\
+                     .await?;",
+            ));
+        }
+
         #[cfg(feature = "vite")]
         if let Some(vite) = self.vite {
             self.assets = vite.build()?;

@@ -8,6 +8,8 @@
 
 pub mod axum;
 pub mod prelude;
+#[cfg(feature = "ssr")]
+pub mod ssr;
 
 mod app;
 pub mod assets;
@@ -47,6 +49,8 @@ pub use request::RequestContext;
 pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
 pub use root::{AssetTags, MountMarkup, RootContext, RootView};
 pub use share::{Share, ShareContext};
+#[cfg(feature = "ssr")]
+pub use ssr::Ssr;
 #[cfg(feature = "cookies")]
 pub use transient::CookieTransient;
 #[cfg(feature = "tower-sessions")]

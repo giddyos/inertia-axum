@@ -6,6 +6,9 @@ pub use crate::{
     lazy, merge, once, optional, page, scroll,
 };
 
+#[cfg(feature = "ssr")]
+pub use crate::Ssr;
+
 #[cfg(feature = "cookies")]
 pub use crate::CookieTransient;
 

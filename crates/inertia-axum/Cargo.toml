@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 axum = { workspace = true, features = ["json", "original-uri"] }
+bytes.workspace = true
 fluent-uri = "0.4.1"
 futures-util = "0.3"
 pin-project-lite = "0.2"
@@ -32,6 +33,11 @@ base64 = { version = "0.22", optional = true }
 inertia-axum-macros = { workspace = true, optional = true }
 cookie = { version = "0.18", features = ["secure"], optional = true }
 tower-sessions = { version = "0.14", optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, features = ["client", "http1"], optional = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"], optional = true }
+tokio = { workspace = true, features = ["io-util", "process", "rt", "sync", "time"], optional = true }
+tower = { workspace = true, features = ["limit", "load-shed", "timeout", "util"], optional = true }
 
 [features]
 default = ["macros", "vite"]
@@ -42,6 +48,13 @@ tower-sessions = ["dep:tower-sessions"]
 garde = []
 validator = []
 test-support = []
+ssr = [
+    "dep:http-body-util",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:tokio",
+    "dep:tower",
+]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }

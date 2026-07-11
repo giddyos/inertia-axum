@@ -28,10 +28,14 @@ authors = ["inertia-axum contributors"]
 
 [workspace.dependencies]
 axum = { version = "0.8.9", default-features = false }
+bytes = "1"
 cargo_metadata = "0.20"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+http-body-util = "0.1"
+hyper = { version = "1", default-features = false }
+hyper-util = { version = "0.1", default-features = false }
 tokio = "1"
 tower = "0.5.3"
 inertia-axum = { path = "crates/inertia-axum", version = "1.0.0-alpha.1" }
