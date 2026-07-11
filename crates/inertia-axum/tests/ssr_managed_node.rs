@@ -12,6 +12,73 @@ use std::time::Duration;
 use tower::ServiceExt as _;
 
 #[tokio::test]
+#[ignore = "requires Node 22 or newer"]
+async fn managed_node_launches_relative_bundle_from_relative_vite_root() {
+    let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = reservation.local_addr().unwrap().port();
+    drop(reservation);
+
+    let workspace = std::env::current_dir().unwrap();
+    let frontend = std::path::PathBuf::from("target/ssr-fixtures").join(format!(
+        "relative-vite-{}-{port}/frontend",
+        std::process::id()
+    ));
+    let absolute_frontend = workspace.join(&frontend);
+    let build = absolute_frontend.join("dist");
+    std::fs::create_dir_all(build.join(".vite")).unwrap();
+    std::fs::create_dir_all(build.join("ssr")).unwrap();
+    std::fs::write(
+        build.join(".vite/manifest.json"),
+        r#"{"src/main.js":{"file":"client.js","isEntry":true}}"#,
+    )
+    .unwrap();
+    std::fs::write(build.join("client.js"), "export {};").unwrap();
+    std::fs::write(
+        build.join("ssr/server.mjs"),
+        format!(
+            r#"
+import http from 'node:http';
+const server = http.createServer((req, res) => {{
+  if (req.url === '/health') return res.end('ok');
+  if (req.url === '/shutdown') {{ res.end('ok'); return server.close(); }}
+  if (req.url === '/render') {{
+    res.setHeader('content-type', 'application/json');
+    return res.end(JSON.stringify({{head:[],body:'<div id="app" data-server-rendered="true">relative</div>'}}));
+  }}
+  res.statusCode = 404; res.end();
+}});
+server.listen({port}, '127.0.0.1');
+"#
+        ),
+    )
+    .unwrap();
+
+    let inertia = InertiaApp::vite(&frontend)
+        .entry("src/main.js")
+        .ssr(Ssr::node("dist/ssr/server.mjs").endpoint(format!("http://127.0.0.1:{port}")))
+        .start()
+        .await
+        .unwrap();
+    let app = Router::new()
+        .route("/", get(|| async { DynamicPage::new("Home") }))
+        .inertia(inertia);
+    let response = app
+        .oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let html = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(html.contains("data-server-rendered=\"true\">relative"));
+
+    let _ = std::fs::remove_dir_all(workspace.join(frontend).parent().unwrap());
+}
+
+#[tokio::test]
 async fn managed_node_starts_renders_and_shuts_down() {
     let version = tokio::process::Command::new("node")
         .arg("--version")

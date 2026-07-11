@@ -6,6 +6,8 @@ use std::fmt;
 #[derive(Debug)]
 #[allow(missing_docs)]
 pub enum SsrStartError {
+    /// The process working directory could not be determined.
+    CurrentDirectoryUnavailable(std::io::Error),
     /// The endpoint is not a valid URI.
     InvalidEndpoint {
         endpoint: String,
@@ -41,6 +43,11 @@ pub enum SsrStartError {
     UnsupportedNode { found: String, required: u64 },
     /// The configured bundle path is not a file.
     BundleIsNotFile(std::path::PathBuf),
+    /// The configured Node working directory could not be resolved.
+    WorkingDirectoryUnavailable {
+        directory: std::path::PathBuf,
+        source: std::io::Error,
+    },
     /// The Node child process could not be spawned.
     NodeSpawn {
         runtime: std::path::PathBuf,
@@ -52,6 +59,12 @@ pub enum SsrStartError {
 impl fmt::Display for SsrStartError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::CurrentDirectoryUnavailable(source) => {
+                write!(
+                    formatter,
+                    "current working directory is unavailable: {source}"
+                )
+            }
             Self::InvalidEndpoint { endpoint, .. } => {
                 write!(formatter, "invalid SSR endpoint: {endpoint}")
             }
@@ -94,6 +107,11 @@ impl fmt::Display for SsrStartError {
             Self::BundleIsNotFile(bundle) => {
                 write!(formatter, "SSR bundle {} is not a file", bundle.display())
             }
+            Self::WorkingDirectoryUnavailable { directory, source } => write!(
+                formatter,
+                "Node working directory {} is unavailable: {source}",
+                directory.display()
+            ),
             Self::NodeSpawn {
                 runtime,
                 bundle,
@@ -111,8 +129,10 @@ impl fmt::Display for SsrStartError {
 impl std::error::Error for SsrStartError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::CurrentDirectoryUnavailable(source) => Some(source),
             Self::InvalidEndpoint { source, .. } => Some(source),
             Self::BundleUnavailable { source, .. } => Some(source),
+            Self::WorkingDirectoryUnavailable { source, .. } => Some(source),
             Self::NodeUnavailable { source, .. } | Self::NodeSpawn { source, .. } => Some(source),
             _ => None,
         }

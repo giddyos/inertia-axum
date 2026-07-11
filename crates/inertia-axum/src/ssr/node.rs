@@ -16,6 +16,65 @@ struct NodeVersion {
     patch: u64,
 }
 
+#[derive(Debug)]
+pub(crate) struct ManagedNodeLaunchPaths {
+    pub(crate) bundle: PathBuf,
+    pub(crate) working_directory: PathBuf,
+    pub(crate) runtime: PathBuf,
+}
+
+fn absolute_from(base: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        base.join(path)
+    }
+}
+
+pub(crate) fn resolve_managed_paths(
+    bundle: &Path,
+    runtime: &Path,
+    vite_root: Option<&Path>,
+) -> Result<ManagedNodeLaunchPaths, SsrStartError> {
+    let process_directory =
+        std::env::current_dir().map_err(SsrStartError::CurrentDirectoryUnavailable)?;
+    let vite_root = vite_root.map(|root| absolute_from(&process_directory, root));
+    let unresolved_bundle = match &vite_root {
+        Some(root) => absolute_from(root, bundle),
+        None => absolute_from(&process_directory, bundle),
+    };
+
+    verify_bundle(&unresolved_bundle)?;
+    let bundle =
+        unresolved_bundle
+            .canonicalize()
+            .map_err(|source| SsrStartError::BundleUnavailable {
+                bundle: unresolved_bundle,
+                source,
+            })?;
+    let working_directory = match vite_root {
+        Some(root) => {
+            root.canonicalize()
+                .map_err(|source| SsrStartError::WorkingDirectoryUnavailable {
+                    directory: root,
+                    source,
+                })?
+        }
+        None => bundle.parent().unwrap_or(&process_directory).to_owned(),
+    };
+    let runtime = if runtime.components().count() > 1 && !runtime.is_absolute() {
+        process_directory.join(runtime)
+    } else {
+        runtime.to_owned()
+    };
+
+    Ok(ManagedNodeLaunchPaths {
+        bundle,
+        working_directory,
+        runtime,
+    })
+}
+
 fn parse_node_version(value: &str) -> Result<NodeVersion, SsrStartError> {
     let value = value.trim().strip_prefix('v').unwrap_or(value.trim());
     let invalid = || SsrStartError::InvalidNodeVersion(value.to_owned());
@@ -227,12 +286,14 @@ async fn supervise(
 
 pub(crate) async fn start_managed_node(
     config: Ssr,
-    bundle: PathBuf,
-    runtime: PathBuf,
+    paths: ManagedNodeLaunchPaths,
     endpoint: String,
-    working_directory: PathBuf,
 ) -> Result<SsrRuntime, SsrStartError> {
-    verify_bundle(&bundle)?;
+    let ManagedNodeLaunchPaths {
+        bundle,
+        runtime,
+        working_directory,
+    } = paths;
     let version = verify_node(&runtime).await?;
     tracing::info!(node = %format!("{}.{}.{}", version.major, version.minor, version.patch), bundle = %bundle.display(), "starting Inertia SSR server");
     let client = SsrClient::new(
@@ -283,6 +344,141 @@ pub(crate) async fn start_managed_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Fixture(PathBuf);
+
+    impl Fixture {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::current_dir()
+                .unwrap()
+                .join("target/ssr-path-tests")
+                .join(format!(
+                    "{}-{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, Ordering::Relaxed)
+                ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn bundle(&self, relative: &str) -> PathBuf {
+            let path = self.0.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "export {};").unwrap();
+            path
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn resolves_absolute_bundle_without_vite_root() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("server.mjs");
+        let paths = resolve_managed_paths(&bundle, Path::new("node"), None).unwrap();
+        assert_eq!(paths.bundle, bundle.canonicalize().unwrap());
+        assert_eq!(paths.working_directory, fixture.0.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolves_relative_bundle_without_vite_root() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("dist/server.mjs");
+        let cwd = std::env::current_dir().unwrap();
+        let relative = bundle.strip_prefix(&cwd).unwrap();
+        let paths = resolve_managed_paths(relative, Path::new("node"), None).unwrap();
+        assert_eq!(paths.bundle, bundle.canonicalize().unwrap());
+        assert_eq!(paths.working_directory, bundle.parent().unwrap());
+    }
+
+    #[test]
+    fn resolves_relative_vite_root_and_relative_bundle() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("frontend/dist/ssr/server.mjs");
+        let cwd = std::env::current_dir().unwrap();
+        let root = fixture.0.join("frontend");
+        let paths = resolve_managed_paths(
+            Path::new("dist/ssr/server.mjs"),
+            Path::new("node"),
+            Some(root.strip_prefix(cwd).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(paths.bundle, bundle.canonicalize().unwrap());
+        assert_eq!(paths.working_directory, root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolves_absolute_vite_root_and_relative_bundle() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("frontend/dist/ssr/server.mjs");
+        let root = fixture.0.join("frontend");
+        let paths = resolve_managed_paths(
+            Path::new("dist/ssr/server.mjs"),
+            Path::new("node"),
+            Some(&root),
+        )
+        .unwrap();
+        assert_eq!(paths.bundle, bundle.canonicalize().unwrap());
+        assert_eq!(paths.working_directory, root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn preserves_absolute_bundle_with_vite_root() {
+        let fixture = Fixture::new();
+        let root = fixture.0.join("frontend");
+        std::fs::create_dir_all(&root).unwrap();
+        let bundle = fixture.bundle("elsewhere/server.mjs");
+        let paths = resolve_managed_paths(&bundle, Path::new("node"), Some(&root)).unwrap();
+        assert_eq!(paths.bundle, bundle.canonicalize().unwrap());
+        assert_eq!(paths.working_directory, root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolves_relative_custom_runtime_against_process_directory() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("server.mjs");
+        let paths = resolve_managed_paths(&bundle, Path::new("./tools/node"), None).unwrap();
+        assert_eq!(
+            paths.runtime,
+            std::env::current_dir().unwrap().join("./tools/node")
+        );
+        assert!(paths.runtime.is_absolute());
+    }
+
+    #[test]
+    fn leaves_bare_node_as_path_lookup() {
+        let fixture = Fixture::new();
+        let bundle = fixture.bundle("server.mjs");
+        let paths = resolve_managed_paths(&bundle, Path::new("node"), None).unwrap();
+        assert_eq!(paths.runtime, Path::new("node"));
+    }
+
+    #[test]
+    fn missing_bundle_error_contains_resolved_path() {
+        let fixture = Fixture::new();
+        let cwd = std::env::current_dir().unwrap();
+        let relative = fixture.0.strip_prefix(&cwd).unwrap().join("missing.mjs");
+        let error = resolve_managed_paths(&relative, Path::new("node"), None).unwrap_err();
+        assert!(matches!(
+            error,
+            SsrStartError::BundleUnavailable { bundle, .. }
+                if bundle == cwd.join(relative)
+        ));
+    }
+
+    #[test]
+    fn rejects_directory_bundle() {
+        let fixture = Fixture::new();
+        let error = resolve_managed_paths(&fixture.0, Path::new("node"), None).unwrap_err();
+        assert!(matches!(error, SsrStartError::BundleIsNotFile(bundle) if bundle == fixture.0));
+    }
+
     #[test]
     fn parses_current_node_version() {
         assert_eq!(

@@ -112,12 +112,8 @@ pub(crate) async fn start_runtime(
             runtime,
             endpoint,
         } => {
-            let bundle = Ssr::resolve_bundle(&bundle, vite_root);
-            let working_directory = vite_root
-                .map(std::path::Path::to_owned)
-                .or_else(|| bundle.parent().map(std::path::Path::to_owned))
-                .unwrap_or_else(|| std::path::PathBuf::from("."));
-            super::start_managed_node(config, bundle, runtime, endpoint, working_directory).await
+            let paths = super::resolve_managed_paths(&bundle, &runtime, vite_root)?;
+            super::start_managed_node(config, paths, endpoint).await
         }
     }
 }
