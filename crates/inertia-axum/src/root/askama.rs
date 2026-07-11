@@ -96,3 +96,134 @@ where
 
     Ok(output)
 }
+
+#[cfg(all(test, feature = "askama"))]
+mod tests {
+    use super::*;
+
+    #[derive(::askama::Template)]
+    #[template(
+        source = "<!doctype html><html><head><title>{{ app_name }}</title>{{ inertia.assets|safe }}{{ inertia.head|safe }}</head><body><p>{{ description }}</p>{{ inertia.mount|safe }}</body></html>",
+        ext = "html",
+        askama = ::askama
+    )]
+    struct TestTemplate<'a> {
+        inertia: AskamaRootContext<'a>,
+        app_name: &'a str,
+        description: &'a str,
+    }
+
+    #[derive(Clone)]
+    struct TestRoot {
+        app_name: &'static str,
+        description: &'static str,
+    }
+
+    impl AskamaRoot for TestRoot {
+        type Template<'a> = TestTemplate<'a>;
+
+        fn template<'a>(&'a self, inertia: AskamaRootContext<'a>) -> Self::Template<'a> {
+            TestTemplate {
+                inertia,
+                app_name: self.app_name,
+                description: self.description,
+            }
+        }
+    }
+
+    fn render(root: TestRoot, head_markup: &str) -> String {
+        let assets = AssetTags::new("<script data-asset></script>".to_owned());
+        let head = HeadMarkup::for_test(head_markup);
+        let mount = MountMarkup::for_test("<div data-mount></div>");
+        RootView::render(
+            &AskamaRootView::new(root),
+            RootContext::new(&assets, &head, &mount),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn trusted_inertia_fragments_are_not_escaped() {
+        let html = render(
+            TestRoot {
+                app_name: "Acme",
+                description: "Description",
+            },
+            "<meta data-head>",
+        );
+        assert!(html.contains("<script data-asset></script>"));
+        assert!(html.contains("<meta data-head>"));
+        assert!(html.contains("<div data-mount></div>"));
+        assert!(!html.contains("&lt;script data-asset"));
+    }
+
+    #[test]
+    fn application_values_are_html_escaped() {
+        let html = render(
+            TestRoot {
+                app_name: "<Acme>",
+                description: "<script>alert(1)</script>",
+            },
+            "",
+        );
+        assert!(html.contains("<title>&#60;Acme&#62;</title>"));
+        assert!(html.contains("<p>&#60;script&#62;alert(1)&#60;/script&#62;</p>"));
+        assert!(!html.contains("<p><script>"));
+    }
+
+    #[test]
+    fn each_inertia_fragment_is_rendered_once() {
+        let html = render(
+            TestRoot {
+                app_name: "Acme",
+                description: "Description",
+            },
+            "<meta data-head>",
+        );
+        assert_eq!(html.matches("data-asset").count(), 1);
+        assert_eq!(html.matches("data-head").count(), 1);
+        assert_eq!(html.matches("data-mount").count(), 1);
+    }
+
+    #[test]
+    fn csr_context_reports_no_ssr_head() {
+        let assets = AssetTags::empty();
+        let head = HeadMarkup::empty();
+        let mount = MountMarkup::for_test("");
+        let context = AskamaRootContext::from(RootContext::new(&assets, &head, &mount));
+        assert!(!context.has_ssr_head);
+    }
+
+    #[test]
+    fn ssr_context_reports_head_content() {
+        let assets = AssetTags::empty();
+        let head = HeadMarkup::for_test("<title>SSR</title>");
+        let mount = MountMarkup::for_test("");
+        let context = AskamaRootContext::from(RootContext::new(&assets, &head, &mount));
+        assert!(context.has_ssr_head);
+    }
+
+    mod filters {
+        #[::askama::filter_fn]
+        pub fn fail(
+            _value: &dyn std::fmt::Display,
+            _values: &dyn ::askama::Values,
+        ) -> ::askama::Result<String> {
+            Err(::askama::Error::custom(std::io::Error::other(
+                "test render failure",
+            )))
+        }
+    }
+
+    #[derive(::askama::Template)]
+    #[template(source = "{{ value|fail }}", ext = "html", askama = ::askama)]
+    struct FallibleTemplate<'a> {
+        value: &'a str,
+    }
+
+    #[test]
+    fn askama_errors_propagate() {
+        let error = render_template(&FallibleTemplate { value: "value" }, 0).unwrap_err();
+        assert_eq!(error.to_string(), "test render failure");
+    }
+}
