@@ -11,7 +11,7 @@ use serde_json::Value;
 
 /// Converts a value into a filtered Inertia props object.
 ///
-/// Most callers use ordinary serializable structs or maps. [`crate::InertiaProps`]
+/// Most callers use ordinary serializable structs or maps. [`tyalias@crate::InertiaProps`]
 /// implements this trait for route-local lazy, optional, and deferred
 /// synchronous resolvers.
 pub trait IntoPageProps {

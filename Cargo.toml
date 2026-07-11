@@ -14,6 +14,7 @@ readme = "README.md"
 [workspace]
 resolver = "2"
 members = [
+    "crates/inertia-axum-macros",
     "examples/axum-minimal",
     "examples/axum-svelte",
 ]
@@ -38,6 +39,11 @@ tower-service = "0.3"
 tracing = "0.1"
 sha2 = "0.10"
 tower-http = { version = "0.6", features = ["fs"] }
+inertia-axum-macros = { path = "crates/inertia-axum-macros", version = "1.0.0-alpha.1", optional = true }
+
+[features]
+default = ["macros"]
+macros = ["dep:inertia-axum-macros"]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }

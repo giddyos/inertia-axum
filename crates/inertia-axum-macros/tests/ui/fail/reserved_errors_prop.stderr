@@ -1,0 +1,5 @@
+error: "errors" is reserved by the Inertia validation protocol
+ --> tests/ui/fail/reserved_errors_prop.rs:5:19
+  |
+5 | struct Reserved { errors: String }
+  |                   ^^^^^^

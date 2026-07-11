@@ -66,6 +66,33 @@ the `/build` public path. `VITE_DEV_SERVER_URL` switches startup to development
 tags without requiring a manifest. Entry, build directory, public path, root
 view, and development URL can all be overridden on the builder.
 
+## Typed pages
+
+With the default `macros` feature, a page struct is itself an Axum response.
+The derive registers fields individually, so `Prop<T>` policies remain lazy
+and typed prop-key constants are available to tests and partial requests.
+
+```rust
+use inertia_axum::prelude::*;
+
+#[derive(InertiaPage)]
+#[inertia(component = "Todos/Index", rename_all = "camelCase")]
+struct TodosPage {
+    todos: Vec<String>,
+    stats: Prop<u64>,
+}
+
+async fn todos() -> TodosPage {
+    TodosPage {
+        todos: vec!["Ship typed pages".to_owned()],
+        stats: defer(|| async { Ok::<_, std::convert::Infallible>(7) }),
+    }
+}
+
+assert_eq!(TodosPage::TODOS.name(), "todos");
+assert_eq!(TodosPage::STATS.component().as_str(), "Todos/Index");
+```
+
 ## Examples
 
 - [`examples/axum-minimal`](examples/axum-minimal): the Todo setup above.

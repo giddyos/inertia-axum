@@ -1,0 +1,5 @@
+error: InertiaPage requires #[inertia(component = "...")]
+ --> tests/ui/fail/missing_component.rs:4:1
+  |
+4 | struct Missing { value: u32 }
+  | ^^^^^^

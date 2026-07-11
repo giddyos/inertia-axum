@@ -16,7 +16,14 @@ pub struct PendingPage {
     pub(crate) props: Vec<PendingProp>,
     pub(crate) encrypt_history: bool,
     pub(crate) clear_history: bool,
+    pub(crate) preserve_fragment: bool,
     pub(crate) status: StatusCode,
+}
+
+impl IntoResponse for PendingPage {
+    fn into_response(self) -> Response {
+        pending_response(PendingResponse::Page(Box::new(self)))
+    }
 }
 
 /// A response awaiting request-aware Inertia finalization.
@@ -61,6 +68,7 @@ pub struct DynamicPage {
     props: Vec<PendingProp>,
     encrypt_history: bool,
     clear_history: bool,
+    preserve_fragment: bool,
     status: StatusCode,
 }
 
@@ -72,6 +80,7 @@ impl DynamicPage {
             props: Vec::new(),
             encrypt_history: false,
             clear_history: false,
+            preserve_fragment: false,
             status: StatusCode::OK,
         }
     }
@@ -118,6 +127,11 @@ impl DynamicPage {
         self.encrypt_history = true;
         self
     }
+    /// Preserves the original URL fragment across a redirect.
+    pub fn preserve_fragment(mut self) -> Self {
+        self.preserve_fragment = true;
+        self
+    }
 
     /// Converts this response into its request-aware pending representation.
     pub fn into_pending_page(self) -> PendingPage {
@@ -126,6 +140,7 @@ impl DynamicPage {
             props: self.props,
             encrypt_history: self.encrypt_history,
             clear_history: self.clear_history,
+            preserve_fragment: self.preserve_fragment,
             status: self.status,
         }
     }

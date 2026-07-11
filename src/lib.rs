@@ -22,6 +22,7 @@ mod request;
 mod response;
 mod root;
 mod shared;
+mod typed;
 mod visit;
 
 pub use app::{ErrorHandler, InertiaApp, InertiaAppBuilder, RouterInertiaExt};
@@ -41,13 +42,18 @@ pub use redirect::{Location, Redirect};
 pub use request::RequestContext;
 pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
 pub use root::{AssetTags, MountMarkup, RootContext, RootView};
+pub use typed::{Component, InertiaPage, IntoInertiaProps, PageOptions, PropKey, Props};
 pub use visit::Visit;
 
 /// Implementation details referenced by exported declarative macros.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::props::prop::{DynamicPropAdapter, IntoPendingProp};
+    pub use axum::response::{IntoResponse, Response};
 }
+
+#[cfg(feature = "macros")]
+pub use inertia_axum_macros::{InertiaPage, InertiaProps};
 
 /// Advanced protocol-aware application APIs.
 pub mod advanced {

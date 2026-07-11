@@ -1,0 +1,5 @@
+error: Inertia component names cannot be empty
+ --> tests/ui/fail/empty_component.rs:4:23
+  |
+4 | #[inertia(component = "")]
+  |                       ^^

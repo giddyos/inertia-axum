@@ -72,6 +72,7 @@ impl Engine {
             props,
             encrypt_history,
             clear_history,
+            preserve_fragment,
             status,
         } = pending;
         let mut metadata = PageMetadata::new();
@@ -80,6 +81,9 @@ impl Engine {
         }
         if clear_history {
             metadata = metadata.clear_history();
+        }
+        if preserve_fragment {
+            metadata = metadata.preserve_fragment();
         }
         for prop in &props {
             prop.apply_metadata(&mut metadata, !prop.is_fresh_once());
