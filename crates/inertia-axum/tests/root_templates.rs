@@ -114,16 +114,20 @@ impl RootView for Custom {
 
 #[tokio::test]
 async fn root_selection_is_last_call_wins() {
+    let path =
+        std::env::temp_dir().join(format!("inertia-axum-ordering-{}.html", std::process::id()));
+    fs::write(&path, TEMPLATE).unwrap();
     let custom = InertiaApp::default_root()
-        .root_template_source(TEMPLATE)
+        .root_template(&path)
         .root(Custom)
         .build()
         .unwrap();
     assert_eq!(response_body(router(custom), false).await, "CUSTOM");
     let template = InertiaApp::builder(Custom)
-        .root_template_source(TEMPLATE)
+        .root_template(&path)
         .build()
         .unwrap();
+    fs::remove_file(path).unwrap();
     assert!(
         response_body(router(template), false)
             .await
