@@ -8,6 +8,98 @@ use std::{
 };
 use syn::{Attribute, Expr, LitStr, Token, visit::Visit};
 
+pub fn run_args(args: args::CheckArgs) -> Result<(), String> {
+    let frontend = args.path.join(&args.frontend);
+    let package = frontend.join("package.json");
+    let value: serde_json::Value = serde_json::from_slice(
+        &fs::read(&package)
+            .map_err(|_| format!("package.json {} does not exist", package.display()))?,
+    )
+    .map_err(|error| format!("invalid package.json {}: {error}", package.display()))?;
+    if value.get("private").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err(format!(
+            "package.json {} must set private to true",
+            package.display()
+        ));
+    }
+    let groups = [value.get("dependencies"), value.get("devDependencies")];
+    let present = |name: &str| {
+        groups
+            .iter()
+            .any(|group| group.and_then(|v| v.get(name)).is_some())
+    };
+    let adapters = [
+        (
+            crate::framework::Framework::React,
+            "@inertiajs/react",
+            "@vitejs/plugin-react",
+        ),
+        (
+            crate::framework::Framework::Svelte,
+            "@inertiajs/svelte",
+            "@sveltejs/vite-plugin-svelte",
+        ),
+        (
+            crate::framework::Framework::Vue,
+            "@inertiajs/vue3",
+            "@vitejs/plugin-vue",
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, adapter, _)| present(adapter))
+    .collect::<Vec<_>>();
+    if adapters.len() != 1 {
+        return Err(
+            "package.json must contain exactly one supported Inertia framework adapter".into(),
+        );
+    }
+    if let Some(framework) = args.framework.explicit() {
+        if framework != adapters[0].0 {
+            return Err("--framework conflicts with package.json dependencies".into());
+        }
+    }
+    if !present("@inertiajs/vite") || !present(adapters[0].2) {
+        return Err("package.json is missing @inertiajs/vite or its framework Vite plugin".into());
+    }
+    run(&args.path, &args.frontend)?;
+    if args.built {
+        validate_built(&frontend, args.ssr)?;
+    }
+    Ok(())
+}
+
+fn validate_built(frontend: &Path, ssr: bool) -> Result<(), String> {
+    let manifest = frontend.join("dist/.vite/manifest.json");
+    let value: serde_json::Value = serde_json::from_slice(
+        &fs::read(&manifest)
+            .map_err(|_| format!("missing Vite manifest {}", manifest.display()))?,
+    )
+    .map_err(|error| format!("invalid Vite manifest {}: {error}", manifest.display()))?;
+    let entry = value.get("src/main.ts").ok_or_else(|| {
+        format!(
+            "Vite manifest {} is missing entry src/main.ts",
+            manifest.display()
+        )
+    })?;
+    let file = entry
+        .get("file")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "Vite manifest entry src/main.ts has no file".to_owned())?;
+    if !frontend.join("dist").join(file).is_file() {
+        return Err(format!(
+            "Vite manifest references missing output {}",
+            frontend.join("dist").join(file).display()
+        ));
+    }
+    if ssr && !frontend.join("dist/ssr/main.js").is_file() {
+        return Err(format!(
+            "missing SSR bundle {}",
+            frontend.join("dist/ssr/main.js").display()
+        ));
+    }
+    Ok(())
+}
+
 pub fn run(root: &Path, frontend_arg: &Path) -> Result<(), String> {
     let frontend = root.join(frontend_arg);
     if !frontend.is_dir() {

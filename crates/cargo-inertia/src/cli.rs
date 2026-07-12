@@ -44,6 +44,6 @@ pub fn run() -> Result<(), CliError> {
         #[cfg(feature = "dev")]
         Command::Dev(args) => crate::dev::run_args(args),
         #[cfg(feature = "check")]
-        Command::Check(args) => crate::check::run(&args.path, &args.frontend).map_err(Into::into),
+        Command::Check(args) => crate::check::run_args(args).map_err(Into::into),
     }
 }
