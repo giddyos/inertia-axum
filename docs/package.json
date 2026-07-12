@@ -1,13 +1,6 @@
 {
   "name": "inertia-axum-docs",
   "version": "1.0.0-alpha.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp",
-      "unrs-resolver"
-    ]
-  },
   "private": true,
   "engines": {
     "node": ">=22"
