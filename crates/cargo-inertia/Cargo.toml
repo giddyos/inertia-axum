@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 description = "Optional project tooling for inertia-axum"
+include = ["Cargo.toml", "README.md", "src/**", "templates/**"]
 
 [lints]
 workspace = true
