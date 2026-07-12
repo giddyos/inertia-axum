@@ -19,6 +19,7 @@ The executable accepts both `cargo inertia ...` and direct `cargo-inertia ...` i
 cargo inertia init [--framework <svelte|react|vue>] [--package-manager <auto|npm|pnpm|bun>] [--ssr <none|managed-node|external>] [--yes]
 cargo inertia dev [--frontend <directory>] [--package-manager <auto|npm|pnpm|bun>] [--host <host>] [--port <port>] [-- <cargo args>]
 cargo inertia check [--path <root>] [--frontend <directory>] [--built] [--ssr]
+cargo inertia sync [OUTPUT] [-p <package>] [--workspace] [--layout <auto|single|modules>] [--check] [--clean]
 ```
 
 Errors are written to stderr with a `cargo inertia:` prefix and a non-zero exit code.
@@ -105,3 +106,7 @@ Component paths may contain normal slash-separated segments such as `Todos/Index
 The checker is intentionally lightweight. It recursively scans `.rs` source text, excluding `target` and `node_modules`; it does not expand macros or query rustc's type information. Only literal component attributes are discovered. It also does not reject frontend pages that have no Rust declaration.
 
 Use `cargo check` and application tests in addition to this command. See [typed pages and props](/docs/guides/typed-pages-and-props) for the compiler-checked boundary.
+
+## `sync`
+
+`sync` compiles filtered `__inertia_typegen_` tests and writes deterministic TypeScript without starting the application. It supports Cargo package, workspace, target, and feature selection; integer and dynamic-page policies; single and managed-module layouts; CI `--check`; and ownership-safe `--clean`. See [Generated TypeScript contracts](/docs/guides/generated-types).

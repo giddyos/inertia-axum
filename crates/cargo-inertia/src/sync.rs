@@ -97,12 +97,17 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
     if bundles.is_empty() && has_typed_declaration(package_root) {
         return Err("error[INERTIA-TYPEGEN-018]: no type exporters were compiled; enable the typegen feature".into());
     }
+    let dynamic_warnings = dynamic_page_diagnostics(package_root, args.dynamic_pages)?;
     if layout == OutputLayout::Modules {
         let (files, warnings) = render_modules(
             &bundles,
             args.large_integers,
             args.import_extension.as_deref(),
         )?;
+        let warnings = warnings
+            .into_iter()
+            .chain(dynamic_warnings)
+            .collect::<Vec<_>>();
         for warning in &warnings {
             eprintln!("{warning}");
         }
@@ -118,21 +123,7 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
         );
     }
     let (content, mut warnings) = reconcile_and_render(&bundles, args.large_integers)?;
-    if has_dynamic_page(package_root) {
-        match args.dynamic_pages {
-            DynamicPagePolicy::Ignore => {}
-            DynamicPagePolicy::Warn => warnings.push(
-                "warning[INERTIA-TYPEGEN-019]: dynamic Inertia page has no static prop contract"
-                    .into(),
-            ),
-            DynamicPagePolicy::Error => {
-                return Err(
-                    "error[INERTIA-TYPEGEN-019]: dynamic Inertia page has no static prop contract"
-                        .into(),
-                );
-            }
-        }
-    }
+    warnings.extend(dynamic_warnings);
     for warning in &warnings {
         eprintln!("{warning}");
     }
@@ -150,8 +141,77 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
     Ok(())
 }
 
-fn has_dynamic_page(root: &Path) -> bool {
-    source_tree_contains(root, "page!(")
+fn dynamic_page_diagnostics(root: &Path, policy: DynamicPagePolicy) -> Result<Vec<String>, String> {
+    dynamic_pages(root)
+        .into_iter()
+        .filter_map(|component| {
+            let message = format!("dynamic Inertia page `{component}` has no static prop contract\n\nexact TypeScript generation requires #[derive(InertiaPage)] on a typed page\n\nuse --dynamic-pages error to reject untyped dynamic pages in CI");
+            match policy {
+                DynamicPagePolicy::Ignore => None,
+                DynamicPagePolicy::Warn => Some(Ok(format!("warning[INERTIA-TYPEGEN-019]: {message}"))),
+                DynamicPagePolicy::Error => Some(Err(format!("error[INERTIA-TYPEGEN-019]: {message}"))),
+            }
+        })
+        .collect()
+}
+
+fn dynamic_pages(root: &Path) -> Vec<String> {
+    let mut pages = Vec::new();
+    collect_dynamic_pages(root, &mut pages);
+    pages.sort();
+    pages.dedup();
+    pages
+}
+
+fn collect_dynamic_pages(root: &Path, pages: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.file_name().is_some_and(|name| name == "target") {
+            continue;
+        }
+        if path.is_dir() {
+            collect_dynamic_pages(&path, pages);
+        } else if path.extension().and_then(|value| value.to_str()) == Some("rs") {
+            if let Ok(source) = fs::read_to_string(path) {
+                pages.extend(dynamic_pages_in_source(&source));
+            }
+        }
+    }
+}
+
+fn dynamic_pages_in_source(source: &str) -> Vec<String> {
+    use syn::{parse::Parser, visit::Visit};
+    #[derive(Default)]
+    struct Visitor(Vec<String>);
+    impl<'ast> Visit<'ast> for Visitor {
+        fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+            if mac
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "page")
+            {
+                let first_literal = |input: syn::parse::ParseStream<'_>| {
+                    let literal: syn::LitStr = input.parse()?;
+                    let _: proc_macro2::TokenStream = input.parse()?;
+                    Ok(literal.value())
+                };
+                if let Ok(component) = first_literal.parse2(mac.tokens.clone()) {
+                    self.0.push(component);
+                }
+            }
+            syn::visit::visit_macro(self, mac);
+        }
+    }
+    let Ok(file) = syn::parse_file(source) else {
+        return Vec::new();
+    };
+    let mut visitor = Visitor::default();
+    visitor.visit_file(&file);
+    visitor.0
 }
 
 fn has_typed_declaration(root: &Path) -> bool {
@@ -918,5 +978,15 @@ mod tests {
         assert!(validate_generated_path(Path::new("types/Todo.ts")).is_ok());
         assert!(validate_generated_path(Path::new("../Todo.ts")).is_err());
         assert!(validate_generated_path(Path::new("/Todo.ts")).is_err());
+    }
+
+    #[test]
+    fn dynamic_scanner_reports_literal_page_components() {
+        let source = r#"
+            page!("Users/Show", { user });
+            crate::page!("Home", { greeting: value() });
+            unrelated!("Ignored");
+        "#;
+        assert_eq!(dynamic_pages_in_source(source), ["Users/Show", "Home"]);
     }
 }

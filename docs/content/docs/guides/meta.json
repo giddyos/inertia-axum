@@ -3,6 +3,7 @@
   "pages": [
     "vite-and-assets",
     "typed-pages-and-props",
+    "generated-types",
     "partial-reloads",
     "deferred-and-lazy-props",
     "merge-scroll-once-and-reset",

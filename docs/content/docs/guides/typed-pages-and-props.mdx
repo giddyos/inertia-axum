@@ -9,8 +9,10 @@ Derive `InertiaPage` when a stable page contract is shared by handlers and tests
 use inertia_axum::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, InertiaType)]
 pub struct Todo {
+    // Use a string serializer too when IDs may exceed Number.MAX_SAFE_INTEGER.
+    #[ts(type = "string")]
     pub id: u64,
     pub title: String,
 }
@@ -53,3 +55,5 @@ page.assert_missing(TodosPage::TODOS);
 ```
 
 The derive generates `TodosPage::COMPONENT` and a typed key for each serialized top-level field. Use `InertiaProps` for reusable typed prop collections such as shared data; the complete attributes, rename rules, supported shapes, and reserved fields remain in the [Macros reference](/docs/reference/macros).
+
+Run `cargo inertia sync` to compile these contracts and generate `PagePropsFor<"Todos/Index">`. See [Generated TypeScript contracts](/docs/guides/generated-types) for setup, frontend examples, integer policies, workspaces, and CI.

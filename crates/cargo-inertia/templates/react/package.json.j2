@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build[[% if ssr.enabled %]] && vite build --ssr[[% endif %]]", "check": "tsc --noEmit", "preview": "vite preview" },
+  "scripts": { "dev": "vite", "build": "vite build[[% if ssr.enabled %]] && vite build --ssr[[% endif %]]", "check": "tsc --noEmit", "preview": "vite preview", "types:sync": "cargo inertia sync", "types:check": "cargo inertia sync --check" },
   "engines": { "node": "[[% if ssr.enabled %]]>=22.12.0[[% else %]]^20.19.0 || >=22.12.0[[% endif %]]" },
   "dependencies": { "@inertiajs/react": "[[= versions.inertia]]", "axios": "[[= versions.axios]]", "react": "[[= versions.react]]", "react-dom": "[[= versions.react_dom]]" },
   "devDependencies": { "@inertiajs/vite": "[[= versions.inertia]]", "@types/react": "[[= versions.react_types]]", "@types/react-dom": "[[= versions.react_dom_types]]", "@vitejs/plugin-react": "[[= versions.vite_plugin_react]]", "typescript": "[[= versions.typescript]]", "vite": "[[= versions.vite]]" }

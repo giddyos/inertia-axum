@@ -1,0 +1,87 @@
+---
+title: Generated TypeScript contracts
+description: Compile typed Rust page props into deterministic TypeScript with cargo inertia sync.
+---
+
+## Five-minute setup
+
+Install `cargo-inertia`, derive a typed page, derive `InertiaType` on nested application DTOs, then run:
+
+```sh
+cargo inertia sync frontend/src/types/inertia.ts
+```
+
+The command runs filtered test exporters for the selected Cargo target. It does not start the server, execute handlers, mutate Rust source, or require a handwritten registry or direct `ts-rs` dependency. Commit the generated output so frontend-only builds do not need Rust.
+
+## Typed pages and nested application types
+
+```rust title="src/pages/todos.rs"
+use inertia_axum::prelude::*;
+use serde::Serialize;
+
+#[derive(Serialize, InertiaType)]
+pub struct Todo { pub id: u32, pub title: String }
+
+#[derive(InertiaPage)]
+#[inertia(component = "Todos/Index", rename_all = "camelCase")]
+pub struct TodosPage {
+    pub todos: Vec<Todo>,
+    pub selected: Prop<Option<Todo>>,
+    pub subtitle: Option<String>,
+}
+```
+
+`Prop<T>` is an optional property, `Prop<Option<T>>` is optional and nullable, and ordinary `Option<T>` remains required and nullable. Runtime rename and skip behavior is reused exactly. Protocol-owned `errors` is supplied by Inertia core and is never duplicated in route props.
+
+## Shared props
+
+```rust title="src/shared_props.rs"
+#[derive(InertiaProps)]
+#[inertia(shared, rename_all = "camelCase")]
+pub struct AppSharedProps { pub app_name: String }
+```
+
+One shared root generates `InertiaConfig.sharedPageProps` module augmentation.
+
+## React, Vue, and Svelte
+
+```tsx title="frontend/src/Pages/Todos/Index.tsx"
+import { usePage } from "@inertiajs/react";
+import type { PagePropsFor } from "@/types/inertia";
+const page = usePage<PagePropsFor<"Todos/Index">>();
+```
+
+Vue uses `usePage` from `@inertiajs/vue3`; Svelte uses `usePage` from `@inertiajs/svelte`. The same `PagePropsFor<Component>` generic provides route props, configured shared props, and protocol errors. All generated imports are type-only.
+
+## Large integers
+
+The default `--large-integers number` matches ordinary JSON but warns about precision above `Number.MAX_SAFE_INTEGER`. Use `--large-integers error` in strict CI. `bigint` requires a frontend transport transform. For lossless IDs, change Rust serialization and declare the wire type:
+
+```rust title="src/models.rs"
+#[serde(serialize_with = "serialize_id_as_string")]
+#[ts(type = "string")]
+pub id: u64,
+```
+
+## Custom serializers
+
+Fields using Serde `serialize_with` or `with` must specify `#[ts(type = "...")]` or `#[ts(as = "...")]`; otherwise `INERTIA-TYPEGEN-010` fails compilation rather than guessing.
+
+## Workspaces and output layouts
+
+Select a package with `-p server`, or use `--workspace`. Cargo feature flags are forwarded with `--features`, `--all-features`, and `--no-default-features`. A `.ts` destination selects one file; a directory selects managed modules with `.inertia-types.json`. `--clean` removes only generator-owned files.
+
+Package defaults may set `[package.metadata.inertia.types] output = "frontend/src/types/inertia.ts"`. Without configuration, the default is used only when `frontend/src` exists.
+
+## CI
+
+```sh
+cargo inertia sync -p server --check --deny-warnings \
+  --large-integers error --dynamic-pages error
+```
+
+Use `--dynamic-pages warn` when an application intentionally retains untyped dynamic pages.
+
+## Dynamic pages and troubleshooting
+
+The source scanner reports literal `page!` calls as `INERTIA-TYPEGEN-019`; it never guesses expression types. Convert a route to `#[derive(InertiaPage)]` for an exact contract. If `INERTIA-TYPEGEN-018` reports no exporters, enable the default `typegen` feature. Name, component, shared-root, unsafe-path, and integer failures include stable `INERTIA-TYPEGEN-*` codes suitable for CI logs.

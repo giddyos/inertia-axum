@@ -77,3 +77,7 @@ manifest is checked only when one already exists.
 
 See the exact [CLI reference](/docs/reference/cli) and
 [Deployment](/docs/guides/deployment) for gates that the checker does not replace.
+
+## Synchronize Rust contracts
+
+`cargo inertia sync` compiles typed page and props roots into TypeScript. Use `--check --deny-warnings` in CI and commit the output. The complete setup, workspace selection, layouts, integer policies, and framework imports are in [Generated TypeScript contracts](/docs/guides/generated-types).

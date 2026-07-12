@@ -4,7 +4,7 @@ import GithubSlugger from 'github-slugger';
 
 const root = path.resolve('content/docs');
 const errors = [];
-const expectedPageCount = 60;
+const expectedPageCount = 61;
 
 async function walk(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });

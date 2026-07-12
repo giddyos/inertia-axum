@@ -96,3 +96,7 @@ The adapter hashes the supplied key material with SHA-512 before constructing th
 `inertia-axum-test` depends on `inertia-axum` with its defaults plus `ssr` and `test-support`. Cargo unifies those features for the test build. This makes SSR test helpers available even if the application dependency does not select `ssr` in its normal dependency set.
 
 See [configuration](/docs/reference/configuration) for the runtime defaults introduced by each integration.
+
+## Type generation
+
+The default features include `typegen`, which reexports the internal compiled TypeScript adapter and enables `InertiaType`. Applications disabling defaults must explicitly enable `macros`, `vite` as needed, and `typegen` before running `cargo inertia sync`. Ecosystem mappings are individually available as `typegen-uuid`, `typegen-chrono`, `typegen-url`, and the other `typegen-*` features.

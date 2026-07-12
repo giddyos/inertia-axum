@@ -28,7 +28,7 @@ init = ["cli", "templates", "package-managers", "dep:tempfile"]
 interactive = ["init", "dep:cliclack"]
 dev = ["cli", "package-managers", "dep:command-group", "dep:ctrlc"]
 check = ["cli", "dep:cargo_metadata", "dep:serde_json", "dep:syn"]
-sync = ["cli", "dep:cargo_metadata", "dep:dprint-plugin-typescript", "dep:fs2", "dep:inertia-axum-typegen", "dep:serde", "dep:serde_json", "dep:sha2", "dep:tempfile"]
+sync = ["cli", "dep:cargo_metadata", "dep:dprint-plugin-typescript", "dep:fs2", "dep:inertia-axum-typegen", "dep:proc-macro2", "dep:serde", "dep:serde_json", "dep:sha2", "dep:syn", "dep:tempfile"]
 
 [dependencies]
 cargo_metadata = { version = "0.23.1", optional = true }
@@ -41,6 +41,7 @@ fs2 = { version = "0.4.3", optional = true }
 inertia-axum-typegen = { workspace = true, optional = true }
 include_dir = { version = "0.7.4", optional = true }
 minijinja = { version = "2.21.0", default-features = false, features = ["custom_syntax", "debug", "serde"], optional = true }
+proc-macro2 = { version = "1", optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 sha2 = { version = "0.11", optional = true }

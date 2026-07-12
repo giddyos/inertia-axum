@@ -147,3 +147,7 @@ Fields may use `#[inertia(redact)]` or `#[inertia(sensitive)]` instead of the co
 Only one validator backend may be configured. With no `validator` or `validate_with`, the generated validation method succeeds.
 
 See [forms and validation](/docs/guides/forms-and-validation) for redirect behavior and [Cargo features](/docs/reference/cargo-features) for backend dependencies.
+
+## Type-generation derives
+
+`InertiaType` exports nested structs and enums through test-only compiled proxies. `InertiaPage` creates a route root and `InertiaProps` creates a reusable root; `#[inertia(shared)]` marks the single shared root. Root overrides use `typegen(name = "...")`, `typegen(path = "...")`, or `typegen(skip)`. Field wire overrides use `#[ts(type = "...")]` and `#[ts(as = "...")]`. See [Generated TypeScript contracts](/docs/guides/generated-types).
