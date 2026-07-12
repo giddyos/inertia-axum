@@ -1,105 +1,104 @@
 ---
 title: Quick start
-description: Create and run a working Axum and Inertia page with Svelte, React, or Vue in under ten minutes.
+description: Build an Axum and Inertia page with immediate and deferred data in Svelte, React, or Vue.
 keywords:
   - quick start
-  - page macro
+  - deferred props
   - cargo inertia init
 ---
 
 import { Snippet } from '@/components/snippet'
 
-## What you will accomplish
-
-You will create a new application, generate one frontend page, build its assets, and serve `Hello from inertia-axum` at `http://127.0.0.1:3000`.
-
-## Prerequisites and features
-
-Complete [Installation](/docs/getting-started/installation) first. This guide uses the default `macros` and `vite` features. It does not require `ssr`, a session store, or a custom root document.
-
-## Minimal copyable implementation
+Build a first page that renders a greeting immediately, shows a loading fallback, and then reveals stats produced by slower server work.
 
 <Steps>
   <Step>
-    ### Create the Rust project
+    ### Create the project
 
-    ```bash
+    ```bash title="Terminal"
     cargo new inertia-demo
     cd inertia-demo
+    ```
+  </Step>
+  <Step>
+    ### Add the dependencies
+
+    ```bash title="Terminal"
     cargo add axum@0.8.9 --features http1,tokio
-    cargo add inertia-axum@1.0.0-alpha.1
-    cargo add tokio@1 --features macros,net,rt-multi-thread
+    cargo add inertia-axum@=1.0.0-alpha.1
+    cargo add serde@1 --features derive
+    cargo add tokio@1 --features macros,net,rt-multi-thread,time
     cargo install cargo-inertia --version 1.0.0-alpha.1 --locked
     ```
   </Step>
   <Step>
     ### Generate one frontend
 
-    Choose the framework you want to use:
-
     <Tabs items={['Svelte', 'React', 'Vue']}>
       <Tab value="Svelte">
-        ```bash
+        ```bash title="Terminal"
         cargo inertia init --frontend svelte
         ```
       </Tab>
       <Tab value="React">
-        ```bash
+        ```bash title="Terminal"
         cargo inertia init --frontend react
         ```
       </Tab>
       <Tab value="Vue">
-        ```bash
+        ```bash title="Terminal"
         cargo inertia init --frontend vue
         ```
       </Tab>
     </Tabs>
-
-    The command creates `frontend/package.json`, `frontend/vite.config.ts`, `frontend/src/main.ts`, and `frontend/src/Pages/Home.*`.
   </Step>
   <Step>
-    ### Return the `Home` page from Axum
+    ### Add the Rust server
 
-    Replace `src/main.rs` with this reduced version of the maintained `axum-minimal` example:
+    Replace `src/main.rs` with the checked quick-start server:
 
     <Snippet language="rust" source="quick-start-server/src/main.rs" title="src/main.rs" />
   </Step>
   <Step>
-    ### Build and run
+    ### Preview the generated page
 
-    ```bash
+    The selected `Home` component uses its adapter's `Deferred` boundary:
+
+    <Tabs items={['Svelte', 'React', 'Vue']}>
+      <Tab value="Svelte">
+        <Snippet language="svelte" source="svelte/src/Pages/Home.svelte" title="frontend/src/Pages/Home.svelte" />
+      </Tab>
+      <Tab value="React">
+        <Snippet language="tsx" source="react/src/Pages/Home.tsx" title="frontend/src/Pages/Home.tsx" />
+      </Tab>
+      <Tab value="Vue">
+        <Snippet language="vue" source="vue/src/Pages/Home.vue" title="frontend/src/Pages/Home.vue" />
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step>
+    ### Install and build
+
+    ```bash title="Terminal"
     pnpm --dir frontend install
     pnpm --dir frontend build
+    ```
+  </Step>
+  <Step>
+    ### Run the application
+
+    ```bash title="Terminal"
     cargo run
     ```
 
-    Open `http://127.0.0.1:3000`. The generated `Home` component renders `Hello from inertia-axum`.
+    Open `http://127.0.0.1:3000`.
   </Step>
 </Steps>
 
-## How it works
+`greeting` arrives in the initial response. The simulated slow `load_stats` work is deferred so it cannot hold up that response; the client shows `Loading stats…`, requests `stats`, and replaces the fallback with `3 projects · 12 tasks` when the follow-up finishes.
 
-`page!` sets the component name to `Home` and serializes `greeting` into the page props. `InertiaApp::vite` reads `frontend/dist/.vite/manifest.json` during startup, generates the browser asset tags, and mounts the build directory at `/build`. `.inertia(inertia)` installs the request and response layer on the router.
+## Next steps
 
-The built-in root document handles the first HTML response. When the frontend makes an Inertia visit, the same route returns a JSON page object instead of rebuilding the document.
-
-## Defaults and edge cases
-
-- The generated Vite entry is `src/main.ts`, matching the adapter default.
-- The component name is case-sensitive and must resolve to `frontend/src/Pages/Home.*`.
-- `build()` reads the production manifest immediately. Run the frontend build first or set `VITE_DEV_SERVER_URL` for a live Vite server.
-- A custom root template is not required.
-- This is CSR startup. If you configure SSR, replace `build()` with `start().await`.
-
-## Production guidance
-
-Commit `frontend/pnpm-lock.yaml`, rebuild the frontend for every deployment, and start the Rust binary only after the manifest exists. Use the framework-specific guide to adopt the tested `@inertiajs/vite` configuration and the SSR guide before enabling server rendering.
-
-## Related guides and examples
-
-- [Svelte](/docs/frontend/svelte)
-- [React](/docs/frontend/react)
-- [Vue](/docs/frontend/vue)
-- [Project structure](/docs/getting-started/project-structure)
-- [Page responses](/docs/concepts/page-responses)
-- [`axum-minimal` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-minimal)
+- [Development mode](/docs/getting-started/frontend-setup)
+- [Typed pages](/docs/guides/typed-pages-and-props)
+- [Forms and validation](/docs/guides/forms-and-validation)

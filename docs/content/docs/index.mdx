@@ -7,49 +7,27 @@ keywords:
   - Rust
 ---
 
-`inertia-axum` is an Inertia.js v3 server adapter for Axum. Keep routes, state,
-extractors, middleware, validation, and data loading in Rust while rendering pages
-with Svelte, React, or Vue—without maintaining a separate JSON API.
+`inertia-axum` is an Inertia.js v3 server adapter for Axum. Keep routing, data loading, validation, and redirects in Rust while Svelte, React, or Vue renders the pages—without a separate JSON API.
 
 <Cards>
-  <Card title="Build your first page" href="/docs/getting-started/quick-start">
-    Start an Axum + Inertia application in under ten minutes.
+  <Card title="Start an application" href="/docs/getting-started/quick-start">
+    Build the first page with immediate and deferred data.
   </Card>
-  <Card title="Choose a frontend" href="/docs/frontend">
-    Install Svelte, React, or Vue with the repository's tested Vite setup.
+  <Card title="Pass and defer data" href="/docs/guides/deferred-and-lazy-props">
+    Keep the initial response fast while expensive props load.
   </Card>
-  <Card title="Understand the protocol" href="/docs/concepts/how-inertia-works">
-    See how initial HTML responses become fast page-object visits.
+  <Card title="Validate forms" href="/docs/guides/forms-and-validation">
+    Return errors, old input, and redirects from Axum handlers.
   </Card>
-  <Card title="Add SSR" href="/docs/ssr">
-    Run managed Node SSR or connect an external rendering server.
+  <Card title="Enable SSR" href="/docs/ssr">
+    Add managed Node rendering or an external SSR server.
   </Card>
 </Cards>
 
-## What you can build
+## Choose an example
 
-- Dynamic `page!` responses or strongly typed pages and props.
-- Shared, request-aware, lazy, optional, deferred, rescued, mergeable, scroll,
-  and once-only data.
-- Redirect-based form validation with error bags, old input, and flash values.
-- Built-in, marker-based, Askama, or fully custom root documents.
-- Client-side rendering and server-side rendering from the same Axum routes.
-- In-process application and SSR tests with `inertia-axum-test`.
+- [`axum-svelte`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-svelte), [`axum-react`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-react), and [`axum-vue`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-vue) show maintained framework applications.
+- [`todo`](https://github.com/giddyos/inertia-axum/tree/main/examples/todo) shows typed pages, forms, deferred props, and tests.
+- [`incident-board`](https://github.com/giddyos/inertia-axum/tree/main/examples/incident-board) shows advanced prop policies.
 
-## Start here
-
-New to the adapter? Follow [Getting started](/docs/getting-started). Already have
-an Inertia frontend? Read [Application and router](/docs/concepts/application-and-router),
-then [Page responses](/docs/concepts/page-responses).
-
-The crate is currently `1.0.0-alpha.1` and requires Rust 1.88 or newer. Alpha
-releases may change before 1.0; pin the version and review migration notes when
-upgrading.
-
-## Essential links
-
-- [Source repository](https://github.com/giddyos/inertia-axum)
-- [Crate on crates.io](https://crates.io/crates/inertia-axum)
-- [Rust API documentation](https://docs.rs/inertia-axum/latest/inertia_axum/)
-- [Runnable examples](https://github.com/giddyos/inertia-axum/tree/main/examples)
-- [Inertia.js v3 documentation](https://inertiajs.com/docs/v3/getting-started)
+This documentation targets `1.0.0-alpha.1` and Rust 1.88. Pin the exact prerelease version and review the [migration guide](/docs/migrations/from-0-5) when upgrading from 0.5.

@@ -1,103 +1,38 @@
 ---
 title: Frontend setup
-description: Connect Svelte, React, or Vue to the Inertia v3 client and the Vite asset conventions used by inertia-axum.
+description: Run the generated Vite frontend in development and production.
 keywords:
-  - frontend setup
+  - frontend workflow
   - Vite
-  - Svelte
-  - React
-  - Vue
+  - development
+  - production
 ---
 
-## What you will accomplish
+Use these commands after completing the [quick start](/docs/getting-started/quick-start).
 
-You will choose an Inertia v3 frontend adapter, create its page directory, and understand the development and production build paths expected by the Rust server.
+## Development
 
-## Prerequisites and features
+Run Vite in the first terminal:
 
-- A working Rust application from the [Quick start](/docs/getting-started/quick-start).
-- Node.js 22.12 or newer and pnpm.
-- The default `vite` Cargo feature.
-- The `ssr` Cargo feature only if you will configure SSR later.
-
-## Minimal framework setup
-
-The tested `cargo-inertia` scaffold can create any supported frontend:
-
-<Tabs items={['Svelte', 'React', 'Vue']}>
-  <Tab value="Svelte">
-    ```bash
-    cargo inertia init --frontend svelte
-    ```
-
-    Continue with [Svelte](/docs/frontend/svelte).
-  </Tab>
-  <Tab value="React">
-    ```bash
-    cargo inertia init --frontend react
-    ```
-
-    Continue with [React](/docs/frontend/react).
-  </Tab>
-  <Tab value="Vue">
-    ```bash
-    cargo inertia init --frontend vue
-    ```
-
-    Continue with [Vue](/docs/frontend/vue).
-  </Tab>
-</Tabs>
-
-All three frontends use the same server route:
-
-```rust
-async fn index() -> DynamicPage {
-    page!("Home", { greeting: "Hello" })
-}
-```
-
-The string `Home` selects a file under `frontend/src/Pages`; the object becomes that component's props.
-
-### Development server
-
-Run Vite and Rust in separate terminals:
-
-```bash
+```bash title="Terminal 1"
 pnpm --dir frontend dev -- --host 127.0.0.1
 ```
 
-```bash
+Point the Rust application at that server in the second terminal:
+
+```bash title="Terminal 2"
 VITE_DEV_SERVER_URL=http://127.0.0.1:5173 cargo run
 ```
 
-### Production build
+Development mode loads assets from Vite and does not require a manifest.
 
-```bash
+## Production
+
+```bash title="Terminal"
 pnpm --dir frontend build
 cargo run --release
 ```
 
-## How it works
+Production mode reads `frontend/dist/.vite/manifest.json` at startup. The default entry is `src/main.ts`; if Vite uses another input, configure the matching `.entry(...)` on `InertiaApp::vite`.
 
-In development, the environment variable tells `InertiaApp::vite` to emit Vite client and entry URLs instead of reading a manifest. In production, Vite writes the manifest and hashed assets; inertia-axum reads that manifest once, emits the correct tags, calculates an asset version, and serves those files.
-
-The frontend adapter mounts on the built-in root's `#app` element. It resolves page names sent by Rust and performs subsequent visits with Inertia protocol headers.
-
-## Defaults and edge cases
-
-- The default Rust entry is `src/main.ts`. Call `.entry("src/app.js")` or `.entry("src/app.jsx")` when your Vite input differs.
-- The default production directory is `frontend/dist` and the public asset URL is `/build`.
-- Production Vite usage needs the client manifest even though the SSR protocol does not consume it.
-- Framework components may use `Pages` or `pages`, but the resolver and Rust component strings must agree on case.
-- React 19+, Svelte 5+, and Vue 3 are the supported generations in the maintained examples.
-
-## Production guidance
-
-Use exact dependency versions through a committed lockfile. Build the client and, when enabled, the SSR bundle in CI. Keep the Vite endpoint private in development and never point a production application at a developer workstation.
-
-## Related guides and examples
-
-- [Frontend frameworks](/docs/frontend)
-- [Vite and assets](/docs/guides/vite-and-assets)
-- [SSR frontend build](/docs/ssr/frontend-build)
-- [Cargo CLI](/docs/guides/cargo-inertia)
+Continue with [Vite and assets](/docs/guides/vite-and-assets) when you need custom build directories, public paths, or entries.

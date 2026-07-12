@@ -1,0 +1,12 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: "fs::read_to_string(root.join(\"frontend/tsconfig.json\")).unwrap()"
+---
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": true
+  }
+}

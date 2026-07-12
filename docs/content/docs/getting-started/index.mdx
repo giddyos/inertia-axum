@@ -1,69 +1,35 @@
 ---
 title: Getting started
-description: Build your first Axum and Inertia application, then choose a Svelte, React, or Vue frontend.
+description: Build your first Axum and Inertia application with Svelte, React, or Vue.
 keywords:
   - getting started
   - Axum
   - Inertia
 ---
 
-## What you will accomplish
+Build a working Axum, Vite, and Inertia application with Svelte, React, or Vue.
 
-You will create an Axum server that returns an Inertia page, connect a Vite frontend, and open the result in a browser. The [quick start](/docs/getting-started/quick-start) is designed to reach that result in under ten minutes.
-
-## Prerequisites and features
-
-- Rust 1.88 or newer.
-- Node.js 22.12 or newer and pnpm.
-- `inertia-axum` 1.0.0-alpha.1.
-- The default `macros` and `vite` Cargo features. The first application does not need `ssr` or a custom root template.
-
-## Minimal path
+## Recommended path
 
 <Steps>
   <Step>
-    ### Check the installation requirements
+    ### Install the dependencies
 
-    Read [Installation](/docs/getting-started/installation) for the supported toolchain, default features, and dependency roles. The self-contained quick start repeats the commands you need.
+    Check the supported toolchain and add the Rust packages in [Installation](/docs/getting-started/installation).
   </Step>
   <Step>
-    ### Render a working page
+    ### Complete the quick start
 
-    Complete the [Quick start](/docs/getting-started/quick-start). It creates the frontend, builds its manifest, installs `InertiaApp` on an ordinary Axum router, and serves `Home`.
+    Build a page with immediate and deferred props in the [Quick start](/docs/getting-started/quick-start).
   </Step>
   <Step>
-    ### Choose your frontend
+    ### Learn the frontend workflow
 
-    Go directly to [Svelte](/docs/frontend/svelte), [React](/docs/frontend/react), or [Vue](/docs/frontend/vue). Each guide uses the matching maintained repository example.
+    Use the [development and production commands](/docs/getting-started/frontend-setup).
   </Step>
   <Step>
-    ### Learn the files
+    ### Review the file layout
 
-    Use [Project structure](/docs/getting-started/project-structure) to see which files belong to Rust, Vite, and the page component.
+    See the conventional [project structure](/docs/getting-started/project-structure).
   </Step>
 </Steps>
-
-## How it works
-
-Your handler returns a page response such as `page!("Home", { greeting: "Hello" })`. `RouterInertiaExt::inertia` installs request parsing and response finalization around the router. An initial browser request receives complete HTML; a later request carrying `X-Inertia: true` receives the page object as JSON.
-
-The frontend resolves the component name `Home` to a file under `frontend/src/Pages`. Axum remains responsible for routing, state, extractors, middleware, validation, and redirects.
-
-## Defaults and edge cases
-
-- `InertiaApp::vite("frontend")` expects `frontend/src/main.ts` and `frontend/dist/.vite/manifest.json` unless you override the entry or build directory.
-- The built-in root document is the default. A template file is optional.
-- `build()` is synchronous and is correct for CSR-only startup. Configured SSR requires asynchronous `start()`.
-- Production startup fails early when the Vite manifest or configured entry is missing. Development can use `VITE_DEV_SERVER_URL` instead.
-
-## Production guidance
-
-Commit the frontend lockfile, run the Vite production build before starting Rust, and build the server with `--release`. Add SSR only after the CSR application works; the same routes continue to serve both modes.
-
-## Related guides and examples
-
-- [Frontend setup](/docs/getting-started/frontend-setup)
-- [Application and router](/docs/concepts/application-and-router)
-- [Vite and assets](/docs/guides/vite-and-assets)
-- [Maintained examples](/docs/reference/examples)
-- [`axum-minimal` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-minimal)

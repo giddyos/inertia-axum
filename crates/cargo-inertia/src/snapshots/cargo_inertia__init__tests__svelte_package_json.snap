@@ -5,7 +5,18 @@ expression: package
 {
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build" },
-  "dependencies": { "@inertiajs/svelte": "^3.0.0", "svelte": "latest" },
-  "devDependencies": { "vite": "latest", "@sveltejs/vite-plugin-svelte": "latest", "typescript": "latest" }
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@inertiajs/svelte": "3.6.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.1.2",
+    "svelte": "5.55.7",
+    "svelte-preprocess": "6.0.5",
+    "typescript": "5.9.3",
+    "vite": "8.1.4"
+  }
 }

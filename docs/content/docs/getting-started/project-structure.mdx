@@ -1,25 +1,18 @@
 ---
 title: Project structure
-description: Organize Rust routes, Vite assets, and Inertia page components using the repository's conventional layout.
+description: See how Rust component names map to frontend pages and the Vite manifest.
 keywords:
   - project structure
   - page components
   - Vite manifest
 ---
 
-## What you will accomplish
+Keep Axum routes and frontend pages in one project so their component names remain easy to trace.
 
-You will organize a small application so Rust component names, frontend page files, and Vite build output line up without custom paths.
-
-## Prerequisites and features
-
-Start with the application from the [Quick start](/docs/getting-started/quick-start). The structure below uses the default `macros` and `vite` features and the built-in root document.
-
-## Minimal project layout
+## Conventional layout
 
 <Files>
   <File name="Cargo.toml" />
-  <File name="Cargo.lock" />
   <Folder name="src" defaultOpen>
     <File name="main.rs" />
   </Folder>
@@ -31,57 +24,27 @@ Start with the application from the [Quick start](/docs/getting-started/quick-st
       <File name="main.ts" />
       <Folder name="Pages" defaultOpen>
         <File name="Home.svelte (or Home.tsx / Home.vue)" />
+        <Folder name="Users">
+          <File name="Show.svelte (or Show.tsx / Show.vue)" />
+        </Folder>
       </Folder>
     </Folder>
     <Folder name="dist">
       <Folder name=".vite">
         <File name="manifest.json" />
       </Folder>
-      <Folder name="assets" />
     </Folder>
   </Folder>
 </Files>
 
-Keep the relationship explicit in Rust:
+The Rust component name selects a file below `frontend/src/Pages`:
 
-```rust title="src/main.rs"
-async fn index() -> DynamicPage {
-    page!("Home", { greeting: "Hello" })
+```rust title="src/routes/users.rs"
+async fn show_user() -> DynamicPage {
+    page!("Users/Show", { name: "Ada" })
 }
-
-let inertia = InertiaApp::vite("frontend").build()?;
 ```
 
-`Home` resolves beneath `frontend/src/Pages`, while the Vite root passed to `InertiaApp::vite` owns the source entry and production manifest.
+`Users/Show` resolves to `Pages/Users/Show.svelte`, `Show.tsx`, or `Show.vue`. Vite records `src/main.ts` and its hashed browser assets in `frontend/dist/.vite/manifest.json`.
 
-## How it works
-
-| Path | Responsibility |
-| --- | --- |
-| `src/main.rs` | Axum listener, routes, state, and `InertiaApp` startup. |
-| `frontend/src/main.ts` | Boots the selected Inertia client adapter. |
-| `frontend/src/Pages/` | Holds components selected by Rust page names. |
-| `frontend/vite.config.ts` | Defines the framework plugin, entry, manifest, and optional SSR build. |
-| `frontend/dist/.vite/manifest.json` | Maps the configured entry to hashed browser assets. |
-
-The `frontend/dist` directory is generated. The manifest is read during application startup; individual requests do not re-read it.
-
-## Defaults and edge cases
-
-- Do not add `templates/app.html` unless you need a custom document. The built-in root is complete.
-- If the entry is `src/app.jsx`, configure `.entry("src/app.jsx")`; the manifest key must match exactly.
-- If the build leaves `frontend/dist`, configure `.build_dir(...)` and `.public_path(...)` together, as the maintained framework examples do.
-- Page names may contain directories, such as `Users/Show`, which resolve beneath `Pages/Users/Show.*`.
-- Keep generated assets out of source control unless an example intentionally uses committed fixtures.
-
-## Production guidance
-
-Commit both lockfiles, build `frontend/dist` as a deployment step, and fail the deployment if the manifest is absent. Keep application code and pages together when they change as one unit so Rust page names cannot drift from frontend paths.
-
-## Related guides and examples
-
-- [Typed pages and props](/docs/guides/typed-pages-and-props)
-- [Vite and assets](/docs/guides/vite-and-assets)
-- [Custom root documents](/docs/guides/root-documents)
-- [Maintained examples](/docs/reference/examples)
-- [`axum-minimal` source](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-minimal)
+Next, use [typed pages and props](/docs/guides/typed-pages-and-props) to replace string component names where compile-time contracts help.

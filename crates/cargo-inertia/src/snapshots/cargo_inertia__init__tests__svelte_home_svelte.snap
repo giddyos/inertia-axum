@@ -1,6 +1,34 @@
 ---
 source: crates/cargo-inertia/src/init.rs
-expression: "fs::read_to_string(home_path).unwrap()"
+expression: home
 ---
-<script lang="ts">let { greeting = 'Hello' } = $props();</script>
-<h1>{greeting} from inertia-axum</h1>
+<script lang="ts">
+  import { Deferred } from '@inertiajs/svelte'
+
+  type Stats = {
+    projects: number
+    tasks: number
+  }
+
+  let {
+    greeting = 'Hello',
+    stats,
+  }: {
+    greeting?: string
+    stats?: Stats
+  } = $props()
+</script>
+
+<main>
+  <h1>{greeting} from inertia-axum</h1>
+
+  <Deferred data="stats">
+    {#snippet fallback()}
+      <p>Loading stats…</p>
+    {/snippet}
+
+    {#if stats}
+      <p>{stats.projects} projects · {stats.tasks} tasks</p>
+    {/if}
+  </Deferred>
+</main>

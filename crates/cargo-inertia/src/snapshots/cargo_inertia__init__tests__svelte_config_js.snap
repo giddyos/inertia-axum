@@ -1,0 +1,9 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: "fs::read_to_string(root.join(\"frontend/svelte.config.js\")).unwrap()"
+---
+import preprocess from 'svelte-preprocess'
+
+export default {
+  preprocess: preprocess({ typescript: true }),
+}

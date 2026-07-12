@@ -1,90 +1,33 @@
 ---
 title: Installation
-description: Install inertia-axum, Axum, Tokio, and the optional project CLI with the features needed for a first application.
+description: Install the supported Rust and frontend toolchains and add the first application dependencies.
 keywords:
   - installation
   - Cargo features
   - cargo-inertia
 ---
 
-## What you will accomplish
+## Requirements
 
-You will prepare a Rust project and frontend toolchain for a CSR application using the adapter's default feature set.
+Install Rust 1.88 or newer, Node.js 22.12 or newer, and pnpm 11. The Node requirement comes from the Vite-based maintained examples.
 
-## Prerequisites and features
-
-Verify the supported toolchain before installing dependencies:
-
-```bash
-rustc --version
-node --version
-pnpm --version
+```toml title="Cargo.toml"
+[dependencies]
+axum = { version = "0.8.9", features = ["http1", "tokio"] }
+inertia-axum = "=1.0.0-alpha.1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
 ```
 
-Use Rust 1.88 or newer and Node.js 22.12 or newer for the current Vite toolchain. The commands below keep the default `inertia-axum` features enabled:
+The `time` feature supports the quick start's simulated slow query. Install the optional scaffold CLI if you want it to generate the frontend files:
 
-| Feature | Default | Why it is needed here |
-| --- | --- | --- |
-| `macros` | Yes | Re-exports `InertiaPage`, `InertiaProps`, and `InertiaForm` derives. |
-| `vite` | Yes | Reads the Vite manifest, emits asset tags, versions assets, and serves the build directory. |
-| `ssr` | No | Needed only when a Node or external SSR backend is configured. |
+```bash title="Terminal"
+cargo install cargo-inertia --version 1.0.0-alpha.1 --locked
+```
 
-See [Cargo features](/docs/reference/cargo-features) before enabling validation, transient-store, Askama, testing, or SSR integrations.
+| Default feature | Purpose |
+| --- | --- |
+| `macros` | Re-exports the typed page, prop, and form derives. |
+| `vite` | Reads the Vite manifest and serves built frontend assets. |
 
-## Minimal installation
-
-Run these commands inside an existing binary crate. If you are starting from an empty directory, the [Quick start](/docs/getting-started/quick-start) creates the crate and repeats the same dependency commands.
-
-<Steps>
-  <Step>
-    ### Add the server dependencies
-
-    ```bash
-    cargo add axum@0.8.9 --features http1,tokio
-    cargo add inertia-axum@1.0.0-alpha.1
-    cargo add tokio@1 --features macros,net,rt-multi-thread
-    ```
-
-    The equivalent essential manifest entries are:
-
-    ```toml title="Cargo.toml"
-    [dependencies]
-    axum = { version = "0.8.9", features = ["http1", "tokio"] }
-    inertia-axum = "1.0.0-alpha.1"
-    tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
-    ```
-  </Step>
-  <Step>
-    ### Install the optional project helper
-
-    ```bash
-    cargo install cargo-inertia --version 1.0.0-alpha.1 --locked
-    ```
-
-    The quick start uses `cargo inertia init` to generate a small Svelte, React, or Vue frontend. The CLI is optional; all generated files can also be maintained manually.
-  </Step>
-</Steps>
-
-## How it works
-
-`inertia-axum` depends on Axum's JSON and original-URI support. Your application adds the Axum server features and Tokio runtime needed to bind a listener. Default features provide the Vite asset provider and procedural macros without enabling SSR, cookies, sessions, or a template engine.
-
-## Defaults and edge cases
-
-- Disabling default features disables the derive re-exports and `InertiaApp::vite`.
-  The declarative `page!` macro remains available.
-- `cargo-inertia` is a separate executable package, not a Cargo feature of the runtime crate.
-- A frontend adapter is still required. `inertia-axum` implements the server protocol; it does not bundle Svelte, React, or Vue.
-- The release is an alpha. Pin the version and review the [migration guide](/docs/migrations/from-0-5) when upgrading.
-
-## Production guidance
-
-Commit `Cargo.lock` for applications and the frontend's `pnpm-lock.yaml`. Use `cargo build --locked --release` and `pnpm install --frozen-lockfile` in CI so deployments use the versions you tested.
-
-## Related guides and examples
-
-- [Quick start](/docs/getting-started/quick-start)
-- [Frontend setup](/docs/getting-started/frontend-setup)
-- [Cargo CLI reference](/docs/reference/cli)
-- [Deployment](/docs/guides/deployment)
-- [Maintained examples](/docs/reference/examples)
+See [Cargo features](/docs/reference/cargo-features) for SSR, validation, transient storage, templates, testing integrations, and no-default-feature setups. Then build the [quick-start application](/docs/getting-started/quick-start).
