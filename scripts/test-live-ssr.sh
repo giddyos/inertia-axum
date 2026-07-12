@@ -22,6 +22,8 @@ else
   exit 2
 fi
 
+# The JavaScript is intentionally single-quoted so the shell cannot expand it.
+# shellcheck disable=SC2016
 node -e '
 const major = Number(process.versions.node.split(".")[0])
 if (major < 22) {

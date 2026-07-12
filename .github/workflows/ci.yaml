@@ -12,184 +12,65 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  MISE_LOCKED: "1"
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   INSTA_UPDATE: "no"
-  PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS: "true" 
+  PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS: "true"
 
 jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: docs
-
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+      - uses: jdx/mise-action@v3
         with:
-          version: 11.9.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: docs/pnpm-lock.yaml
-
-      - name: Install documentation dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts=false
-
-      - name: Lint documentation application
-        run: pnpm lint
-
-      - name: Type-check documentation application
-        run: pnpm typecheck
-
-      - name: Validate documentation links and anchors
-        run: pnpm docs:check-links
-
-      - name: Check documentation consistency
-        run: pnpm docs:check-content
-
-      - name: Check Rust documentation snippets
-        run: >-
-          cargo
-          --config 'patch.crates-io.inertia-axum.path="../crates/inertia-axum"'
-          check
-          --manifest-path snippets/quick-start-server/Cargo.toml
-
-      - name: Check frontend documentation snippets
-        run: pnpm snippets:check
-
-      - name: Build documentation application
-        run: pnpm build
+          version: 2026.7.5
+          install: true
+          cache: true
+      - run: mise run ci:docs
 
   check:
     name: Check
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@v3
         with:
-          components: clippy, rustfmt
-
+          version: 2026.7.5
+          install: true
+          cache: true
       - name: Cache Cargo dependencies and build artifacts
         uses: Swatinem/rust-cache@v2.9.1
         with:
           shared-key: stable
           workspaces: ". -> target"
           cache-on-failure: true
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Test default features and all targets
-        run: cargo test --locked --workspace --all-targets
-
-      - name: Test all features
-        run: cargo test --locked --workspace --all-features
-
-      - name: Reject uncommitted snapshots
-        shell: bash
-        run: |
-          snapshots="$(find . \
-            -path './target' -prune -o \
-            -name '*.snap.new' -print)"
-
-          if [[ -n "$snapshots" ]]; then
-            echo "Pending Insta snapshots were generated:"
-            printf '%s\n' "$snapshots"
-            exit 1
-          fi
-
-      - name: Check all targets and features
-        run: cargo check --locked --workspace --all-targets --all-features
-
-      - name: Clippy
-        run: >-
-          cargo clippy
-          --locked
-          --workspace
-          --all-targets
-          --all-features
-          --
-          -D warnings
-
-      - name: Test documentation
-        run: cargo test --locked --workspace --doc
-
-      - name: Build documentation
-        env:
-          RUSTDOCFLAGS: "-D warnings"
-        run: cargo doc --locked --workspace --no-deps
-
-      - name: Package macros
-        run: cargo package --locked -p inertia-axum-macros
-
-      - name: Package runtime against the unpublished workspace macro
-        run: >-
-          cargo
-          --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"'
-          package
-          --locked
-          -p inertia-axum
-
-      - name: Package test crate against unpublished workspace packages
-        run: >-
-          cargo
-          --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"'
-          --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"'
-          package
-          --locked
-          -p inertia-axum-test
-
-      - name: Package Cargo plugin
-        run: cargo package --locked -p cargo-inertia
-
-      - name: Compile benchmarks
-        run: cargo bench --locked --workspace --no-run
-
-      - name: Check without default features
-        run: cargo check --locked --workspace --all-targets --no-default-features
-
-      - name: Check encrypted cookies without default features
-        run: >-
-          cargo check
-          --locked
-          -p inertia-axum
-          --no-default-features
-          --features cookies
+      - run: mise run ci:rust
 
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@1.88.0
-
+      - uses: jdx/mise-action@v3
+        with:
+          version: 2026.7.5
+          install: true
+          cache: true
       - name: Cache MSRV Cargo dependencies and build artifacts
         uses: Swatinem/rust-cache@v2.9.1
         with:
           shared-key: msrv-1.88
           workspaces: ". -> target"
           cache-on-failure: true
-
-      - run: cargo check --locked --workspace --all-targets
+      - run: mise run ci:msrv
 
   frontend-build:
     name: Frontend build (${{ matrix.crate }})
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -200,76 +81,36 @@ jobs:
             frontend: react-app
           - crate: axum-vue
             frontend: vue-app
-
-    defaults:
-      run:
-        working-directory: examples/${{ matrix.crate }}/${{ matrix.frontend }}
-
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+      - uses: jdx/mise-action@v3
         with:
-          version: 11.9.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Delete prior frontend outputs
-        run: rm -rf ../public/build dist
-
-      - name: Build frontend
-        run: pnpm check:build
-
-      - name: Verify client and SSR artifacts
-        run: |
-          test -f ../public/build/.vite/manifest.json
-          test -f dist/ssr/app.js
+          version: 2026.7.5
+          install: true
+          cache: true
+      - run: mise run ci:frontend -- "${{ matrix.crate }}" "${{ matrix.frontend }}"
 
   ssr-node-lifecycle:
     name: Managed Node lifecycle
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: jdx/mise-action@v3
         with:
-          node-version: 22
-
-      - uses: dtolnay/rust-toolchain@stable
-
+          version: 2026.7.5
+          install: true
+          cache: true
       - name: Restore stable Cargo cache
         uses: Swatinem/rust-cache@v2.9.1
         with:
           shared-key: stable
           workspaces: ". -> target"
           save-if: false
-
-      - name: Test managed Node lifecycle
-        run: |
-          cargo test \
-          --locked \
-          -p inertia-axum \
-          --features ssr \
-          --test ssr_node_lifecycle \
-          -- \
-          --ignored \
-          --test-threads=1
+      - run: mise run ci:ssr-node-lifecycle
 
   production-example:
     name: Production example SSR (${{ matrix.crate }})
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -280,38 +121,24 @@ jobs:
             frontend: react-app
           - crate: axum-vue
             frontend: vue-app
-
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+      - uses: jdx/mise-action@v3
         with:
-          version: 11.9.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
-
-      - uses: dtolnay/rust-toolchain@stable
-
+          version: 2026.7.5
+          install: true
+          cache: true
       - name: Restore stable Cargo cache
         uses: Swatinem/rust-cache@v2.9.1
         with:
           shared-key: stable
           workspaces: ". -> target"
           save-if: false
-
-      - name: Clean-build and test production example
-        run: ./scripts/test-live-ssr.sh --example-only ${{ matrix.crate }}
+      - run: mise run ci:production --example-only "${{ matrix.crate }}"
 
   browser-smoke:
     name: Browser hydration smoke (${{ matrix.crate }})
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -322,51 +149,17 @@ jobs:
             frontend: react-app
           - crate: axum-vue
             frontend: vue-app
-
-    defaults:
-      run:
-        working-directory: examples/${{ matrix.crate }}/${{ matrix.frontend }}
-
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+      - uses: jdx/mise-action@v3
         with:
-          version: 11.9.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: examples/${{ matrix.crate }}/${{ matrix.frontend }}/pnpm-lock.yaml
-
-      - uses: dtolnay/rust-toolchain@stable
-
+          version: 2026.7.5
+          install: true
+          cache: true
       - name: Restore stable Cargo cache
         uses: Swatinem/rust-cache@v2.9.1
         with:
           shared-key: stable
           workspaces: ". -> target"
           save-if: false
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Delete prior frontend outputs
-        run: rm -rf ../public/build dist
-
-      - name: Build frontend
-        run: pnpm build
-
-      - name: Verify client and SSR artifacts
-        run: |
-          test -f ../public/build/.vite/manifest.json
-          test -f dist/ssr/app.js
-
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Test production hydration
-        run: pnpm test:e2e
+      - run: mise run ci:browser -- "${{ matrix.crate }}" "${{ matrix.frontend }}"

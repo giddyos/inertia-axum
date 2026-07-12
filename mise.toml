@@ -1,0 +1,227 @@
+[tools]
+rust = { version = "stable", profile = "minimal", components = "clippy,rustfmt" }
+node = "22"
+pnpm = "11.9.0"
+actionlint = "latest"
+shellcheck = "latest"
+
+[settings]
+activate_aggressive = true
+env_cache = true
+lockfile = true
+
+[settings.task]
+output = "prefix"
+show_full_cmd = true
+
+[env]
+CARGO_TARGET_DIR = "{{config_root}}/target"
+CARGO_TERM_COLOR = "always"
+
+[tasks.deps]
+description = "Install documentation and example frontend dependencies"
+run = [
+  "pnpm --dir docs install --frozen-lockfile --ignore-scripts=false",
+  "pnpm --dir examples/axum-svelte/svelte-app install --frozen-lockfile --prefer-offline",
+  "pnpm --dir examples/axum-react/react-app install --frozen-lockfile --prefer-offline",
+  "pnpm --dir examples/axum-vue/vue-app install --frozen-lockfile --prefer-offline",
+]
+
+[tasks.fmt]
+description = "Check Rust formatting"
+alias = "f"
+run = "cargo fmt --all -- --check"
+
+[tasks.test]
+description = "Test the workspace with default features"
+alias = "t"
+env.INSTA_UPDATE = "no"
+run = "cargo test --locked --workspace --all-targets"
+
+[tasks."test:all"]
+description = "Test the workspace with all features"
+env.INSTA_UPDATE = "no"
+run = "cargo test --locked --workspace --all-features"
+
+[tasks.clippy]
+description = "Lint every workspace target and feature"
+run = """
+cargo clippy \
+  --locked \
+  --workspace \
+  --all-targets \
+  --all-features \
+  -- \
+  -D warnings
+"""
+
+[tasks.check]
+description = "Run the normal local validation suite"
+alias = "c"
+run = [
+  { task = "ci:static" },
+  { task = "fmt" },
+  { task = "test" },
+  { task = "clippy" },
+]
+
+[tasks."dev:docs"]
+description = "Start the documentation development server"
+dir = "docs"
+run = "pnpm dev"
+
+[tasks."dev:svelte"]
+description = "Start the Svelte example frontend"
+dir = "examples/axum-svelte/svelte-app"
+run = "pnpm dev"
+
+[tasks."dev:react"]
+description = "Start the React example frontend"
+dir = "examples/axum-react/react-app"
+run = "pnpm dev"
+
+[tasks."dev:vue"]
+description = "Start the Vue example frontend"
+dir = "examples/axum-vue/vue-app"
+run = "pnpm dev"
+
+[tasks."ci:static"]
+description = "Validate workflows and shell scripts"
+run = [
+  "actionlint",
+  "shellcheck scripts/*.sh",
+]
+
+[tasks."ci:rust"]
+description = "Run the complete primary Rust CI job"
+env = { CARGO_INCREMENTAL = "0", INSTA_UPDATE = "no" }
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo fmt --all -- --check
+cargo test --locked --workspace --all-targets
+cargo test --locked --workspace --all-features
+
+snapshots="$(find . -path './target' -prune -o -name '*.snap.new' -print)"
+if [[ -n "$snapshots" ]]; then
+  echo "Pending Insta snapshots were generated:"
+  printf '%s\n' "$snapshots"
+  exit 1
+fi
+
+cargo check --locked --workspace --all-targets --all-features
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace --doc
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps
+cargo package --locked -p inertia-axum-macros
+cargo --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"' package --locked -p inertia-axum
+cargo --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"' package --locked -p inertia-axum-test
+cargo package --locked -p cargo-inertia
+cargo bench --locked --workspace --no-run
+cargo check --locked --workspace --all-targets --no-default-features
+cargo check --locked -p inertia-axum --no-default-features --features cookies
+'''
+
+[tasks."ci:msrv"]
+description = "Check the workspace against the declared Rust MSRV"
+tools.rust = "1.88.0"
+env.CARGO_INCREMENTAL = "0"
+run = "cargo check --locked --workspace --all-targets"
+
+[tasks."ci:docs"]
+description = "Lint, validate, type-check, and build the documentation"
+dir = "docs"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+pnpm install --frozen-lockfile --ignore-scripts=false
+pnpm lint
+pnpm typecheck
+pnpm docs:check-links
+pnpm docs:check-content
+cargo --config 'patch.crates-io.inertia-axum.path="../crates/inertia-axum"' check --manifest-path snippets/quick-start-server/Cargo.toml
+pnpm snippets:check
+pnpm build
+'''
+
+[tasks."ci:frontend"]
+description = "Build and validate one frontend example"
+usage = '''
+arg "<crate>" help="Example crate, such as axum-svelte"
+arg "<frontend>" help="Frontend directory, such as svelte-app"
+'''
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+crate="{{usage.crate}}"
+frontend="{{usage.frontend}}"
+case "$crate/$frontend" in
+  axum-svelte/svelte-app | axum-react/react-app | axum-vue/vue-app) ;;
+  *) echo "Unsupported frontend pair: $crate/$frontend" >&2; exit 2 ;;
+esac
+
+cd "examples/$crate/$frontend"
+pnpm install --frozen-lockfile --prefer-offline
+rm -rf ../public/build dist
+pnpm check:build
+test -f ../public/build/.vite/manifest.json
+test -f dist/ssr/app.js
+'''
+
+[tasks."ci:ssr-node-lifecycle"]
+description = "Test the managed Node SSR lifecycle"
+run = "cargo test --locked -p inertia-axum --features ssr --test ssr_node_lifecycle -- --ignored --test-threads=1"
+
+[tasks."ci:production"]
+description = "Build and test production SSR examples"
+file = "scripts/test-live-ssr.sh"
+raw = true
+
+[tasks."ci:browser"]
+description = "Run the production browser hydration test for one frontend"
+usage = '''
+arg "<crate>" help="Example crate, such as axum-svelte"
+arg "<frontend>" help="Frontend directory, such as svelte-app"
+'''
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+crate="{{usage.crate}}"
+frontend="{{usage.frontend}}"
+case "$crate/$frontend" in
+  axum-svelte/svelte-app | axum-react/react-app | axum-vue/vue-app) ;;
+  *) echo "Unsupported frontend pair: $crate/$frontend" >&2; exit 2 ;;
+esac
+
+cd "examples/$crate/$frontend"
+pnpm install --frozen-lockfile --prefer-offline
+rm -rf ../public/build dist
+pnpm build
+test -f ../public/build/.vite/manifest.json
+test -f dist/ssr/app.js
+pnpm exec playwright install --with-deps chromium
+pnpm test:e2e
+'''
+
+[tasks.ci]
+description = "Run the complete CI suite serially"
+run = [
+  { task = "ci:static" },
+  { task = "ci:rust" },
+  { task = "ci:msrv" },
+  { task = "ci:docs" },
+  { task = "ci:frontend", args = ["axum-svelte", "svelte-app"] },
+  { task = "ci:frontend", args = ["axum-react", "react-app"] },
+  { task = "ci:frontend", args = ["axum-vue", "vue-app"] },
+  { task = "ci:ssr-node-lifecycle" },
+  { task = "ci:production", args = ["--example-only", "axum-svelte"] },
+  { task = "ci:production", args = ["--example-only", "axum-react"] },
+  { task = "ci:production", args = ["--example-only", "axum-vue"] },
+  { task = "ci:browser", args = ["axum-svelte", "svelte-app"] },
+  { task = "ci:browser", args = ["axum-react", "react-app"] },
+  { task = "ci:browser", args = ["axum-vue", "vue-app"] },
+]
