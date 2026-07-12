@@ -23,9 +23,9 @@ Keep Axum routes and frontend pages in one project so their component names rema
     <Folder name="src" defaultOpen>
       <File name="main.ts" />
       <Folder name="Pages" defaultOpen>
-        <File name="Home.svelte (or Home.tsx / Home.vue)" />
+        <File name="Home.tsx (or Home.svelte / Home.vue)" />
         <Folder name="Users">
-          <File name="Show.svelte (or Show.tsx / Show.vue)" />
+          <File name="Show.tsx (or Show.svelte / Show.vue)" />
         </Folder>
       </Folder>
     </Folder>
@@ -45,6 +45,6 @@ async fn show_user() -> DynamicPage {
 }
 ```
 
-`Users/Show` resolves to `Pages/Users/Show.svelte`, `Show.tsx`, or `Show.vue`. Vite records `src/main.ts` and its hashed browser assets in `frontend/dist/.vite/manifest.json`.
+`Users/Show` resolves to `Pages/Users/Show.tsx`, `Show.svelte`, or `Show.vue`. Vite records `src/main.ts` and its hashed browser assets in `frontend/dist/.vite/manifest.json`.
 
 Next, use [typed pages and props](/docs/guides/typed-pages-and-props) to replace string component names where compile-time contracts help.
