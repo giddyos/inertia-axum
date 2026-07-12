@@ -1,0 +1,11 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: package
+---
+{
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build" },
+  "dependencies": { "@inertiajs/svelte": "^3.0.0", "svelte": "latest" },
+  "devDependencies": { "vite": "latest", "@sveltejs/vite-plugin-svelte": "latest", "typescript": "latest" }
+}

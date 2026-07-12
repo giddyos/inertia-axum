@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",
     "docs:check-links": "node scripts/check-links.mjs",
+    "docs:check-content": "node scripts/check-content.mjs",
+    "snippets:check": "node scripts/check-snippets.mjs",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
@@ -22,21 +24,28 @@
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.11.3",
     "lucide-react": "1.24.0",
     "next": "16.2.10",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@inertiajs/react": "3.6.1",
+    "@inertiajs/svelte": "3.6.1",
+    "@inertiajs/vue3": "3.6.1",
     "@tailwindcss/postcss": "4.3.2",
     "@types/mdx": "2.0.14",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@vue/compiler-sfc": "3.5.29",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.10",
     "github-slugger": "2.0.0",
     "postcss": "8.5.16",
+    "svelte": "5.55.7",
     "tailwindcss": "4.3.2",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vite": "8.1.4",
+    "vue": "3.5.29"
   }
 }

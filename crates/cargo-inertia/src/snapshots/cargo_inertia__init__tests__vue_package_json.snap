@@ -1,0 +1,11 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: package
+---
+{
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build" },
+  "dependencies": { "@inertiajs/vue3": "^3.0.0", "vue": "latest" },
+  "devDependencies": { "vite": "latest", "@vitejs/plugin-vue": "latest", "typescript": "latest" }
+}

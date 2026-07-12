@@ -1,0 +1,8 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: "fs::read_to_string(root.join(\"frontend/vite.config.ts\")).unwrap()"
+---
+import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+
+export default defineConfig({ plugins: [svelte()], build: { manifest: true, rollupOptions: { input: 'src/main.ts' } } });

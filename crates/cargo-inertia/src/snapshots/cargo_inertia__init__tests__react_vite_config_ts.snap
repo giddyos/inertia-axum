@@ -1,0 +1,8 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: "fs::read_to_string(root.join(\"frontend/vite.config.ts\")).unwrap()"
+---
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({ plugins: [react()], build: { manifest: true, rollupOptions: { input: 'src/main.ts' } } });

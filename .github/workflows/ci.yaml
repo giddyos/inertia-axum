@@ -54,6 +54,19 @@ jobs:
       - name: Validate documentation links and anchors
         run: pnpm docs:check-links
 
+      - name: Check documentation consistency
+        run: pnpm docs:check-content
+
+      - name: Check Rust documentation snippets
+        run: >-
+          cargo
+          --config 'patch.crates-io.inertia-axum.path="../crates/inertia-axum"'
+          check
+          --manifest-path snippets/quick-start-server/Cargo.toml
+
+      - name: Check frontend documentation snippets
+        run: pnpm snippets:check
+
       - name: Build documentation application
         run: pnpm build
 

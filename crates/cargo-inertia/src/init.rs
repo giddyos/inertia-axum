@@ -1,7 +1,19 @@
 use crate::Frontend;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    io::{self, Write},
+    path::Path,
+};
 
 pub fn run(root: &Path, framework: Frontend) -> Result<(), String> {
+    run_with_writer(root, framework, &mut io::stdout().lock())
+}
+
+fn run_with_writer(
+    root: &Path,
+    framework: Frontend,
+    output: &mut impl Write,
+) -> Result<(), String> {
     let frontend = root.join("frontend");
     if frontend.exists() {
         return Err(format!("{} already exists", frontend.display()));
@@ -47,8 +59,18 @@ pub fn run(root: &Path, framework: Frontend) -> Result<(), String> {
     write(&frontend.join("vite.config.ts"), &vite_config(framework))?;
     write(&frontend.join("src/main.ts"), main)?;
     write(&frontend.join(format!("src/Pages/Home.{extension}")), home)?;
-    println!("Created {} frontend in {}", name, frontend.display());
-    println!("\nRust setup:\n\n.inertia(InertiaApp::vite(\"frontend\").build()?)");
+    writeln!(
+        output,
+        "Created {} frontend in {}",
+        name,
+        frontend.display()
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(
+        output,
+        "\nRust setup:\n\n.inertia(InertiaApp::vite(\"frontend\").build()?)"
+    )
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -92,18 +114,42 @@ mod tests {
                 .join(format!("cargo-inertia-init-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&root);
             fs::create_dir_all(&root).unwrap();
-            run(&root, framework).unwrap();
+            let mut output = Vec::new();
+            run_with_writer(&root, framework, &mut output).unwrap();
             assert!(root.join("frontend/package.json").is_file());
             assert!(root.join("frontend/vite.config.ts").is_file());
             assert!(root.join("frontend/src/main.ts").is_file());
             let package = fs::read_to_string(root.join("frontend/package.json")).unwrap();
             assert!(package.contains(adapter));
-            assert!(
-                root.join(format!("frontend/src/Pages/Home.{extension}"))
-                    .is_file()
+            let home_path = root.join(format!("frontend/src/Pages/Home.{extension}"));
+            assert!(home_path.is_file());
+
+            insta::assert_snapshot!(format!("{name}_package_json"), package);
+            insta::assert_snapshot!(
+                format!("{name}_vite_config_ts"),
+                fs::read_to_string(root.join("frontend/vite.config.ts")).unwrap()
             );
+            insta::assert_snapshot!(
+                format!("{name}_main_ts"),
+                fs::read_to_string(root.join("frontend/src/main.ts")).unwrap()
+            );
+            insta::assert_snapshot!(
+                format!("{name}_home_{extension}"),
+                fs::read_to_string(home_path).unwrap()
+            );
+            insta::assert_snapshot!(
+                format!("{name}_completion_output"),
+                String::from_utf8(output)
+                    .unwrap()
+                    .replace(root.to_str().unwrap(), "[ROOT]")
+            );
+
+            if matches!(framework, Frontend::React) {
+                assert!(root.join("frontend/src/Pages/Home.tsx").is_file());
+                assert!(!root.join("frontend/src/Pages/Home.jsx").exists());
+            }
             assert!(
-                run(&root, framework)
+                run_with_writer(&root, framework, &mut Vec::new())
                     .unwrap_err()
                     .contains("already exists")
             );

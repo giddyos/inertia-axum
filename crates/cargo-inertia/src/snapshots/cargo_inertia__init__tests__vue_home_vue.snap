@@ -1,0 +1,6 @@
+---
+source: crates/cargo-inertia/src/init.rs
+expression: "fs::read_to_string(home_path).unwrap()"
+---
+<script setup lang="ts">withDefaults(defineProps<{ greeting?: string }>(), { greeting: 'Hello' });</script>
+<template><h1>{{ greeting }} from inertia-axum</h1></template>

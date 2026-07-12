@@ -347,6 +347,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "cargo_metadata",
  "clap",
+ "insta",
  "serde_json",
 ]
 

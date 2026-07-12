@@ -7,6 +7,8 @@ keywords:
   - cargo inertia init
 ---
 
+import { Snippet } from '@/components/snippet'
+
 ## What you will accomplish
 
 You will create a new application, generate one frontend page, build its assets, and serve `Hello from inertia-axum` at `http://127.0.0.1:3000`.
@@ -60,26 +62,7 @@ Complete [Installation](/docs/getting-started/installation) first. This guide us
 
     Replace `src/main.rs` with this reduced version of the maintained `axum-minimal` example:
 
-    ```rust title="src/main.rs"
-    use axum::{routing::get, Router};
-    use inertia_axum::prelude::*;
-
-    async fn index() -> DynamicPage {
-        page!("Home", { greeting: "Hello" })
-    }
-
-    #[tokio::main]
-    async fn main() -> Result<(), Box<dyn std::error::Error>> {
-        let inertia = InertiaApp::vite("frontend").build()?;
-        let app = Router::new()
-            .route("/", get(index))
-            .inertia(inertia);
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
-        axum::serve(listener, app).await?;
-        Ok(())
-    }
-    ```
+    <Snippet language="rust" source="quick-start-server/src/main.rs" title="src/main.rs" />
   </Step>
   <Step>
     ### Build and run

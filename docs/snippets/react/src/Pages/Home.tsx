@@ -1,0 +1,25 @@
+import { Deferred } from '@inertiajs/react'
+
+type Props = {
+  greeting?: string
+  stats?: {
+    projects: number
+    tasks: number
+  }
+}
+
+export default function Home({ greeting = 'Hello', stats }: Props) {
+  return (
+    <main>
+      <h1>{greeting} from inertia-axum</h1>
+
+      <Deferred data="stats" fallback={<p>Loading stats…</p>}>
+        {stats && (
+          <p>
+            {stats.projects} projects · {stats.tasks} tasks
+          </p>
+        )}
+      </Deferred>
+    </main>
+  )
+}

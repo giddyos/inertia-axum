@@ -4,6 +4,7 @@ import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import type { MDXComponents } from 'mdx/types';
+import { Snippet } from './snippet';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -13,6 +14,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Folder,
     Step,
     Steps,
+    Snippet,
     Tab,
     Tabs,
     TypeTable,
