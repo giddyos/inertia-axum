@@ -284,7 +284,15 @@ impl ViteConfig {
             hasher.update(path.as_bytes());
             hasher.update([0]);
         }
-        let version = format!("{:x}", hasher.finalize());
+        let version = hasher
+            .finalize()
+            .iter()
+            .flat_map(|byte| {
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                [HEX[usize::from(byte >> 4)], HEX[usize::from(byte & 0x0f)]]
+            })
+            .map(char::from)
+            .collect::<String>();
         let header_version: Arc<str> = Arc::from(version.as_str());
         Ok(AssetRuntime {
             version: Some(AssetVersion::from(version)),
