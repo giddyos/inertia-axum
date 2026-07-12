@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, InertiaType)]
 struct Todo {
     id: u64,
     title: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, InertiaType)]
 struct TodoStats {
     total: usize,
     remaining: usize,

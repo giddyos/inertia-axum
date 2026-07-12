@@ -24,7 +24,8 @@ pub struct Datum {
 #[inertia(
     component = "Anomalies/Show",
     rename_all = "camelCase",
-    encrypt_history
+    encrypt_history,
+    typegen(skip)
 )]
 pub struct AnomalyShowPage {
     pub anomaly: Datum,

@@ -6,6 +6,7 @@ docs/node_modules/
 docs/next-env.d.ts
 docs/*.tsbuildinfo
 **/*.snap.new
+crates/cargo-inertia/tests/fixtures/*/Cargo.lock
 examples/axum-*/**/node_modules/
 examples/axum-*/**/dist/
 examples/axum-*/**/playwright-report/

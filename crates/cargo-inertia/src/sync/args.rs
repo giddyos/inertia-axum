@@ -24,6 +24,7 @@ pub enum DynamicPagePolicy {
 }
 
 #[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
     #[arg(value_name = "OUTPUT", conflicts_with = "out")]
     pub output: Option<PathBuf>,
@@ -41,14 +42,14 @@ pub struct SyncArgs {
     pub all_features: bool,
     #[arg(long)]
     pub no_default_features: bool,
-    #[arg(long, default_value = "auto")]
-    pub layout: OutputLayout,
-    #[arg(long, default_value = "number")]
-    pub large_integers: LargeIntegerPolicy,
-    #[arg(long, default_value = "warn")]
-    pub dynamic_pages: DynamicPagePolicy,
-    #[arg(long, default_value_t = 64)]
-    pub array_tuple_limit: usize,
+    #[arg(long)]
+    pub layout: Option<OutputLayout>,
+    #[arg(long)]
+    pub large_integers: Option<LargeIntegerPolicy>,
+    #[arg(long)]
+    pub dynamic_pages: Option<DynamicPagePolicy>,
+    #[arg(long)]
+    pub array_tuple_limit: Option<usize>,
     #[arg(long)]
     pub import_extension: Option<String>,
     #[arg(long)]
@@ -57,11 +58,11 @@ pub struct SyncArgs {
     pub clean: bool,
     #[arg(long)]
     pub deny_warnings: bool,
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["bin", "all_bins"])]
     pub lib: bool,
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_bins")]
     pub bin: Vec<String>,
-    #[arg(long)]
+    #[arg(long, conflicts_with = "bin")]
     pub all_bins: bool,
     #[arg(long)]
     pub examples: bool,

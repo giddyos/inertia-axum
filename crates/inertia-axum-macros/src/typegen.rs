@@ -286,9 +286,8 @@ fn validate_fields(input: &DeriveInput) -> syn::Result<()> {
                 .map_or_else(|| "tuple field".into(), ToString::to_string);
             return Err(error(
                 field.span(),
-                &format!(
-                    "error[INERTIA-TYPEGEN-010]: `{}` uses custom Serde serialization but does not declare its TypeScript wire representation; add #[ts(type = \"...\")] or #[ts(as = \"...\")]",
-                    field_name
+                format!(
+                    "error[INERTIA-TYPEGEN-010]: `{field_name}` uses custom Serde serialization but does not declare its TypeScript wire representation; add #[ts(type = \"...\")] or #[ts(as = \"...\")]"
                 ),
             ));
         }

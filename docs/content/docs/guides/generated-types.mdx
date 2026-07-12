@@ -71,7 +71,19 @@ Fields using Serde `serialize_with` or `with` must specify `#[ts(type = "...")]`
 
 Select a package with `-p server`, or use `--workspace`. Cargo feature flags are forwarded with `--features`, `--all-features`, and `--no-default-features`. A `.ts` destination selects one file; a directory selects managed modules with `.inertia-types.json`. `--clean` removes only generator-owned files.
 
-Package defaults may set `[package.metadata.inertia.types] output = "frontend/src/types/inertia.ts"`. Without configuration, the default is used only when `frontend/src` exists.
+Package defaults may configure output and generation policy; workspace metadata supplies lower-precedence defaults. Explicit CLI flags always win:
+
+```toml title="Cargo.toml"
+[package.metadata.inertia.types]
+output = "frontend/src/types/inertia.ts"
+layout = "single"
+large-integers = "number"
+dynamic-pages = "warn"
+array-tuple-limit = 64
+features = ["admin"]
+```
+
+Without configuration, the automatic output is used only when `frontend/src` exists.
 
 ## CI
 

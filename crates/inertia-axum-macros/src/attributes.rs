@@ -2,6 +2,7 @@ use crate::diagnostics::error;
 use syn::{Attribute, LitStr, spanned::Spanned};
 
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ContainerAttributes {
     pub component: Option<LitStr>,
     pub rename_all: Option<RenameRule>,

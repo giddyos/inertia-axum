@@ -247,6 +247,7 @@ impl Serialize for Counted {
 }
 
 #[derive(InertiaProps)]
+#[inertia(typegen(skip))]
 struct HealthShared {
     value: Counted,
     optional: Prop<u32>,

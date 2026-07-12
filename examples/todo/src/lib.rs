@@ -4,14 +4,14 @@ use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, InertiaType)]
 pub struct Todo {
     pub id: u64,
     pub title: String,
     pub completed: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, InertiaType)]
 pub struct TodoStats {
     pub total: usize,
     pub completed: usize,

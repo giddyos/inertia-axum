@@ -16,7 +16,7 @@ use std::{
 };
 
 pub fn run_args(args: SyncArgs) -> Result<(), String> {
-    if args.array_tuple_limit == 0 {
+    if args.array_tuple_limit == Some(0) {
         return Err("--array-tuple-limit must be greater than zero".into());
     }
     let manifest = if args.path.is_file() {
@@ -50,7 +50,7 @@ fn select_packages<'a>(
             metadata
                 .packages
                 .iter()
-                .find(|package| &package.name == name)
+                .find(|package| package.name == *name)
                 .ok_or_else(|| format!("Cargo package {name} was not found"))?,
         ]
     } else if args.workspace {
@@ -76,37 +76,45 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
         .parent()
         .ok_or("package manifest has no parent")?
         .as_std_path();
-    let output = resolve_output(package_root, package, args)?;
-    let layout = resolve_layout(&output, args.layout);
+    let settings = resolve_settings(metadata, package, args)?;
+    let output = resolve_output(package_root, package, metadata, args)?;
+    let layout = resolve_layout(&output, settings.layout);
     let output = if output.is_absolute() {
         output
     } else {
         package_root.join(output)
     };
     if args.clean {
-        return clean_output(&output, layout);
+        return clean_output_locked(&output, layout);
     }
     let staging = tempfile::Builder::new()
         .prefix(".inertia-typegen-")
         .tempdir_in(package_root)
         .map_err(|error| error.to_string())?;
     for target in select_targets(package, args)? {
-        run_exporters(metadata, package, target, args, staging.path())?;
+        run_exporters(metadata, package, target, args, &settings, staging.path())?;
     }
     let bundles = read_bundles(staging.path())?;
     if bundles.is_empty() && has_typed_declaration(package_root) {
         return Err("error[INERTIA-TYPEGEN-018]: no type exporters were compiled; enable the typegen feature".into());
     }
-    let dynamic_warnings = dynamic_page_diagnostics(package_root, args.dynamic_pages)?;
+    let dynamic_warnings = dynamic_page_diagnostics(package_root, settings.dynamic_pages)?;
+    let ir_warnings = bundles
+        .iter()
+        .flat_map(|bundle| &bundle.diagnostics)
+        .map(|diagnostic| format!("warning[{}]: {}", diagnostic.code, diagnostic.message))
+        .collect::<std::collections::BTreeSet<_>>();
+    let ir_warnings = ir_warnings.into_iter().collect::<Vec<_>>();
     if layout == OutputLayout::Modules {
         let (files, warnings) = render_modules(
             &bundles,
-            args.large_integers,
+            settings.large_integers,
             args.import_extension.as_deref(),
         )?;
         let warnings = warnings
             .into_iter()
             .chain(dynamic_warnings)
+            .chain(ir_warnings)
             .collect::<Vec<_>>();
         for warning in &warnings {
             eprintln!("{warning}");
@@ -118,12 +126,13 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
             &output,
             files,
             package.name.as_str(),
-            args.large_integers,
+            settings.large_integers,
             args.check,
         );
     }
-    let (content, mut warnings) = reconcile_and_render(&bundles, args.large_integers)?;
+    let (content, mut warnings) = reconcile_and_render(&bundles, settings.large_integers)?;
     warnings.extend(dynamic_warnings);
+    warnings.extend(ir_warnings);
     for warning in &warnings {
         eprintln!("{warning}");
     }
@@ -242,6 +251,7 @@ fn source_tree_contains(root: &Path, needle: &str) -> bool {
 fn resolve_output(
     package_root: &Path,
     package: &Package,
+    metadata: &Metadata,
     args: &SyncArgs,
 ) -> Result<PathBuf, String> {
     if let Some(output) = args.explicit_output() {
@@ -254,10 +264,101 @@ fn resolve_output(
     {
         return Ok(output.into());
     }
+    if let Some(output) = metadata
+        .workspace_metadata
+        .pointer("/inertia/types/output")
+        .and_then(serde_json::Value::as_str)
+    {
+        return Ok(output.into());
+    }
     if package_root.join("frontend/src").is_dir() {
         return Ok("frontend/src/types/inertia.ts".into());
     }
     Err("could not determine the TypeScript output path; pass a destination or configure package metadata".into())
+}
+
+#[derive(Debug)]
+struct SyncSettings {
+    layout: OutputLayout,
+    large_integers: LargeIntegerPolicy,
+    dynamic_pages: DynamicPagePolicy,
+    array_tuple_limit: usize,
+    features: Vec<String>,
+}
+
+fn resolve_settings(
+    metadata: &Metadata,
+    package: &Package,
+    args: &SyncArgs,
+) -> Result<SyncSettings, String> {
+    let package_types = package.metadata.pointer("/inertia/types");
+    let workspace_types = metadata.workspace_metadata.pointer("/inertia/types");
+    let text = |key: &str| {
+        package_types
+            .and_then(|value| value.get(key))
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| {
+                workspace_types
+                    .and_then(|value| value.get(key))
+                    .and_then(serde_json::Value::as_str)
+            })
+    };
+    let integer = match text("large-integers") {
+        Some("number") | None => LargeIntegerPolicy::Number,
+        Some("error") => LargeIntegerPolicy::Error,
+        Some("bigint") => LargeIntegerPolicy::Bigint,
+        Some(value) => return Err(format!("invalid metadata large-integers value `{value}`")),
+    };
+    let dynamic = match text("dynamic-pages") {
+        Some("ignore") => DynamicPagePolicy::Ignore,
+        Some("warn") | None => DynamicPagePolicy::Warn,
+        Some("error") => DynamicPagePolicy::Error,
+        Some(value) => return Err(format!("invalid metadata dynamic-pages value `{value}`")),
+    };
+    let layout = match text("layout") {
+        Some("auto") | None => OutputLayout::Auto,
+        Some("single") => OutputLayout::Single,
+        Some("modules") => OutputLayout::Modules,
+        Some(value) => return Err(format!("invalid metadata layout value `{value}`")),
+    };
+    let array_tuple_limit = package_types
+        .and_then(|value| value.get("array-tuple-limit"))
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| {
+            workspace_types
+                .and_then(|value| value.get("array-tuple-limit"))
+                .and_then(serde_json::Value::as_u64)
+        })
+        .unwrap_or(64);
+    let array_tuple_limit =
+        usize::try_from(array_tuple_limit).map_err(|_| "array-tuple-limit is too large")?;
+    let configured_features = package_types
+        .and_then(|value| value.get("features"))
+        .or_else(|| workspace_types.and_then(|value| value.get("features")))
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let settings = SyncSettings {
+        layout: args.layout.unwrap_or(layout),
+        large_integers: args.large_integers.unwrap_or(integer),
+        dynamic_pages: args.dynamic_pages.unwrap_or(dynamic),
+        array_tuple_limit: args.array_tuple_limit.unwrap_or(array_tuple_limit),
+        features: if args.features.is_empty() {
+            configured_features
+        } else {
+            args.features.clone()
+        },
+    };
+    if settings.array_tuple_limit == 0 {
+        return Err("--array-tuple-limit must be greater than zero".into());
+    }
+    Ok(settings)
 }
 
 fn resolve_layout(output: &Path, explicit: OutputLayout) -> OutputLayout {
@@ -303,6 +404,16 @@ fn select_targets<'a>(package: &'a Package, args: &SyncArgs) -> Result<Vec<&'a T
     }
     targets.sort_by(|left, right| left.name.cmp(&right.name));
     targets.dedup_by(|left, right| left.name == right.name);
+    if !args.bin.is_empty() {
+        for requested in &args.bin {
+            if !targets.iter().any(|target| &target.name == requested) {
+                return Err(format!(
+                    "package {} has no binary target named `{requested}`",
+                    package.name
+                ));
+            }
+        }
+    }
     if targets.is_empty() {
         return Err(format!("package {} has no selected target", package.name));
     }
@@ -314,6 +425,7 @@ fn run_exporters(
     package: &Package,
     target: &Target,
     args: &SyncArgs,
+    settings: &SyncSettings,
     staging: &Path,
 ) -> Result<(), String> {
     let mut command = Command::new("cargo");
@@ -329,8 +441,8 @@ fn run_exporters(
     } else {
         command.arg("--bin").arg(target.name.as_str());
     }
-    if !args.features.is_empty() {
-        command.arg("--features").arg(args.features.join(","));
+    if !settings.features.is_empty() {
+        command.arg("--features").arg(settings.features.join(","));
     }
     if args.all_features {
         command.arg("--all-features");
@@ -351,7 +463,7 @@ fn run_exporters(
         )
         .env(
             "INERTIA_TYPEGEN_ARRAY_TUPLE_LIMIT",
-            args.array_tuple_limit.to_string(),
+            settings.array_tuple_limit.to_string(),
         );
     let status = command
         .status()
@@ -399,6 +511,7 @@ fn reconcile_and_render(
     policy: LargeIntegerPolicy,
 ) -> Result<(String, Vec<String>), String> {
     let mut definitions: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+    let mut definition_paths = BTreeMap::new();
     let mut pages = BTreeMap::new();
     let mut shared = None;
     for bundle in bundles
@@ -424,6 +537,17 @@ fn reconcile_and_render(
             return Err("error[INERTIA-TYPEGEN-016]: duplicate shared prop root".into());
         }
         for definition in &bundle.definitions {
+            if let Some(existing) =
+                definition_paths.insert(definition.output_path.clone(), definition.name.clone())
+            {
+                if existing != definition.name {
+                    return Err(format!(
+                        "error[INERTIA-TYPEGEN-014]: conflicting output path {} for {existing} and {}",
+                        definition.output_path.display(),
+                        definition.name
+                    ));
+                }
+            }
             match definitions.get(&definition.name) {
                 Some(existing) if existing != definition => {
                     return Err(format!(
@@ -518,6 +642,7 @@ fn compare_or_write(path: &Path, bytes: &[u8], check: bool) -> Result<(), String
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     let lock = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(parent.join(".inertia-types.lock"))
@@ -550,12 +675,15 @@ struct OutputManifest {
     files: Vec<PathBuf>,
 }
 
+type GeneratedModules = (BTreeMap<PathBuf, Vec<u8>>, Vec<String>);
+
 fn render_modules(
     bundles: &[ExportBundle],
     policy: LargeIntegerPolicy,
     import_extension: Option<&str>,
-) -> Result<(BTreeMap<PathBuf, Vec<u8>>, Vec<String>), String> {
+) -> Result<GeneratedModules, String> {
     let mut definitions: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+    let mut definition_paths = BTreeMap::new();
     let mut pages = BTreeMap::new();
     let mut shared = None;
     for bundle in bundles
@@ -581,6 +709,17 @@ fn render_modules(
             return Err("error[INERTIA-TYPEGEN-016]: duplicate shared prop root".into());
         }
         for definition in &bundle.definitions {
+            if let Some(existing) =
+                definition_paths.insert(definition.output_path.clone(), definition.name.clone())
+            {
+                if existing != definition.name {
+                    return Err(format!(
+                        "error[INERTIA-TYPEGEN-014]: conflicting output path {} for {existing} and {}",
+                        definition.output_path.display(),
+                        definition.name
+                    ));
+                }
+            }
             match definitions.get(&definition.name) {
                 Some(existing) if existing != definition => {
                     return Err(format!(
@@ -810,6 +949,7 @@ fn reconcile_modules(
     }
     let lock = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(parent.join(".inertia-types.lock"))
@@ -940,6 +1080,23 @@ fn clean_output(path: &Path, layout: OutputLayout) -> Result<(), String> {
         fs::remove_file(path.join(MANIFEST_NAME)).map_err(|error| error.to_string())?;
         Ok(())
     }
+}
+
+fn clean_output_locked(path: &Path, layout: OutputLayout) -> Result<(), String> {
+    let Some(parent) = path.parent().filter(|parent| parent.is_dir()) else {
+        return Ok(());
+    };
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(parent.join(".inertia-types.lock"))
+        .map_err(|error| error.to_string())?;
+    lock.lock_exclusive().map_err(|error| error.to_string())?;
+    let result = clean_output(path, layout);
+    FileExt::unlock(&lock).map_err(|error| error.to_string())?;
+    result
 }
 
 #[cfg(test)]

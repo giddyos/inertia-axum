@@ -179,3 +179,13 @@ fn output_paths_reject_traversal_and_normalize_dots() {
         Err(ExportError::UnsafeOutputPath(_))
     ));
 }
+
+#[test]
+fn collector_warns_for_target_dependent_integers() {
+    let cfg = config();
+    let (_, diagnostics) = TypeCollector::new(&cfg)
+        .collect_with_diagnostics::<usize>()
+        .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "INERTIA-TYPEGEN-003");
+}

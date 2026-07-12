@@ -194,6 +194,7 @@ pub struct TypeCollector<'a> {
     visited: BTreeSet<TypeId>,
     definitions: BTreeMap<String, TypeDefinition>,
     error: Option<ExportError>,
+    diagnostics: Vec<TypegenDiagnostic>,
 }
 
 impl<'a> TypeCollector<'a> {
@@ -203,6 +204,7 @@ impl<'a> TypeCollector<'a> {
             visited: BTreeSet::new(),
             definitions: BTreeMap::new(),
             error: None,
+            diagnostics: Vec::new(),
         }
     }
 
@@ -214,9 +216,30 @@ impl<'a> TypeCollector<'a> {
         Ok(self.definitions.into_values().collect())
     }
 
+    fn collect_with_diagnostics<T: TS + 'static>(
+        mut self,
+    ) -> Result<(Vec<TypeDefinition>, Vec<TypegenDiagnostic>), ExportError> {
+        self.collect::<T>();
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        Ok((self.definitions.into_values().collect(), self.diagnostics))
+    }
+
     fn collect<T: TS + 'static + ?Sized>(&mut self) {
         if self.error.is_some() || !self.visited.insert(TypeId::of::<T>()) {
             return;
+        }
+        if TypeId::of::<T>() == TypeId::of::<usize>() || TypeId::of::<T>() == TypeId::of::<isize>()
+        {
+            self.diagnostics.push(TypegenDiagnostic {
+                severity: Severity::Warning,
+                code: "INERTIA-TYPEGEN-003".into(),
+                message: "usize/isize is target-dependent in a frontend contract; prefer a fixed-width wire integer".into(),
+                rust_type: Some(std::any::type_name::<T>().into()),
+                field: None,
+                source: None,
+            });
         }
         if let Some(path) = T::output_path() {
             match normalize_relative_path(&path) {
@@ -265,7 +288,7 @@ impl TypeVisitor for TypeCollector<'_> {
 pub fn export_root<T: TS + 'static>(metadata: RootMetadata) -> Result<PathBuf, ExportError> {
     let environment = ExportEnvironment::from_env()?;
     let config = Config::default().with_large_int(&environment.large_int);
-    let definitions = TypeCollector::new(&config).collect_root::<T>()?;
+    let (definitions, diagnostics) = TypeCollector::new(&config).collect_with_diagnostics::<T>()?;
     let root = RootDefinition {
         kind: metadata.kind,
         rust_name: metadata.rust_name.into(),
@@ -282,7 +305,7 @@ pub fn export_root<T: TS + 'static>(metadata: RootMetadata) -> Result<PathBuf, E
             cargo_target: environment.cargo_target.clone(),
             root,
             definitions,
-            diagnostics: Vec::new(),
+            diagnostics,
         },
     )
 }

@@ -14,7 +14,7 @@ pub struct Item {
 }
 
 #[derive(InertiaPage)]
-#[inertia(component = "Incidents/Show", rename_all = "camelCase")]
+#[inertia(component = "Incidents/Show", rename_all = "camelCase", typegen(skip))]
 pub struct IncidentShowPage {
     pub incident: Item,
     pub timeline: Prop<ScrollPage<Item>>,
