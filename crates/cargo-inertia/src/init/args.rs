@@ -12,6 +12,7 @@ use crate::{
 
 /// Creates a Vite frontend for an `inertia-axum` application.
 #[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
     /// Frontend framework; `--frontend` remains a compatibility alias.
     #[arg(long, visible_alias = "frontend")]

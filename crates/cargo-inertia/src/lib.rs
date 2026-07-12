@@ -1,4 +1,5 @@
 //! Optional, feature-gated project tooling for `inertia-axum`.
+#![allow(missing_docs)]
 
 #[cfg(feature = "check")]
 pub mod check;

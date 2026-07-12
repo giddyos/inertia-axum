@@ -224,7 +224,7 @@ fn package_manager_value(package_json: &str) -> Option<&str> {
     let remainder = package_json.split_once(key)?.1;
     let remainder = remainder.trim_start().strip_prefix(':')?.trim_start();
     let remainder = remainder.strip_prefix('\"')?;
-    Some(remainder.split('\"').next()?)
+    remainder.split('\"').next()
 }
 
 /// A package-manager resolution failure.

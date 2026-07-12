@@ -1,4 +1,4 @@
-//! Strict MiniJinja rendering of the explicit template catalog.
+//! Strict `MiniJinja` rendering of the explicit template catalog.
 
 use std::path::PathBuf;
 
