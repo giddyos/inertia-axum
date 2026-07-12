@@ -42,7 +42,7 @@ jobs:
           cache-dependency-path: docs/pnpm-lock.yaml
 
       - name: Install documentation dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --allow-scripts
 
       - name: Lint documentation application
         run: pnpm lint
