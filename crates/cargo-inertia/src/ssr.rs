@@ -2,6 +2,15 @@
 
 use std::path::PathBuf;
 
+/// Default Vite frontend entry.
+pub const DEFAULT_ENTRY: &str = "src/main.ts";
+/// Default client build directory.
+pub const DEFAULT_CLIENT_OUT_DIR: &str = "dist";
+/// Default Vite client manifest.
+pub const DEFAULT_MANIFEST: &str = "dist/.vite/manifest.json";
+/// Default Node SSR bundle.
+pub const DEFAULT_SSR_BUNDLE: &str = "dist/ssr/main.js";
+
 /// The rendering mode generated for a frontend project.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -73,7 +82,7 @@ impl SsrOptions {
             backend: SsrBackend::None,
             policy: SsrPolicy::Enabled,
             failure_mode: SsrFailureMode::Fallback,
-            bundle: PathBuf::from("dist/ssr/main.js"),
+            bundle: PathBuf::from(DEFAULT_SSR_BUNDLE),
             host: "127.0.0.1".to_owned(),
             port: 13_714,
         }

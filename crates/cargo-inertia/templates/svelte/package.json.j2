@@ -1,8 +1,10 @@
 {
   "name": "[[= package_name]]",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "check": "[[= framework.check_script]]" },
-  "dependencies": { "@inertiajs/svelte": "[[= versions.inertia]]" },
-  "devDependencies": { "@sveltejs/vite-plugin-svelte": "[[= versions.vite_plugin_svelte]]", "svelte": "[[= versions.svelte]]", "svelte-check": "[[= versions.svelte_check]]", "typescript": "[[= versions.typescript]]", "vite": "[[= versions.vite]]" }
+  "scripts": { "dev": "vite", "build": "vite build[[% if ssr.enabled %]] && vite build --ssr[[% endif %]]", "check": "svelte-check --tsconfig ./tsconfig.json", "preview": "vite preview" },
+  "engines": { "node": "[[% if ssr.enabled %]]>=22.12.0[[% else %]]^20.19.0 || >=22.12.0[[% endif %]]" },
+  "dependencies": { "@inertiajs/svelte": "[[= versions.inertia]]", "axios": "[[= versions.axios]]" },
+  "devDependencies": { "@inertiajs/vite": "[[= versions.inertia]]", "@sveltejs/vite-plugin-svelte": "[[= versions.vite_plugin_svelte]]", "svelte": "[[= versions.svelte]]", "svelte-check": "[[= versions.svelte_check]]", "typescript": "[[= versions.typescript]]", "vite": "[[= versions.vite]]" }
 }

@@ -8,7 +8,7 @@ export default defineConfig(({ isSsrBuild }) => ({
     outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
     emptyOutDir: true,
     manifest: !isSsrBuild,
-    rollupOptions: isSsrBuild
+    rolldownOptions: isSsrBuild
       ? {}
       : {
           input: 'src/app.jsx',

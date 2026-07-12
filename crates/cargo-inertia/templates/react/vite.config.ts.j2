@@ -1,7 +1,8 @@
+import inertia from '@inertiajs/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-export default defineConfig({
-  plugins: [react()],
-  build: { manifest: true, rolldownOptions: { input: 'src/main.ts' } },
-})
+export default defineConfig(({ isSsrBuild }) => ({
+  plugins: [react(), inertia({ ssr: [[% if ssr.enabled %]]{ entry: 'src/main.ts', host: '[[= ssr.host]]', port: [[= ssr.port]], cluster: false }[[% else %]]false[[% endif %]] })],
+  build: { outDir: isSsrBuild ? 'dist/ssr' : 'dist', emptyOutDir: true, manifest: !isSsrBuild, rolldownOptions: isSsrBuild ? {} : { input: 'src/main.ts' } },
+}))

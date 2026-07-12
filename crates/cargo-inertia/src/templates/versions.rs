@@ -3,6 +3,7 @@
 /// Versions referenced by all embedded templates.
 #[derive(serde::Serialize)]
 pub struct TemplateVersions {
+    pub axios: &'static str,
     pub inertia: &'static str,
     pub vite: &'static str,
     pub typescript: &'static str,
@@ -20,6 +21,7 @@ pub struct TemplateVersions {
 }
 /// The pinned versions used by generated projects.
 pub const VERSIONS: TemplateVersions = TemplateVersions {
+    axios: "1.8.4",
     inertia: "3.6.1",
     vite: "8.1.4",
     typescript: "5.9.3",

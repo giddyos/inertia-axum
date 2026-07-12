@@ -1,8 +1,10 @@
 {
   "name": "[[= package_name]]",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "check": "[[= framework.check_script]]" },
-  "dependencies": { "@inertiajs/vue3": "[[= versions.inertia]]", "vue": "[[= versions.vue]]" },
-  "devDependencies": { "@vitejs/plugin-vue": "[[= versions.vite_plugin_vue]]", "typescript": "[[= versions.typescript]]", "vite": "[[= versions.vite]]", "vue-tsc": "[[= versions.vue_tsc]]" }
+  "scripts": { "dev": "vite", "build": "vite build[[% if ssr.enabled %]] && vite build --ssr[[% endif %]]", "check": "vue-tsc --noEmit", "preview": "vite preview" },
+  "engines": { "node": "[[% if ssr.enabled %]]>=22.12.0[[% else %]]^20.19.0 || >=22.12.0[[% endif %]]" },
+  "dependencies": { "@inertiajs/vue3": "[[= versions.inertia]]", "axios": "[[= versions.axios]]", "vue": "[[= versions.vue]]" },
+  "devDependencies": { "@inertiajs/vite": "[[= versions.inertia]]", "@vitejs/plugin-vue": "[[= versions.vite_plugin_vue]]", "typescript": "[[= versions.typescript]]", "vite": "[[= versions.vite]]", "vue-tsc": "[[= versions.vue_tsc]]" }
 }
