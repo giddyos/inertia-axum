@@ -1,17 +1,17 @@
-use crate::Frontend;
+use crate::framework::Framework;
 use std::{
     fs,
     io::{self, Write},
     path::Path,
 };
 
-pub fn run(root: &Path, framework: Frontend) -> Result<(), String> {
+pub fn run(root: &Path, framework: Framework) -> Result<(), String> {
     run_with_writer(root, framework, &mut io::stdout().lock())
 }
 
 fn run_with_writer(
     root: &Path,
-    framework: Frontend,
+    framework: Framework,
     output: &mut impl Write,
 ) -> Result<(), String> {
     let frontend = root.join("frontend");
@@ -20,9 +20,9 @@ fn run_with_writer(
     }
     fs::create_dir_all(frontend.join("src/Pages")).map_err(|error| error.to_string())?;
     let (name, extension, main, home) = match framework {
-        Frontend::Svelte => ("svelte", "svelte", SVELTE_MAIN, SVELTE_HOME),
-        Frontend::React => ("react", "tsx", REACT_MAIN, REACT_HOME),
-        Frontend::Vue => ("vue", "vue", VUE_MAIN, VUE_HOME),
+        Framework::Svelte => ("svelte", "svelte", SVELTE_MAIN, SVELTE_HOME),
+        Framework::React => ("react", "tsx", REACT_MAIN, REACT_HOME),
+        Framework::Vue => ("vue", "vue", VUE_MAIN, VUE_HOME),
     };
     write(&frontend.join("package.json"), package_json(framework))?;
     if matches!(framework, Frontend::Svelte) {
@@ -48,25 +48,25 @@ fn run_with_writer(
     Ok(())
 }
 
-fn vite_config(framework: Frontend) -> String {
+fn vite_config(framework: Framework) -> String {
     let (import, plugin) = match framework {
-        Frontend::Svelte => (
+        Framework::Svelte => (
             "import { svelte } from '@sveltejs/vite-plugin-svelte'",
             "svelte({ prebundleSvelteLibraries: true })",
         ),
-        Frontend::React => ("import react from '@vitejs/plugin-react'", "react()"),
-        Frontend::Vue => ("import vue from '@vitejs/plugin-vue'", "vue()"),
+        Framework::React => ("import react from '@vitejs/plugin-react'", "react()"),
+        Framework::Vue => ("import vue from '@vitejs/plugin-vue'", "vue()"),
     };
     format!(
         "{import}\nimport {{ defineConfig }} from 'vite'\n\nexport default defineConfig({{\n  plugins: [{plugin}],\n  build: {{\n    manifest: true,\n    rollupOptions: {{\n      input: 'src/main.ts',\n    }},\n  }},\n}})\n"
     )
 }
 
-fn package_json(framework: Frontend) -> &'static str {
+fn package_json(framework: Framework) -> &'static str {
     match framework {
-        Frontend::Svelte => SVELTE_PACKAGE,
-        Frontend::React => REACT_PACKAGE,
-        Frontend::Vue => VUE_PACKAGE,
+        Framework::Svelte => SVELTE_PACKAGE,
+        Framework::React => REACT_PACKAGE,
+        Framework::Vue => VUE_PACKAGE,
     }
 }
 
