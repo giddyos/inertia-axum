@@ -13,14 +13,6 @@ separate process manager. The adapter validates the runtime and bundle, waits fo
 readiness, restarts an exited child, and shuts it down when the last application
 handle is dropped.
 
-## Prerequisites
-
-- Enable the `ssr` feature.
-- Put Node.js 22 or newer on `PATH`, or configure another executable.
-- Produce the SSR bundle described in
-  [Frontend build](/docs/ssr/frontend-build).
-- Ensure the bundle listens on the same endpoint configured in Rust.
-
 ## Start the process
 
 ```rust title="src/main.rs"
@@ -34,6 +26,10 @@ let inertia = InertiaApp::vite("frontend")
 
 `.ssr("dist/ssr/app.js")` is equivalent shorthand. The default endpoint is
 `http://127.0.0.1:13714`.
+
+Managed mode validates Node major version 22 or newer. Produce the bundle through
+[Frontend build](/docs/ssr/frontend-build) and keep its listening endpoint aligned
+with the Rust configuration.
 
 With a Vite root, a relative bundle is resolved from that root and Node runs with
 the Vite root as its working directory. Without a Vite root, a relative path is
@@ -74,7 +70,7 @@ When the last `InertiaApp` handle is dropped, the supervisor requests
 `/shutdown`, waits up to the control timeout, and force-kills a process that does
 not exit. Keep the application handle alive for as long as the router is serving.
 
-## Production guidance
+## Choose managed ownership
 
 Managed mode fits a single container or host that contains the Rust binary, Node,
 and the bundle. Bind Node to loopback unless another host must reach it. Use an

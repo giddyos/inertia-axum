@@ -1,176 +1,111 @@
 ---
-title: Troubleshoot SSR
-description: Diagnose SSR feature, startup, bundle, manifest, policy, fallback, capacity, and shutdown failures.
-keywords:
-  - SSR troubleshooting
-  - health timeout
-  - missing manifest
-  - Node version
-  - CSR fallback
+title: SSR troubleshooting
+description: Diagnose feature, startup, bundle, policy, rendering, capacity, asset, and shutdown failures.
+keywords: [SSR errors, missing manifest, Node version, CSR fallback]
 ---
 
-Work from startup errors, `ssr_health()`, and the
-`inertia_axum::ssr::node` tracing target. Fallback mode intentionally turns many
-runtime failures into valid CSR, so a successful HTTP page alone does not prove
-that SSR succeeded.
+Start with the visible symptom, confirm the likely cause, then apply the smallest check or fix.
 
-## The SSR methods do not exist
+## SSR methods do not exist
 
-Enable the non-default feature:
+**Symptom:** `.ssr(...)`, `.start()`, or route-policy methods do not compile.
 
-```toml title="Cargo.toml"
-inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
-```
+**Likely cause:** The non-default `ssr` Cargo feature is disabled or `SsrRouteExt` is not imported.
 
-Route methods also require the trait import:
-
-```rust title="src/main.rs"
-use inertia_axum::SsrRouteExt as _;
-```
+**Check or fix:** Enable `features = ["ssr"]` and import `inertia_axum::SsrRouteExt as _` for route methods.
 
 ## `build()` rejects the configuration
 
-Starting SSR requires asynchronous work. Replace:
+**Symptom:** Startup reports that configured SSR requires asynchronous startup.
 
-```rust title="src/main.rs"
-let inertia = InertiaApp::vite("frontend")
-    .ssr("dist/ssr/app.js")
-    .build()?;
-```
+**Likely cause:** `.build()` cannot launch or connect an SSR runtime.
 
-with:
-
-```rust title="src/main.rs"
-let inertia = InertiaApp::vite("frontend")
-    .ssr("dist/ssr/app.js")
-    .start()
-    .await?;
-```
+**Check or fix:** Replace the final `.build()?` with `.start().await?`.
 
 ## Node is missing or unsupported
 
-Managed mode runs the configured runtime with `--version` and requires major
-version 22 or newer.
+**Symptom:** Managed startup cannot execute Node or rejects its version.
 
-```sh
-node --version
-```
+**Likely cause:** Node is absent from `PATH`, the configured executable is invalid, or its major version is below 22.
 
-Install Node 22+, put it on `PATH`, or pass an executable with
-`.runtime("/path/to/node")`.
+**Check or fix:** Run `node --version`, install Node 22+, or pass the correct absolute executable through `.runtime(...)`.
 
 ## The bundle cannot be found
 
-The bundle must exist and be a regular file before managed startup.
+**Symptom:** Managed startup reports a missing or non-file bundle.
 
-- With `InertiaApp::vite("frontend")`, `dist/ssr/app.js` means
-  `frontend/dist/ssr/app.js`.
-- Without a Vite root, a relative path starts from the Rust process directory.
-- Run both `vite build` and `vite build --ssr`.
-- Make `.ssr(...)` match a custom Vite entry or output name.
+**Likely cause:** The SSR build was skipped or the path was resolved from a different Vite/process root.
 
-Directories are rejected even when the path exists.
+**Check or fix:** Run the two-output [frontend build](/docs/ssr/frontend-build) and compare the emitted file with `.ssr(...)`.
 
 ## Production Vite reports a missing manifest
 
-`InertiaApp::vite(...)` requires the client manifest before it starts production
-SSR:
+**Symptom:** Production startup fails before contacting the SSR backend.
 
-```text
-<vite root>/<build directory>/.vite/manifest.json
-```
+**Likely cause:** The client build or configured entry/build directory does not match the manifest.
 
-The SSR protocol itself does not consume this file. The initial document still
-needs the manifest to inject browser scripts and styles and serve static assets.
-Run the client build, verify `.build_dir(...)`, and then start Rust. A custom
-asset provider or `default_root()` with no Vite configuration has no manifest
-requirement.
+**Check or fix:** Verify the canonical [client-manifest contract](/docs/ssr/frontend-build#connect-both-outputs). SSR does not replace the browser build.
 
 ## Startup times out waiting for health
 
-Check all of the following:
+**Symptom:** `.start().await` reaches `startup_timeout`.
 
-- The endpoint is an absolute `http://` URL.
-- The server listens on the same host and port configured in Rust.
-- `GET /health` returns a successful response.
-- The Vite plugin's SSR port matches a custom `.endpoint(...)`.
-- Container networking permits Rust to reach the external service.
-- Startup fits inside `.startup_timeout(...)`.
+**Likely cause:** `/health` is unreachable, the endpoint differs between Rust and the bundle, or the renderer failed during boot.
 
-Changing the Rust endpoint does not change a port compiled into the Node bundle.
+**Check or fix:** Call the configured health URL from the Rust host, inspect renderer logs, and align both endpoint settings before increasing the timeout.
 
-## A page silently renders as CSR
+## A page renders as CSR
 
-Fallback is the default. Inspect `ssr_health()` and tracing for timeout,
-overload, transport, invalid response, response-too-large, render, or process-exit
-failures.
+**Symptom:** The page is usable but contains no server-rendered marker.
 
-Also verify that:
+**Likely cause:** Fallback handled a render failure, the route opted out, opt-in mode lacks `.with_ssr()`, or `ssr_when` returned false.
 
-- the request is an initial browser `GET`, not an Inertia JSON visit;
-- the handler returned an Inertia page;
-- the route is not under `.without_ssr()`;
-- opt-in mode routes use `.with_ssr()`;
-- `ssr_when` returned `true`;
-- Vite development did not return temporary `null`.
-
-Use `.strict()` in a test or staging configuration when an otherwise hidden
-fallback should become a visible 500. Do not expose raw backend errors to users.
+**Check or fix:** Inspect `ssr_health()` and tracing, then check [route policies](/docs/ssr/route-policies). Temporarily use strict mode only to make a hidden backend failure visible as a generic 500.
 
 ## Strict mode returns 500
 
-The backend failed to produce a valid document. Check its logs and the local
-failure kind. Common causes are a backend 500, timeout, malformed JSON, or a body
-larger than `max_response_bytes`. Strict responses intentionally omit the raw
-Node error.
+**Symptom:** An eligible page returns `500 Internal Server Error`.
+
+**Likely cause:** The same backend, timeout, overload, or response validation failure that fallback would convert to CSR occurred under `.strict()`.
+
+**Check or fix:** Inspect health and server-side tracing; raw backend details are intentionally not sent to the browser.
 
 ## Renders are overloaded or slow
 
-- Measure Node render latency and CPU before increasing concurrency.
-- Set `.max_concurrency(...)` to real backend capacity; saturation load-sheds
-  immediately rather than forming an unbounded queue.
-- Increase `.timeout(...)` only for legitimate slow renders.
-- Run an external cluster when one managed process is insufficient.
-- Keep large or unnecessary data out of initial page props.
+**Symptom:** Requests fall back or fail immediately under load, or hit the render timeout.
+
+**Likely cause:** `max_concurrency` is saturated or renderer CPU/latency exceeds configured capacity.
+
+**Check or fix:** Measure render latency, CPU, memory, and fallback rate before tuning the limits in [Health and operations](/docs/ssr/health-and-operations).
 
 ## SSR output is rejected
 
-`POST /render` must return successful JSON with either `null` or:
+**Symptom:** Health records an invalid, render-error, or oversized response.
 
-```json title="package.json"
-{
-  "head": ["<title>Page</title>"],
-  "body": "<div id=\"app\" data-server-rendered=\"true\">Page</div>"
-}
-```
+**Likely cause:** `/render` returned a non-success status, malformed JSON, a wrong `head`/`body` shape, or more than `max_response_bytes`.
 
-Every head element must be a string and `body` must be a string. Increase
-`.max_response_bytes(...)` only after confirming that the output is expected.
+**Check or fix:** Capture the renderer response server-side and compare it with the external response contract; raise the size limit only for measured legitimate documents.
 
 ## Head or mount markup appears twice
 
-The root document must place each Inertia fragment once. Marker templates require
-exactly one `inertia:assets`, `inertia:head`, and `inertia:mount` marker. Askama
-roots should mark only `inertia.assets`, `inertia.head`, and `inertia.mount` as
-safe. Do not wrap the backend body in a second `#app` element.
+**Symptom:** Titles, head tags, the app root, or initial page data are duplicated.
 
-See [Root documents](/docs/guides/root-documents) for the complete contract.
+**Likely cause:** A custom root serializes page/SSR fragments itself in addition to the adapter-provided fragments.
+
+**Check or fix:** Emit each marker once and let the selected `RootView` place the trusted assets, head, and mount values.
 
 ## Browser assets return 404
 
-Make the Vite client output, `.build_dir(...)`, and `.public_path(...)` agree.
-The manifest's entry must match `.entry(...)`. The maintained production tests
-request the emitted module script through the Axum router; use the same check in
-your deployment smoke test.
+**Symptom:** SSR HTML arrives, but hydration scripts or styles fail to load.
+
+**Likely cause:** `.entry(...)`, `.build_dir(...)`, `.public_path(...)`, or proxy routing disagrees with the client manifest.
+
+**Check or fix:** Inspect the manifest entry and emitted URLs, then verify Axum or the proxy serves the configured public prefix.
 
 ## Managed Node does not release its port
 
-The bundle should implement `/shutdown` and close its listener. Managed mode
-waits for that route and then force-kills after the control timeout. Keep the
-`InertiaApp` handle owned by the live router and allow normal Rust shutdown to
-drop the last clone. Increase `.control_timeout(...)` only when graceful shutdown
-legitimately needs longer.
+**Symptom:** Restarting Rust reports that the renderer endpoint is already in use.
 
-For baseline configuration values, read
-[Health and operations](/docs/ssr/health-and-operations). For deterministic
-reproduction, use [SSR testing](/docs/ssr/testing).
+**Likely cause:** An `InertiaApp` handle still owns the supervisor or shutdown exceeded the control deadline.
+
+**Check or fix:** Drop every application clone during normal shutdown, inspect `/shutdown` handling, and allow the supervisor to force-kill after its bounded wait.

@@ -1,26 +1,17 @@
 ---
 title: Fallback and strict mode
-description: Decide whether SSR failures return a usable CSR document or a generic internal error.
-keywords:
-  - SSR fallback
-  - strict mode
-  - load shedding
-  - timeout
+description: Choose a usable CSR response or a generic 500 when SSR rendering fails.
+keywords: [SSR fallback, strict mode, load shedding]
 ---
 
-Choose how an eligible page behaves when its SSR backend cannot produce a valid
-document. Fallback is the default and keeps the page usable through client-side
-rendering; strict mode converts the same failure into an internal error.
+The failure mode is application-wide and applies after an eligible page reaches the renderer.
 
-## Prerequisites
+| Mode | Failed render | Best fit |
+| --- | --- | --- |
+| Fallback (default) | Returns the same page through the normal CSR mount | Applications that remain usable in the browser |
+| Strict | Returns `500 Internal Server Error` | Routes where server-rendered markup is a hard contract |
 
-Enable the `ssr` feature and configure either managed or external SSR with
-`.start().await`. Failure mode is selected on the application-wide `Ssr`
-configuration, not on individual routes.
-
-## Default to graceful CSR
-
-No extra configuration is required:
+## Default fallback
 
 ```rust title="src/main.rs"
 use inertia_axum::Ssr;
@@ -28,25 +19,9 @@ use inertia_axum::Ssr;
 let ssr = Ssr::node("dist/ssr/app.js");
 ```
 
-The adapter already has the serialized Inertia page and root renderer before it
-contacts the SSR backend. On failure, fallback renders that same page through the
-normal CSR mount, including the browser assets needed to hydrate it.
+Fallback covers unavailable backends, load shedding, timeouts, transport and backend errors, malformed or oversized output, and a Vite development `null` response. The failed request is not retried; health becomes degraded and a later successful render restores ready state.
 
-Fallback applies to:
-
-- an unavailable backend or exited managed process;
-- immediate load shedding when the concurrency limit is full;
-- render timeout or transport failure;
-- a non-success backend response;
-- malformed response JSON or the wrong response shape;
-- a response larger than `max_response_bytes`;
-- a Vite development `null` response.
-
-Each failed production render is attempted once. A backend 500 is not retried
-inside the request. Managed process supervision and restart are separate from
-per-request rendering.
-
-## Select strict mode
+## Strict mode
 
 ```rust title="src/main.rs"
 use inertia_axum::Ssr;
@@ -54,42 +29,6 @@ use inertia_axum::Ssr;
 let ssr = Ssr::node("dist/ssr/app.js").strict();
 ```
 
-In strict mode, an SSR failure returns `500 Internal Server Error`. Backend
-response bodies, JavaScript exceptions, and transport details are not returned
-to the browser.
+Strict responses never expose backend bodies or JavaScript exceptions. Use `.without_ssr()` when a specific route should remain CSR instead of requiring strict SSR.
 
-Strictness is application-wide for the configured SSR runtime. Use
-`.without_ssr()` for individual routes that should remain CSR rather than
-strictly requiring SSR.
-
-## Choose deliberately
-
-Use fallback when:
-
-- availability matters more than guaranteed server-rendered markup;
-- authenticated or application pages can render correctly in the browser;
-- a deployment should tolerate short Node restarts or load spikes.
-
-Use strict mode when:
-
-- an SSR response is a hard contract for eligible pages;
-- returning CSR would violate a crawler, compliance, or operational requirement;
-- failures should be immediately visible to an upstream health or error system.
-
-Fallback does not make failures invisible. `ssr_health()` records the last
-failure class as `Degraded`, and a later successful render restores `Ready`.
-Monitor that state and the SSR tracing output even when users receive CSR.
-
-## Capacity behavior
-
-The concurrency limiter load-sheds rather than queueing without a bound. In
-fallback mode, an overloaded request immediately becomes CSR. In strict mode, it
-immediately becomes 500. Tune the limit from measured backend capacity instead
-of increasing it solely to hide saturation.
-
-The adapter does not cache SSR documents. Add application-aware caching outside
-the adapter only when it is safe for personalized page props.
-
-Configure and observe these controls in
-[Health and operations](/docs/ssr/health-and-operations), then add failure-path
-coverage with [SSR testing](/docs/ssr/testing).
+The concurrency limiter load-sheds rather than creating an unbounded queue: saturation becomes immediate CSR in fallback mode or an immediate 500 in strict mode. Configure limits and observe health in [Health and operations](/docs/ssr/health-and-operations).

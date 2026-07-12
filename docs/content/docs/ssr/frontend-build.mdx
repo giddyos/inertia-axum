@@ -1,29 +1,12 @@
 ---
 title: Frontend build
-description: Produce the Vite client manifest and Node SSR bundle required by a production Inertia application.
-keywords:
-  - Vite
-  - SSR bundle
-  - client manifest
-  - Svelte
-  - React
-  - Vue
+description: Produce the client assets and framework SSR bundle used by production rendering.
+keywords: [Vite, SSR bundle, client manifest, Svelte, React, Vue]
 ---
 
-Build two production outputs: browser assets described by a Vite manifest, and a
-Node bundle that renders Inertia pages. The maintained Svelte, React, and Vue
-examples use `@inertiajs/vite` to produce both from one application entry.
+Run one script to create browser assets and the Node renderer bundle from the same application entry.
 
-## Prerequisites
-
-- Enable the `ssr` feature on `inertia-axum`; keep the default `vite` feature.
-- Use Node.js 22 or newer for the managed runtime.
-- Install the Inertia adapter, `@inertiajs/vite`, Vite, and your framework's Vite
-  plugin.
-
-Add a production script that runs both builds:
-
-```json title="package.json"
+```json title="frontend/package.json"
 {
   "scripts": {
     "build": "vite build && vite build --ssr"
@@ -33,82 +16,63 @@ Add a production script that runs both builds:
 
 ## Configure Vite
 
-These configurations are reduced from the maintained browser examples. The
-client build emits a manifest under `../public/build`; the SSR build emits its
-bundle under `dist/ssr`.
-
-<Tabs items={["Svelte", "React", "Vue"]}>
+<Tabs items={['Svelte', 'React', 'Vue']}>
   <Tab value="Svelte">
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import { svelte } from '@sveltejs/vite-plugin-svelte'
+    import { defineConfig } from 'vite'
 
-```js title="vite.config.js"
-import inertia from '@inertiajs/vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { defineConfig } from 'vite'
-
-export default defineConfig(({ isSsrBuild }) => ({
-  plugins: [svelte({ prebundleSvelteLibraries: true }), inertia()],
-  build: {
-    outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
-    emptyOutDir: true,
-    manifest: !isSsrBuild,
-    rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
-  },
-}))
-```
-
+    export default defineConfig(({ isSsrBuild }) => ({
+      plugins: [svelte({ prebundleSvelteLibraries: true }), inertia()],
+      build: {
+        outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
+        emptyOutDir: true,
+        manifest: !isSsrBuild,
+        rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
+      },
+    }))
+    ```
   </Tab>
   <Tab value="React">
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import react from '@vitejs/plugin-react'
+    import { defineConfig } from 'vite'
 
-```js title="vite.config.js"
-import inertia from '@inertiajs/vite'
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
-
-export default defineConfig(({ isSsrBuild }) => ({
-  plugins: [react(), inertia()],
-  build: {
-    outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
-    emptyOutDir: true,
-    manifest: !isSsrBuild,
-    rollupOptions: isSsrBuild ? {} : { input: 'src/app.jsx' },
-  },
-}))
-```
-
+    export default defineConfig(({ isSsrBuild }) => ({
+      plugins: [react(), inertia()],
+      build: {
+        outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
+        emptyOutDir: true,
+        manifest: !isSsrBuild,
+        rollupOptions: isSsrBuild ? {} : { input: 'src/app.jsx' },
+      },
+    }))
+    ```
   </Tab>
   <Tab value="Vue">
+    ```js title="frontend/vite.config.js"
+    import inertia from '@inertiajs/vite'
+    import vue from '@vitejs/plugin-vue'
+    import { defineConfig } from 'vite'
 
-```js title="vite.config.js"
-import inertia from '@inertiajs/vite'
-import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
-
-export default defineConfig(({ isSsrBuild }) => ({
-  plugins: [vue(), inertia()],
-  build: {
-    outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
-    emptyOutDir: true,
-    manifest: !isSsrBuild,
-    rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
-  },
-}))
-```
-
+    export default defineConfig(({ isSsrBuild }) => ({
+      plugins: [vue(), inertia()],
+      build: {
+        outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
+        emptyOutDir: true,
+        manifest: !isSsrBuild,
+        rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
+      },
+    }))
+    ```
   </Tab>
 </Tabs>
 
-The plugin detects the application entry used by the examples and generates the
-SSR server bundle. If your application uses another entry or output name, make
-the Rust paths match the files your Vite configuration actually emits.
-
-## Connect the outputs to Rust
-
-Paths passed to `.entry(...)` and `.build_dir(...)` are relative to the Vite root.
-The public path is the URL prefix served by the Axum router.
+## Connect both outputs
 
 ```rust title="src/main.rs"
-use inertia_axum::prelude::*;
-
 let inertia = InertiaApp::vite("frontend")
     .entry("src/app.js")
     .build_dir("../public/build")
@@ -118,31 +82,6 @@ let inertia = InertiaApp::vite("frontend")
     .await?;
 ```
 
-For that layout, production startup expects:
+For this layout the client manifest is `public/build/.vite/manifest.json` and the renderer is `frontend/dist/ssr/app.js`. Production Vite requires that client manifest even though the SSR HTTP protocol does not read it, because the root document still needs browser scripts and styles and Axum serves those built assets.
 
-| Output | Path relative to the repository |
-| --- | --- |
-| Client manifest | `public/build/.vite/manifest.json` |
-| Browser assets | `public/build/...` |
-| Managed Node bundle | `frontend/dist/ssr/app.js` |
-
-The SSR HTTP protocol does not read the client manifest. `InertiaApp::vite(...)`
-still requires it in production so the initial document can load browser scripts
-and styles and Axum can serve the built assets.
-
-## Develop without production outputs
-
-Set a Vite development URL explicitly or through the environment:
-
-```sh
-VITE_DEV_SERVER_URL=http://127.0.0.1:5173 cargo run
-```
-
-When a development server is configured, the adapter loads `@vite/client` and the
-application entry from Vite and sends SSR requests to `/__inertia_ssr`. Neither
-the production manifest nor the production bundle is required. A temporary
-`null` render response, such as during warmup, falls back to CSR.
-
-See the complete [Svelte](/docs/frontend/svelte),
-[React](/docs/frontend/react), and [Vue](/docs/frontend/vue) setup pages, or
-continue with [Managed Node](/docs/ssr/managed-node).
+Continue with [Managed Node](/docs/ssr/managed-node) or point the same frontend bundle at an [external service](/docs/ssr/external-server).

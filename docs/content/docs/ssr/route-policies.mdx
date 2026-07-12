@@ -1,101 +1,45 @@
 ---
 title: Route policies
-description: Enable, disable, or conditionally select SSR for Axum method routes and nested router groups.
-keywords:
-  - without_ssr
-  - with_ssr
-  - ssr_when
-  - SSR opt-in
-  - nested routes
+description: Use default-on SSR, route opt-out, application opt-in, or a request condition.
+keywords: [without_ssr, with_ssr, ssr_when, SSR opt-in]
 ---
 
-Control SSR at the method route or router-group boundary without duplicating
-handlers. Policies affect only eligible initial page GETs; Inertia JSON visits,
-write requests, and ordinary Axum responses still bypass SSR.
+Route policies affect only eligible initial page `GET` requests. Inertia JSON visits, writes, and ordinary Axum responses never invoke SSR.
 
-## Prerequisites
+## Default-on
 
-Enable the `ssr` feature and import `SsrRouteExt`.
+Configured SSR needs no route marker:
 
-```rust title="src/main.rs"
-use inertia_axum::SsrRouteExt as _;
+```rust title="src/router.rs"
+use axum::routing::get;
+
+let dashboard = get(dashboard);
 ```
-
-Configured SSR is enabled for eligible routes by default.
 
 ## Opt a route out
 
-```rust title="src/main.rs"
-use axum::routing::get;
+```rust title="src/router.rs"
 use inertia_axum::SsrRouteExt as _;
 
-let route = get(private_dashboard).without_ssr();
+let account = get(account).without_ssr();
 ```
 
-An opted-out page returns the normal CSR document and does not contact the SSR
-backend.
+`.without_ssr()` is the prominent choice for authenticated or browser-only pages that should always return CSR.
 
-Apply the same policy to a router group:
+## Use explicit opt-in
 
-```rust title="src/main.rs"
-use axum::{Router, routing::get};
-use inertia_axum::SsrRouteExt as _;
-
-let account_routes = Router::new()
-    .route("/settings", get(settings))
-    .route("/billing", get(billing))
-    .without_ssr();
-```
-
-## Use explicit opt-in mode
-
-For applications where most pages should remain CSR, change the application
-default and mark only selected routes:
-
-```rust title="src/main.rs"
-use axum::routing::get;
+```rust title="src/router.rs"
 use inertia_axum::{Ssr, SsrRouteExt as _};
 
 let ssr = Ssr::node("dist/ssr/app.js").opt_in();
-let marketing = get(marketing_page).with_ssr();
+let marketing = get(marketing).with_ssr();
 ```
 
-Unmarked routes are CSR in opt-in mode. `.with_ssr()` also overrides a disabled
-router-group policy when it is attached nearer the handler.
-
-## Understand nested precedence
-
-The policy nearest the handler wins:
-
-1. A method-route policy wins over its router group.
-2. A nested router's policy wins over an outer router.
-3. An outer policy fills in only when no inner policy already made a decision.
-
-```rust title="src/main.rs"
-use axum::{Router, routing::get};
-use inertia_axum::SsrRouteExt as _;
-
-let reports = Router::new()
-    .route("/public", get(public_report).with_ssr())
-    .route("/private", get(private_report))
-    .without_ssr();
-
-let app = Router::new()
-    .nest("/reports", reports)
-    .with_ssr();
-```
-
-Here `/reports/public` is SSR because the method route enables it.
-`/reports/private` remains CSR because the nested group disables it; the outer
-`.with_ssr()` does not replace that nearer decision.
+Unmarked routes remain CSR in opt-in mode.
 
 ## Select SSR per request
 
-`ssr_when` runs synchronously and can inspect the method, URI, headers, and
-request extensions:
-
-```rust title="src/main.rs"
-use axum::routing::get;
+```rust title="src/router.rs"
 use inertia_axum::SsrRouteExt as _;
 
 let preview = get(preview).ssr_when(|context| {
@@ -103,24 +47,6 @@ let preview = get(preview).ssr_when(|context| {
 });
 ```
 
-A `true` result explicitly enables SSR; `false` explicitly disables it. The
-condition does not consume or modify the request body.
+`ssr_when` returns an explicit decision and can inspect the method, URI, headers, or request extensions. Put asynchronous decisions in middleware, store the small result in an extension, and keep the condition synchronous.
 
-For database or network decisions, do the asynchronous work in ordinary Axum
-middleware, insert a small result into request extensions, and read it:
-
-```rust title="src/main.rs"
-#[derive(Clone)]
-struct CanRender(bool);
-
-let route = get(page).ssr_when(|context| {
-    context
-        .extension::<CanRender>()
-        .is_some_and(|value| value.0)
-});
-```
-
-Make sure the middleware that inserts the extension wraps the policy-bearing
-route. Keep conditions cheap; they run for every request through that route.
-
-Test policies without Node through [SSR testing](/docs/ssr/testing).
+The policy nearest the handler wins: method-route policy, then nested router policy, then outer router policy. Test every branch without Node through [SSR testing](/docs/ssr/testing).

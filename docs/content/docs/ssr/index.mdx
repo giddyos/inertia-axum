@@ -1,78 +1,47 @@
 ---
 title: Server-side rendering
-description: Render initial Inertia page visits through managed Node or an external SSR server, with safe CSR fallback.
-keywords:
-  - SSR
-  - server-side rendering
-  - Node
-  - CSR fallback
+description: Enable SSR, build both frontend outputs, and start a managed or external renderer.
+keywords: [SSR, server-side rendering, CSR fallback]
 ---
 
-Add server-rendered markup to initial browser visits while keeping the same Axum
-routes and Inertia page responses. `inertia-axum` can supervise a Node process or
-connect to an SSR server managed outside the Rust application.
+SSR adds rendered markup to eligible initial page visits without changing Axum handlers or later Inertia JSON visits.
 
-## Prerequisites
+## Enable SSR
 
-- Enable the non-default `ssr` feature.
-- Use Node.js 22 or newer for managed Node mode.
-- Build a client manifest and SSR bundle when using Vite in production.
+<Steps>
+  <Step>
+    ### Enable the feature
 
-```toml title="Cargo.toml"
-[dependencies]
-inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
-```
+    ```toml title="Cargo.toml"
+    [dependencies]
+    inertia-axum = { version = "=1.0.0-alpha.1", features = ["ssr"] }
+    ```
+  </Step>
+  <Step>
+    ### Build client and SSR outputs
 
-## Start managed SSR
+    ```json title="frontend/package.json"
+    {
+      "scripts": {
+        "build": "vite build && vite build --ssr"
+      }
+    }
+    ```
 
-The string passed to `.ssr(...)` is shorthand for `Ssr::node(...)`. With
-`InertiaApp::vite("frontend")`, a relative bundle path is resolved from that
-Vite root.
+    Use the framework configurations and output contract in [Frontend build](/docs/ssr/frontend-build).
+  </Step>
+  <Step>
+    ### Start asynchronously
 
-```rust title="src/main.rs"
-use inertia_axum::prelude::*;
+    ```rust title="src/main.rs"
+    let inertia = InertiaApp::vite("frontend")
+        .ssr("dist/ssr/app.js")
+        .start()
+        .await?;
+    ```
+  </Step>
+</Steps>
 
-let inertia = InertiaApp::vite("frontend")
-    .ssr("dist/ssr/app.js")
-    .start()
-    .await?;
-```
+Configured SSR is enabled by default for initial page `GET` requests unless a route policy opts out. Render failures fall back to the normal usable CSR document by default; select [strict mode](/docs/ssr/fallback-and-strict-mode) only when SSR is a hard requirement.
 
-SSR startup is asynchronous. Once `.ssr(...)` is configured, use
-`.start().await`; `.build()` returns a configuration error rather than starting a
-process implicitly.
-
-## What gets rendered
-
-SSR is attempted for an eligible page response only when all of these are true:
-
-- The request is an initial browser request, not an `X-Inertia: true` visit.
-- The method is `GET`.
-- The route policy enables SSR.
-- A page response reaches the Inertia finalizer.
-
-Inertia JSON visits, write requests, and ordinary Axum responses do not invoke the
-SSR backend. The final root document—built-in, marker-based, Askama, or
-custom—receives either the SSR head and body or the normal CSR mount.
-
-## Defaults
-
-Configured SSR is enabled for eligible routes by default. A failed render falls
-back to a usable CSR document unless `.strict()` is selected. The default render
-timeout is 3 seconds, maximum concurrency is 16, and maximum response size is
-8 MiB.
-
-Read [Fallback and strict mode](/docs/ssr/fallback-and-strict-mode) before choosing
-strict mode, and review all limits in
-[Health and operations](/docs/ssr/health-and-operations).
-
-## Choose a backend
-
-- [Managed Node](/docs/ssr/managed-node) starts, monitors, restarts, and shuts down
-  one Node child with the Rust application.
-- [External server](/docs/ssr/external-server) connects to a separately supervised
-  SSR service.
-
-Next, create both frontend outputs in
-[Frontend build](/docs/ssr/frontend-build), then apply route-specific behavior in
-[Route policies](/docs/ssr/route-policies).
+[Managed Node](/docs/ssr/managed-node) makes Rust supervise one renderer process. [External SSR](/docs/ssr/external-server) connects Rust to a service whose supervisor owns process lifecycle and scaling.

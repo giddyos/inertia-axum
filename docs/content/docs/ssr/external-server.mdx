@@ -12,13 +12,6 @@ Connect to a separately deployed SSR service when Node needs its own container,
 cluster, release cycle, or process manager. Rust waits for readiness and sends
 render requests, but it does not start, restart, or stop the external process.
 
-## Prerequisites
-
-- Enable the `ssr` feature.
-- Run an Inertia-compatible service with `GET /health` and `POST /render`.
-- Expose it through an absolute `http://` URL reachable from the Axum process.
-- Build the browser client manifest when using `InertiaApp::vite(...)`.
-
 ## Configure the endpoint
 
 ```rust title="src/main.rs"
@@ -53,7 +46,7 @@ let ssr = Ssr::external("http://127.0.0.1:13714")
 Calling `.skip_bundle_check()` after `.bundle(...)` disables that check again.
 With a Vite root, a relative validation path is resolved from that root.
 
-## Define ownership clearly
+## Supervisor-owned responsibilities
 
 The external supervisor owns:
 
@@ -61,6 +54,8 @@ The external supervisor owns:
 - Node logs and metrics;
 - network policy and service discovery;
 - cluster capacity and rolling deployments.
+
+## Rust-owned responsibilities
 
 The Rust adapter owns render timeouts, response-size validation, load shedding,
 fallback or strict behavior, and local health classification. It does not
