@@ -29,7 +29,7 @@ tower-layer = "0.3"
 tower-service = "0.3"
 tracing = "0.1"
 sha2 = { version = "0.11", optional = true }
-tower-http = { version = "0.6", features = ["fs"], optional = true }
+tower-http = { version = "0.7", features = ["fs"], optional = true }
 inertia-axum-macros = { workspace = true, optional = true }
 cookie = { version = "0.18", features = ["secure"], optional = true }
 tower-sessions = { version = "0.14", optional = true }
