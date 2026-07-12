@@ -29,7 +29,7 @@ Run one script to create browser assets and the Node renderer bundle from the sa
         outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
         emptyOutDir: true,
         manifest: !isSsrBuild,
-        rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
+        rolldownOptions: isSsrBuild ? {} : { input: 'src/app.js' },
       },
     }))
     ```
@@ -46,7 +46,7 @@ Run one script to create browser assets and the Node renderer bundle from the sa
         outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
         emptyOutDir: true,
         manifest: !isSsrBuild,
-        rollupOptions: isSsrBuild ? {} : { input: 'src/app.jsx' },
+        rolldownOptions: isSsrBuild ? {} : { input: 'src/app.jsx' },
       },
     }))
     ```
@@ -63,7 +63,7 @@ Run one script to create browser assets and the Node renderer bundle from the sa
         outDir: isSsrBuild ? 'dist/ssr' : '../public/build',
         emptyOutDir: true,
         manifest: !isSsrBuild,
-        rollupOptions: isSsrBuild ? {} : { input: 'src/app.js' },
+        rolldownOptions: isSsrBuild ? {} : { input: 'src/app.js' },
       },
     }))
     ```

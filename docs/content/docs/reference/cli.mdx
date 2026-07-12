@@ -16,9 +16,9 @@ The executable accepts both `cargo inertia ...` and direct `cargo-inertia ...` i
 ## Command summary
 
 ```text
-cargo inertia init --frontend <svelte|react|vue> [--path <root>]
-cargo inertia dev [--frontend <directory>] [--port <port>]
-cargo inertia check [--path <root>] [--frontend <directory>]
+cargo inertia init [--framework <svelte|react|vue>] [--package-manager <auto|npm|pnpm|bun>] [--ssr <none|managed-node|external>] [--yes]
+cargo inertia dev [--frontend <directory>] [--package-manager <auto|npm|pnpm|bun>] [--host <host>] [--port <port>] [-- <cargo args>]
+cargo inertia check [--path <root>] [--frontend <directory>] [--built] [--ssr]
 ```
 
 Errors are written to stderr with a `cargo inertia:` prefix and a non-zero exit code.
@@ -81,7 +81,7 @@ Defaults:
 The command requires `<frontend>/package.json`, then runs:
 
 ```text
-npm run dev -- --host 127.0.0.1 --port <port>
+<selected package manager> run dev --host <host> --port <port>
 cargo run
 ```
 

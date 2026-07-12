@@ -6,7 +6,7 @@ keywords:
   - CLI
 ---
 
-`cargo-inertia` is optional project tooling. It can create a small client-only Vite
+`cargo-inertia` is optional project tooling. It creates small Vite
 frontend, run Vite beside `cargo run`, and compare literal typed-page components with
 frontend files. It does not replace understanding the generated setup.
 
@@ -19,9 +19,10 @@ cargo install cargo-inertia --version 1.0.0-alpha.1 --locked
 ## Initialize a frontend
 
 ```bash
-cargo inertia init --frontend svelte
-cargo inertia init --frontend react --path ./my-app
-cargo inertia init --frontend vue
+cargo inertia init
+cargo inertia init --framework react --package-manager pnpm --ssr managed-node --install --yes
+cargo inertia init --framework svelte --package-manager bun --ssr none --yes
+cargo inertia init --framework vue --package-manager npm --ssr external --ssr-endpoint http://127.0.0.1:13714 --yes
 ```
 
 The command always creates `<path>/frontend` and refuses to overwrite an existing
@@ -33,7 +34,8 @@ The generated project:
 
 - Pins the maintained framework versions but does not create a lockfile. Install
   dependencies and commit the resulting lockfile for reproducible builds.
-- Uses portable Vite scripts, a client-only build, and no SSR configuration.
+- Supports CSR, managed Node SSR, and external SSR. Managed SSR needs Node 22.12+; Bun only runs package scripts and never replaces Node as the managed SSR runtime.
+- Never overwrites an existing destination. Auto manager selection uses lockfiles and package metadata; conflicting lockfiles require an explicit choice.
 - Creates no Rust manifest, router, handler, or root document.
 
 Use it as a starting point, then compare the maintained
@@ -45,7 +47,11 @@ Use it as a starting point, then compare the maintained
 cargo inertia dev --frontend frontend --port 5173
 ```
 
-This runs `npm run dev -- --host 127.0.0.1 --port <port>` in the frontend directory
+This runs the selected npm, pnpm, or Bun `dev` script, waits for Vite, then runs Cargo with `VITE_DEV_SERVER_URL`. Cargo arguments after `--` are forwarded unchanged:
+
+```bash
+cargo inertia dev -- --bin server
+```
 and plain `cargo run` in the current directory. Only the Cargo child receives
 `VITE_DEV_SERVER_URL=http://127.0.0.1:<port>`. When either child exits, the command
 terminates its peer.
