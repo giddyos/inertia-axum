@@ -10,7 +10,7 @@ mod props;
 #[cfg(feature = "typegen")]
 mod typegen;
 
-#[proc_macro_derive(InertiaPage, attributes(inertia))]
+#[proc_macro_derive(InertiaPage, attributes(inertia, ts))]
 /// Derives a typed direct-response Inertia page and its prop keys.
 pub fn derive_page(input: TokenStream) -> TokenStream {
     page::expand(syn::parse_macro_input!(input))
@@ -18,7 +18,7 @@ pub fn derive_page(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(InertiaProps, attributes(inertia))]
+#[proc_macro_derive(InertiaProps, attributes(inertia, ts))]
 /// Derives field-by-field conversion for typed shared or page props.
 pub fn derive_props(input: TokenStream) -> TokenStream {
     props::expand(syn::parse_macro_input!(input))

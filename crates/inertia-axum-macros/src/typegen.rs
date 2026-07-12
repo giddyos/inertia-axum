@@ -9,6 +9,118 @@ use syn::{
     spanned::Spanned,
 };
 
+pub(crate) enum RootFlavor {
+    Page,
+    Props,
+}
+
+pub(crate) fn expand_root(
+    input: &DeriveInput,
+    fields: &[crate::props::FieldInfo],
+    runtime: &TokenStream,
+    flavor: RootFlavor,
+    component: Option<&syn::LitStr>,
+    options: &crate::attributes::TypegenAttributes,
+    shared: bool,
+) -> syn::Result<TokenStream> {
+    if options.skip {
+        return Ok(TokenStream::new());
+    }
+    if !input.generics.params.is_empty() {
+        return Err(error(
+            input.generics.span(),
+            "type-generation roots must be concrete; move generics into a nested InertiaType DTO",
+        ));
+    }
+    let original = &input.ident;
+    let prefix = match flavor {
+        RootFlavor::Page => "__InertiaPageTypegen",
+        RootFlavor::Props => "__InertiaPropsTypegen",
+    };
+    let proxy = format_ident!("{}{}", prefix, original);
+    let default_name = match flavor {
+        RootFlavor::Page => format!("{original}Props"),
+        RootFlavor::Props => original.to_string(),
+    };
+    let ts_name = options
+        .name
+        .clone()
+        .unwrap_or_else(|| syn::LitStr::new(&default_name, original.span()));
+    let crate_path = format!(
+        "{}::__private::typegen",
+        runtime.to_string().replace(' ', "")
+    );
+    let crate_literal = syn::LitStr::new(&crate_path, original.span());
+    let export_to = options
+        .path
+        .as_ref()
+        .map_or_else(|| quote!(), |path| quote!(, export_to = #path));
+    let doc_attributes = input
+        .attrs
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("doc"));
+    let proxy_fields = fields
+        .iter()
+        .filter(|field| !field.skip)
+        .map(|field| {
+            let ident = &field.ident;
+            let mut attributes = field.ts_attributes.clone();
+            let rust_name = ident.to_string().trim_start_matches("r#").to_owned();
+            if field.serialized_name != rust_name && !has_ts_option(&attributes, "rename")? {
+                let rename = syn::LitStr::new(&field.serialized_name, ident.span());
+                attributes.push(syn::parse_quote!(#[ts(rename = #rename)]));
+            }
+            let ty = &field.exported_ty;
+            if field.is_prop {
+                if !has_ts_option(&attributes, "optional")? {
+                    attributes.push(syn::parse_quote!(#[ts(optional)]));
+                }
+                Ok(quote!(#(#attributes)* #ident: Option<#ty>))
+            } else {
+                Ok(quote!(#(#attributes)* #ident: #ty))
+            }
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+    let kind = match flavor {
+        RootFlavor::Page => quote!(#runtime::__private::typegen::RootKind::Page),
+        RootFlavor::Props => quote!(#runtime::__private::typegen::RootKind::Props),
+    };
+    let component_value = component.map_or_else(|| quote!(None), |value| quote!(Some(#value)));
+    let test = format_ident!(
+        "__inertia_typegen_export_{}_{}",
+        match flavor {
+            RootFlavor::Page => "page",
+            RootFlavor::Props => "props",
+        },
+        to_snake_case(&original.to_string())
+    );
+    Ok(quote! {
+        #[cfg(test)]
+        #(#doc_attributes)*
+        #[derive(#runtime::__private::typegen::TS)]
+        #[ts(crate = #crate_literal, rename = #ts_name #export_to)]
+        struct #proxy { #(#proxy_fields,)* }
+
+        #[cfg(test)]
+        #[test]
+        fn #test() {
+            if std::env::var_os("INERTIA_TYPEGEN_STAGING").is_none() { return; }
+            #runtime::__private::typegen::export_root::<#proxy>(
+                #runtime::__private::typegen::RootMetadata {
+                    kind: #kind,
+                    rust_name: stringify!(#original),
+                    ts_name: #ts_name,
+                    component: #component_value,
+                    shared: #shared,
+                    source: #runtime::__private::typegen::SourceLocation {
+                        file: file!().into(), line: line!(), module: module_path!().into(),
+                    },
+                },
+            ).expect("failed to export Inertia root");
+        }
+    })
+}
+
 pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
     if matches!(input.data, Data::Union(_)) {
         return Err(error(input.span(), "InertiaType does not support unions"));

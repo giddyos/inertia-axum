@@ -1,0 +1,5 @@
+error: error[INERTIA-TYPEGEN-012]: generic Inertia page roots require a concrete frontend contract; use a concrete page type
+ --> tests/ui/fail/generic_page_typegen.rs:5:13
+  |
+5 | struct Items<T: serde::Serialize + Send + 'static> {
+  |             ^

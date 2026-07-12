@@ -1,0 +1,5 @@
+error: invalid InertiaProps container attribute combination
+ --> tests/ui/fail/shared_skip.rs:4:1
+  |
+4 | #[inertia(shared, typegen(skip))]
+  | ^

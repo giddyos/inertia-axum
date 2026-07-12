@@ -18,6 +18,19 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
         ));
     }
     let runtime = props::runtime_path()?;
+    if container.shared {
+        return Err(error(
+            input.span(),
+            "#[inertia(shared)] is valid only on InertiaProps",
+        ));
+    }
+    #[cfg(feature = "typegen")]
+    if !input.generics.params.is_empty() && !container.typegen.skip {
+        return Err(error(
+            input.generics.span(),
+            "error[INERTIA-TYPEGEN-012]: generic Inertia page roots require a concrete frontend contract; use a concrete page type",
+        ));
+    }
     let fields = props::fields(&input, container.rename_all)?;
     let props_impl = props::props_impl(&input, &fields, &runtime);
     let constants = props::key_constants(&fields, &runtime);
@@ -31,6 +44,18 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
     let preserve = container
         .preserve_fragment
         .then(|| quote!(.preserve_fragment()));
+    #[cfg(feature = "typegen")]
+    let exporter = crate::typegen::expand_root(
+        &input,
+        &fields,
+        &runtime,
+        crate::typegen::RootFlavor::Page,
+        Some(&component),
+        &container.typegen,
+        false,
+    )?;
+    #[cfg(not(feature = "typegen"))]
+    let exporter = TokenStream::new();
     Ok(quote! {
         #props_impl
         impl #impl_generics #name #ty_generics #where_clause {
@@ -52,5 +77,6 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
                 #runtime::__private::IntoResponse::into_response(#runtime::InertiaPage::into_pending_page(self))
             }
         }
+        #exporter
     })
 }

@@ -2,13 +2,20 @@ use crate::{attributes, diagnostics::error};
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, Generics, Ident, Type, parse_quote, spanned::Spanned};
+use syn::{
+    Attribute, Data, DeriveInput, Fields, Generics, Ident, Type, parse_quote, spanned::Spanned,
+};
 
 pub(crate) struct FieldInfo {
     pub ident: Ident,
+    #[allow(dead_code)]
+    pub rust_ty: Type,
+    pub exported_ty: Type,
     pub key_ty: Type,
     pub serialized_name: String,
     pub skip: bool,
+    pub is_prop: bool,
+    pub ts_attributes: Vec<Attribute>,
 }
 
 pub(crate) fn runtime_path() -> syn::Result<TokenStream> {
@@ -54,12 +61,22 @@ pub(crate) fn fields(
                     "\"errors\" is reserved by the Inertia validation protocol",
                 ));
             }
-            let key_ty = prop_inner(&field.ty).unwrap_or_else(|| field.ty.clone());
+            let prop = prop_inner(&field.ty);
+            let key_ty = prop.clone().unwrap_or_else(|| field.ty.clone());
             Ok(FieldInfo {
                 ident,
+                rust_ty: field.ty.clone(),
+                exported_ty: key_ty.clone(),
                 key_ty,
                 serialized_name,
                 skip: attrs.skip,
+                is_prop: prop.is_some(),
+                ts_attributes: field
+                    .attrs
+                    .iter()
+                    .filter(|attribute| attribute.path().is_ident("ts"))
+                    .cloned()
+                    .collect(),
             })
         })
         .collect()
@@ -136,15 +153,29 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
         || container.encrypt_history
         || container.clear_history
         || container.preserve_fragment
+        || container.shared && container.typegen.skip
     {
         return Err(error(
             input.span(),
-            "InertiaProps supports only the rename_all container attribute",
+            "invalid InertiaProps container attribute combination",
         ));
     }
     let runtime = runtime_path()?;
     let fields = fields(&input, container.rename_all)?;
-    Ok(props_impl(&input, &fields, &runtime))
+    let runtime_impl = props_impl(&input, &fields, &runtime);
+    #[cfg(feature = "typegen")]
+    let exporter = crate::typegen::expand_root(
+        &input,
+        &fields,
+        &runtime,
+        crate::typegen::RootFlavor::Props,
+        None,
+        &container.typegen,
+        container.shared,
+    )?;
+    #[cfg(not(feature = "typegen"))]
+    let exporter = TokenStream::new();
+    Ok(quote!(#runtime_impl #exporter))
 }
 
 pub(crate) fn key_constants(fields: &[FieldInfo], runtime: &TokenStream) -> Vec<TokenStream> {

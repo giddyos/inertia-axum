@@ -8,6 +8,15 @@ pub(crate) struct ContainerAttributes {
     pub encrypt_history: bool,
     pub clear_history: bool,
     pub preserve_fragment: bool,
+    pub typegen: TypegenAttributes,
+    pub shared: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct TypegenAttributes {
+    pub skip: bool,
+    pub name: Option<LitStr>,
+    pub path: Option<LitStr>,
 }
 
 #[derive(Clone, Copy)]
@@ -92,13 +101,62 @@ pub(crate) fn container(attributes: &[Attribute]) -> syn::Result<ContainerAttrib
             } else if meta.path.is_ident("preserve_fragment") {
                 output.preserve_fragment =
                     set_flag(output.preserve_fragment, &meta, "preserve_fragment")?;
+            } else if meta.path.is_ident("shared") {
+                output.shared = set_flag(output.shared, &meta, "shared")?;
+            } else if meta.path.is_ident("typegen") {
+                meta.parse_nested_meta(|nested| {
+                    if nested.path.is_ident("skip") {
+                        output.typegen.skip =
+                            set_flag(output.typegen.skip, &nested, "typegen skip")?;
+                    } else if nested.path.is_ident("name") {
+                        if output.typegen.name.is_some() {
+                            return Err(nested.error("duplicate inertia typegen name"));
+                        }
+                        output.typegen.name = Some(nested.value()?.parse()?);
+                    } else if nested.path.is_ident("path") {
+                        if output.typegen.path.is_some() {
+                            return Err(nested.error("duplicate inertia typegen path"));
+                        }
+                        let path: LitStr = nested.value()?.parse()?;
+                        validate_typegen_path(&path)?;
+                        output.typegen.path = Some(path);
+                    } else {
+                        return Err(nested.error("unsupported inertia typegen option"));
+                    }
+                    Ok(())
+                })?;
             } else {
                 return Err(meta.error("unsupported inertia container attribute"));
             }
             Ok(())
         })?;
     }
+    if output.typegen.skip && (output.typegen.name.is_some() || output.typegen.path.is_some()) {
+        return Err(error(
+            proc_macro2::Span::call_site(),
+            "inertia typegen skip cannot be combined with name or path",
+        ));
+    }
     Ok(output)
+}
+
+fn validate_typegen_path(value: &LitStr) -> syn::Result<()> {
+    let raw = value.value();
+    let path = std::path::Path::new(&raw);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            !matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(error(
+            value.span(),
+            "inertia typegen path must be a safe relative path without traversal",
+        ));
+    }
+    Ok(())
 }
 
 fn set_flag(current: bool, meta: &syn::meta::ParseNestedMeta<'_>, name: &str) -> syn::Result<bool> {

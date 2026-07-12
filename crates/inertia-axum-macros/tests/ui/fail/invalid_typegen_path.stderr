@@ -1,0 +1,5 @@
+error: inertia typegen path must be a safe relative path without traversal
+ --> tests/ui/fail/invalid_typegen_path.rs:4:26
+  |
+4 | #[inertia(typegen(path = "../outside.ts"))]
+  |                          ^^^^^^^^^^^^^^^

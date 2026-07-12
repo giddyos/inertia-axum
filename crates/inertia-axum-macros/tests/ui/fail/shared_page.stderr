@@ -1,0 +1,5 @@
+error: #[inertia(shared)] is valid only on InertiaProps
+ --> tests/ui/fail/shared_page.rs:4:1
+  |
+4 | #[inertia(component = "Home", shared)]
+  | ^
