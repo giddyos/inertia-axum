@@ -6,6 +6,7 @@ use args::{DynamicPagePolicy, LargeIntegerPolicy, OutputLayout, SyncArgs};
 use cargo_metadata::{Metadata, MetadataCommand, Package, Target, TargetKind};
 use fs2::FileExt;
 use inertia_axum_typegen::{ExportBundle, RootKind, TYPEGEN_SCHEMA_VERSION, TypeDefinition};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::{self, OpenOptions},
@@ -17,9 +18,6 @@ use std::{
 pub fn run_args(args: SyncArgs) -> Result<(), String> {
     if args.array_tuple_limit == 0 {
         return Err("--array-tuple-limit must be greater than zero".into());
-    }
-    if args.clean {
-        return Err("--clean requires module output from Source Phase 5".into());
     }
     let manifest = if args.path.is_file() {
         args.path.clone()
@@ -79,16 +77,15 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
         .ok_or("package manifest has no parent")?
         .as_std_path();
     let output = resolve_output(package_root, package, args)?;
-    if resolve_layout(&output, args.layout) == OutputLayout::Modules {
-        return Err(
-            "module output is implemented in Source Phase 5; select a TypeScript file".into(),
-        );
-    }
+    let layout = resolve_layout(&output, args.layout);
     let output = if output.is_absolute() {
         output
     } else {
         package_root.join(output)
     };
+    if args.clean {
+        return clean_output(&output, layout);
+    }
     let staging = tempfile::Builder::new()
         .prefix(".inertia-typegen-")
         .tempdir_in(package_root)
@@ -99,6 +96,26 @@ fn sync_package(metadata: &Metadata, package: &Package, args: &SyncArgs) -> Resu
     let bundles = read_bundles(staging.path())?;
     if bundles.is_empty() && has_typed_declaration(package_root) {
         return Err("error[INERTIA-TYPEGEN-018]: no type exporters were compiled; enable the typegen feature".into());
+    }
+    if layout == OutputLayout::Modules {
+        let (files, warnings) = render_modules(
+            &bundles,
+            args.large_integers,
+            args.import_extension.as_deref(),
+        )?;
+        for warning in &warnings {
+            eprintln!("{warning}");
+        }
+        if args.deny_warnings && !warnings.is_empty() {
+            return Err("type-generation warnings were denied".into());
+        }
+        return reconcile_modules(
+            &output,
+            files,
+            package.name.as_str(),
+            args.large_integers,
+            args.check,
+        );
     }
     let (content, mut warnings) = reconcile_and_render(&bundles, args.large_integers)?;
     if has_dynamic_page(package_root) {
@@ -460,6 +477,411 @@ fn compare_or_write(path: &Path, bytes: &[u8], check: bool) -> Result<(), String
     Ok(())
 }
 
+const MANIFEST_NAME: &str = ".inertia-types.json";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutputManifest {
+    schema_version: u32,
+    generator: String,
+    package: String,
+    layout: String,
+    large_integers: String,
+    files: Vec<PathBuf>,
+}
+
+fn render_modules(
+    bundles: &[ExportBundle],
+    policy: LargeIntegerPolicy,
+    import_extension: Option<&str>,
+) -> Result<(BTreeMap<PathBuf, Vec<u8>>, Vec<String>), String> {
+    let mut definitions: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+    let mut pages = BTreeMap::new();
+    let mut shared = None;
+    for bundle in bundles
+        .iter()
+        .filter(|bundle| bundle.root.kind != RootKind::SupportingType)
+    {
+        if bundle.root.kind == RootKind::Page {
+            let component = bundle
+                .root
+                .component
+                .clone()
+                .ok_or("page IR is missing component")?;
+            if pages
+                .insert(component.clone(), bundle.root.ts_name.clone())
+                .is_some()
+            {
+                return Err(format!(
+                    "error[INERTIA-TYPEGEN-015]: duplicate Inertia component {component}"
+                ));
+            }
+        }
+        if bundle.root.shared && shared.replace(bundle.root.ts_name.clone()).is_some() {
+            return Err("error[INERTIA-TYPEGEN-016]: duplicate shared prop root".into());
+        }
+        for definition in &bundle.definitions {
+            match definitions.get(&definition.name) {
+                Some(existing) if existing != definition => {
+                    return Err(format!(
+                        "error[INERTIA-TYPEGEN-013]: conflicting TypeScript name {}",
+                        definition.name
+                    ));
+                }
+                _ => {
+                    definitions.insert(definition.name.clone(), definition.clone());
+                }
+            }
+        }
+    }
+    let contains_large = definitions.values().any(|definition| {
+        definition
+            .declaration
+            .contains(inertia_axum_typegen::LARGE_INTEGER_SENTINEL)
+    });
+    if contains_large && policy == LargeIntegerPolicy::Error {
+        return Err(
+            "error[INERTIA-TYPEGEN-002]: large integer is not losslessly representable".into(),
+        );
+    }
+    let replacement = if policy == LargeIntegerPolicy::Bigint {
+        "bigint"
+    } else {
+        "number"
+    };
+    let warnings = if contains_large {
+        vec![if policy == LargeIntegerPolicy::Bigint {
+            "warning[INERTIA-TYPEGEN-001]: bigint requires a frontend transport transform".into()
+        } else {
+            "warning[INERTIA-TYPEGEN-001]: large integers may lose precision as JavaScript numbers"
+                .into()
+        }]
+    } else {
+        Vec::new()
+    };
+
+    let mut paths = BTreeMap::new();
+    for name in definitions.keys() {
+        let page_component = pages
+            .iter()
+            .find_map(|(component, page_name)| (page_name == name).then_some(component));
+        let path = page_component.map_or_else(
+            || PathBuf::from(format!("types/{name}.ts")),
+            |component| PathBuf::from(format!("pages/{component}.ts")),
+        );
+        validate_generated_path(&path)?;
+        paths.insert(name.clone(), path);
+    }
+
+    let mut files = BTreeMap::new();
+    for (name, definition) in &definitions {
+        let path = paths.get(name).expect("definition path");
+        let mut text =
+            String::from("// Generated by cargo inertia sync.\n// Do not edit manually.\n\n");
+        for dependency in definitions.keys().filter(|dependency| {
+            *dependency != name && contains_type_name(&definition.declaration, dependency)
+        }) {
+            let target = paths.get(dependency).expect("dependency path");
+            let import = relative_import(path, target, import_extension)?;
+            text.push_str(&format!(
+                "import type {{ {dependency} }} from {import:?};\n"
+            ));
+        }
+        if text.contains("import type") {
+            text.push('\n');
+        }
+        text.push_str("export ");
+        text.push_str(
+            &definition
+                .declaration
+                .replace(inertia_axum_typegen::LARGE_INTEGER_SENTINEL, replacement),
+        );
+        text.push('\n');
+        files.insert(path.clone(), format_typescript(text, path)?.into_bytes());
+    }
+
+    let mut pages_text = String::from(
+        "// Generated by cargo inertia sync.\n// Do not edit manually.\n\nimport type { ErrorBag, Errors, Page, SharedPageProps } from \"@inertiajs/core\";\n",
+    );
+    for (component, name) in &pages {
+        let path = paths.get(name).expect("page path");
+        let import = module_specifier(Path::new("pages.ts"), path, import_extension)?;
+        pages_text.push_str(&format!("import type {{ {name} }} from {import:?};\n"));
+        let _ = component;
+    }
+    pages_text.push_str("\nexport interface InertiaPageMap {\n");
+    for (component, name) in &pages {
+        pages_text.push_str(&format!("  {component:?}: {name};\n"));
+    }
+    pages_text.push_str("}\n\nexport type InertiaComponent = keyof InertiaPageMap;\nexport type PagePropsFor<Component extends InertiaComponent> = InertiaPageMap[Component];\nexport type ResolvedPagePropsFor<Component extends InertiaComponent> = PagePropsFor<Component> & SharedPageProps & { errors: Errors & ErrorBag };\nexport type InertiaPageFor<Component extends InertiaComponent> = Omit<Page<PagePropsFor<Component> & SharedPageProps>, \"component\"> & { component: Component };\n");
+    files.insert(
+        "pages.ts".into(),
+        format_typescript(pages_text, Path::new("pages.ts"))?.into_bytes(),
+    );
+
+    let mut index = String::from(
+        "// Generated by cargo inertia sync.\n// Do not edit manually.\n\nexport type { InertiaComponent, InertiaPageFor, InertiaPageMap, PagePropsFor, ResolvedPagePropsFor } from \"./pages\";\n",
+    );
+    for (name, path) in &paths {
+        if pages.values().any(|page| page == name) {
+            continue;
+        }
+        let import = module_specifier(Path::new("index.ts"), path, import_extension)?;
+        index.push_str(&format!("export type {{ {name} }} from {import:?};\n"));
+    }
+    files.insert(
+        "index.ts".into(),
+        format_typescript(index, Path::new("index.ts"))?.into_bytes(),
+    );
+
+    if let Some(shared_name) = shared {
+        let shared_path = paths
+            .get(&shared_name)
+            .ok_or("shared definition is missing")?;
+        let import = module_specifier(Path::new("shared.d.ts"), shared_path, import_extension)?;
+        let text = format!(
+            "// Generated by cargo inertia sync.\n// Do not edit manually.\n\nimport type {{ {shared_name} }} from {import:?};\n\ndeclare module \"@inertiajs/core\" {{ interface InertiaConfig {{ sharedPageProps: {shared_name}; }} }}\n"
+        );
+        files.insert(
+            "shared.d.ts".into(),
+            format_typescript(text, Path::new("shared.d.ts"))?.into_bytes(),
+        );
+    }
+    Ok((files, warnings))
+}
+
+fn contains_type_name(declaration: &str, name: &str) -> bool {
+    declaration.match_indices(name).any(|(index, _)| {
+        let before = declaration[..index].chars().next_back();
+        let after = declaration[index + name.len()..].chars().next();
+        before.is_none_or(|value| !value.is_alphanumeric() && value != '_')
+            && after.is_none_or(|value| !value.is_alphanumeric() && value != '_')
+    })
+}
+
+fn module_specifier(from: &Path, to: &Path, extension: Option<&str>) -> Result<String, String> {
+    relative_import(from, to, extension)
+}
+
+fn relative_import(from: &Path, to: &Path, extension: Option<&str>) -> Result<String, String> {
+    validate_generated_path(from)?;
+    validate_generated_path(to)?;
+    let from_parent = from.parent().unwrap_or(Path::new(""));
+    let from_parts: Vec<_> = from_parent.components().collect();
+    let to_without_extension = to.with_extension("");
+    let to_parts: Vec<_> = to_without_extension.components().collect();
+    let mut common = 0;
+    while common < from_parts.len()
+        && common < to_parts.len()
+        && from_parts[common] == to_parts[common]
+    {
+        common += 1;
+    }
+    let mut value = String::new();
+    for _ in common..from_parts.len() {
+        value.push_str("../");
+    }
+    if value.is_empty() {
+        value.push_str("./");
+    }
+    for (index, component) in to_parts[common..].iter().enumerate() {
+        if index > 0 {
+            value.push('/');
+        }
+        value.push_str(&component.as_os_str().to_string_lossy());
+    }
+    if let Some(extension) = extension {
+        value.push('.');
+        value.push_str(extension.trim_start_matches('.'));
+    }
+    Ok(value)
+}
+
+fn format_typescript(text: String, path: &Path) -> Result<String, String> {
+    let config = dprint_plugin_typescript::configuration::ConfigurationBuilder::new()
+        .line_width(100)
+        .build();
+    let formatted =
+        dprint_plugin_typescript::format_text(dprint_plugin_typescript::FormatTextOptions {
+            path,
+            extension: None,
+            text: text.clone(),
+            config: &config,
+            external_formatter: None,
+        })
+        .map_err(|error| format!("could not format generated TypeScript: {error}"))?
+        .unwrap_or(text);
+    Ok(normalize(formatted))
+}
+
+fn validate_generated_path(path: &Path) -> Result<(), String> {
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(format!(
+            "error[INERTIA-TYPEGEN-017]: unsafe generated path {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn reconcile_modules(
+    root: &Path,
+    files: BTreeMap<PathBuf, Vec<u8>>,
+    package: &str,
+    policy: LargeIntegerPolicy,
+    check: bool,
+) -> Result<(), String> {
+    if root
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        return Err(format!(
+            "refusing symlink module destination {}",
+            root.display()
+        ));
+    }
+    let parent = root.parent().ok_or("module output has no parent")?;
+    if !check {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let lock = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(parent.join(".inertia-types.lock"))
+        .map_err(|error| error.to_string())?;
+    lock.lock_exclusive().map_err(|error| error.to_string())?;
+    let old = read_manifest(root)?;
+    let old_files: std::collections::BTreeSet<_> =
+        old.as_ref().map_or_else(Default::default, |manifest| {
+            manifest.files.iter().cloned().collect()
+        });
+    let new_files: std::collections::BTreeSet<_> = files.keys().cloned().collect();
+    if check {
+        let mut differences = Vec::new();
+        for (path, bytes) in &files {
+            match fs::read(root.join(path)) {
+                Ok(existing) if existing == *bytes => {}
+                Ok(_) => differences.push(format!("changed  {}", path.display())),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    differences.push(format!("missing  {}", path.display()))
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        for stale in old_files.difference(&new_files) {
+            differences.push(format!("stale    {}", stale.display()));
+        }
+        if !differences.is_empty() {
+            return Err(format!(
+                "generated Inertia types are stale\n\n  {}",
+                differences.join("\n  ")
+            ));
+        }
+        return Ok(());
+    }
+    fs::create_dir_all(root).map_err(|error| error.to_string())?;
+    for path in files.keys() {
+        validate_generated_path(path)?;
+        let destination = root.join(path);
+        if destination.exists() && !old_files.contains(path) {
+            return Err(format!(
+                "refusing to overwrite untracked file {}",
+                destination.display()
+            ));
+        }
+    }
+    for (path, bytes) in &files {
+        let destination = root.join(path);
+        let parent = destination.parent().expect("generated file parent");
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        let mut temporary =
+            tempfile::NamedTempFile::new_in(parent).map_err(|error| error.to_string())?;
+        temporary
+            .write_all(bytes)
+            .and_then(|()| temporary.as_file().sync_all())
+            .map_err(|error| error.to_string())?;
+        temporary
+            .persist(&destination)
+            .map_err(|error| error.error.to_string())?;
+    }
+    for stale in old_files.difference(&new_files) {
+        let path = root.join(stale);
+        if path.is_file() {
+            fs::remove_file(path).map_err(|error| error.to_string())?;
+        }
+    }
+    let manifest = OutputManifest {
+        schema_version: 1,
+        generator: format!("cargo-inertia {}", env!("CARGO_PKG_VERSION")),
+        package: package.into(),
+        layout: "modules".into(),
+        large_integers: format!("{policy:?}").to_lowercase(),
+        files: new_files.into_iter().collect(),
+    };
+    let mut bytes = serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?;
+    bytes.push(b'\n');
+    let mut temporary = tempfile::NamedTempFile::new_in(root).map_err(|error| error.to_string())?;
+    temporary
+        .write_all(&bytes)
+        .and_then(|()| temporary.as_file().sync_all())
+        .map_err(|error| error.to_string())?;
+    temporary
+        .persist(root.join(MANIFEST_NAME))
+        .map_err(|error| error.error.to_string())?;
+    FileExt::unlock(&lock).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn read_manifest(root: &Path) -> Result<Option<OutputManifest>, String> {
+    let path = root.join(MANIFEST_NAME);
+    match fs::read(&path) {
+        Ok(bytes) => {
+            let manifest: OutputManifest = serde_json::from_slice(&bytes).map_err(|error| {
+                format!("invalid generator manifest {}: {error}", path.display())
+            })?;
+            if manifest.schema_version != 1 || manifest.layout != "modules" {
+                return Err("unsupported generator manifest".into());
+            }
+            for file in &manifest.files {
+                validate_generated_path(file)?;
+            }
+            Ok(Some(manifest))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn clean_output(path: &Path, layout: OutputLayout) -> Result<(), String> {
+    if layout == OutputLayout::Single {
+        match fs::read_to_string(path) {
+            Ok(content) if content.starts_with("// Generated by cargo inertia sync.") => {
+                fs::remove_file(path).map_err(|error| error.to_string())
+            }
+            Ok(_) => Err(format!("refusing to clean unowned file {}", path.display())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
+    } else {
+        let Some(manifest) = read_manifest(path)? else {
+            return Ok(());
+        };
+        for file in manifest.files {
+            let target = path.join(file);
+            if target.is_file() {
+                fs::remove_file(target).map_err(|error| error.to_string())?;
+            }
+        }
+        fs::remove_file(path.join(MANIFEST_NAME)).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +895,28 @@ mod tests {
             resolve_layout(Path::new("types"), OutputLayout::Auto),
             OutputLayout::Modules
         );
+    }
+
+    #[test]
+    fn module_manifest_owns_only_generated_files() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("inertia");
+        let files = BTreeMap::from([(
+            PathBuf::from("index.ts"),
+            b"// Generated by cargo inertia sync.\n".to_vec(),
+        )]);
+        reconcile_modules(&root, files, "server", LargeIntegerPolicy::Number, false).unwrap();
+        fs::write(root.join("user.ts"), "user owned").unwrap();
+        clean_output(&root, OutputLayout::Modules).unwrap();
+        assert!(root.join("user.ts").is_file());
+        assert!(!root.join("index.ts").exists());
+        assert!(!root.join(MANIFEST_NAME).exists());
+    }
+
+    #[test]
+    fn generated_paths_cannot_escape() {
+        assert!(validate_generated_path(Path::new("types/Todo.ts")).is_ok());
+        assert!(validate_generated_path(Path::new("../Todo.ts")).is_err());
+        assert!(validate_generated_path(Path::new("/Todo.ts")).is_err());
     }
 }
