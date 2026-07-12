@@ -1,8 +1,9 @@
 #![allow(missing_docs)]
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use inertia_axum::{Page, PageMetadata};
 use serde_json::json;
+use std::hint::black_box;
 
 #[path = "../src/html/serializer.rs"]
 mod script_safe;

@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use inertia_axum::{
     CACHE_CONTROL, PURPOSE, RequestContext, X_INERTIA, X_INERTIA_ERROR_BAG,
     X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
@@ -8,6 +8,7 @@ use inertia_axum::{
     X_INERTIA_VERSION,
 };
 use std::collections::HashMap;
+use std::hint::black_box;
 
 fn parse_context(headers: &HashMap<&'static str, String>) -> RequestContext {
     RequestContext::from_header_fn(|name| headers.get(name).map(String::as_str))

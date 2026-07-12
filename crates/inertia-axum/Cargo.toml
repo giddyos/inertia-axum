@@ -59,7 +59,7 @@ ssr = [
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }
-criterion = "0.5"
+criterion = "0.8"
 insta = { version = "1.48.0", features = ["json"] }
 tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }

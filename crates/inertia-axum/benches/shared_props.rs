@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use inertia_axum::axum::SharedProps;
+use std::hint::black_box;
 
 fn shared_props_benchmarks(c: &mut Criterion) {
     let props = SharedProps::with_capacity(32)

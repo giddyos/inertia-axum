@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use inertia_axum::axum::VersionLayer;
+use std::hint::black_box;
 
 fn version_layer_benchmarks(c: &mut Criterion) {
     let layer = VersionLayer::new("asset-version");
