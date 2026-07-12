@@ -7,59 +7,28 @@ keywords:
   - partial reloads
 ---
 
-Ordinary serializable values are immediate props. Wrap values or asynchronous
-resolvers in `Prop<T>` to control selection, failure handling, merging, scrolling,
-or client-side reuse.
+Props are serializable values with a loading policy that decides when the server resolves them.
 
 ## Loading policies
 
-| Helper | Initial visit | Matching partial reload |
+| Policy | Initial visit | Matching partial request |
 | --- | --- | --- |
-| ordinary value / `Prop::immediate` | Included | Included when selected. |
-| `lazy` | Included | Included when selected. |
-| `always` | Included | Included even when not selected. |
-| `optional` | Omitted | Included only when explicitly selected. |
-| `defer` | Advertised, value omitted | Loaded by its follow-up group. |
+| Immediate | Included | Included when selected |
+| `always` | Included | Included regardless of selection |
+| `lazy` | Included | Included when selected |
+| `optional` | Omitted | Included only when selected |
+| `defer` | Advertised, then omitted | Loaded by its follow-up group |
 
-`always(value)` stores an already available value. The other policy helpers accept
-an owned `FnOnce` asynchronous resolver returning `Result<T, E>`.
-
-```rust
+```rust title="src/routes/dashboard.rs"
 use inertia_axum::prelude::*;
-use std::convert::Infallible;
 
-let page = page!("Dashboard", {
-    title: "Overview",
-    audit: optional(|| async { Ok::<_, Infallible>(42_u64) }),
-    stats: defer(|| async { Ok::<_, Infallible>(vec![12, 8, 5]) }),
-});
+async fn dashboard() -> DynamicPage {
+    page!("Dashboard", {
+        title: "Overview",
+        audit: optional(load_audit),
+        stats: defer(load_stats).group("summary"),
+    })
+}
 ```
 
-Selection happens before asynchronous closures are invoked. An unselected resolver's
-future is not constructed or polled. Selected asynchronous props resolve concurrently
-with an internal concurrency limit of 16.
-
-## Composable policies
-
-A prop can add policies with builder methods:
-
-- `.rescue()` omits a failed value and records it in `rescuedProps`.
-- `.group("sidebar")` changes a deferred follow-up group.
-- `.once()`, `.key(...)`, `.expires_in(...)`, and `.fresh_if(...)` control client reuse.
-- `.append()`, `.prepend()`, `.deep()`, and match methods attach merge metadata.
-- `scroll(...)` normalizes pagination and supplies infinite-scroll metadata.
-
-Merge behavior is applied by the client only during partial reloads. Full page
-visits replace prop values.
-
-## Partial reload rules
-
-Partial selection is honored only for Inertia `GET` requests whose
-`X-Inertia-Partial-Component` matches the response component. A mismatch resolves
-the normal complete selection. If both `only` and `except` headers are present,
-`except` wins.
-
-Read [Deferred and lazy props](/docs/guides/deferred-and-lazy-props),
-[Partial reloads](/docs/guides/partial-reloads), and
-[Merge, scroll, once, and reset](/docs/guides/merge-scroll-once-and-reset) for
-copyable patterns.
+Loading, rescue, grouping, merge, scroll, and once policies compose through builder methods. Use [Deferred and lazy props](/docs/guides/deferred-and-lazy-props), [Partial reloads](/docs/guides/partial-reloads), and [Merge, scroll, once, and reset](/docs/guides/merge-scroll-once-and-reset) for workflows; [Props and policies](/docs/reference/props-and-policies) retains exact selection rules, metadata, precedence, and limits.

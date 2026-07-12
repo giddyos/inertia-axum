@@ -1,6 +1,6 @@
 ---
 title: Frontend frameworks
-description: Choose the maintained Svelte, React, or Vue integration and connect it to the same inertia-axum routes.
+description: Compare the maintained Svelte, React, and Vue Deferred boundaries for one Axum page contract.
 keywords:
   - frontend
   - Svelte
@@ -8,67 +8,41 @@ keywords:
   - Vue
 ---
 
-## What you will accomplish
+Svelte, React, and Vue consume the same component name and props. The quick-start files are `Home.svelte`, `Home.tsx`, and `Home.vue`.
 
-You will choose a supported Inertia v3 client and connect its page resolver to component names returned by Axum.
-
-| Framework | Supported generation | Setup guide | Maintained example |
-| --- | --- | --- | --- |
-| Svelte | Svelte 5 | [Configure Svelte](/docs/frontend/svelte) | `examples/axum-svelte` |
-| React | React 19 | [Configure React](/docs/frontend/react) | `examples/axum-react` |
-| Vue | Vue 3 | [Configure Vue](/docs/frontend/vue) | `examples/axum-vue` |
-
-## Prerequisites and features
-
-Complete [Frontend setup](/docs/getting-started/frontend-setup). Every framework uses the default `vite` Cargo feature. Add `ssr` only when following the SSR section.
-
-## Minimal shared implementation
-
-All three clients consume the same page response:
-
-```rust
-async fn index() -> DynamicPage {
-    page!("Home", { greeting: "Hello" })
-}
+```rust title="src/routes/home.rs"
+page!("Home", {
+    greeting: "Hello",
+    stats: defer(load_stats),
+})
 ```
 
-Choose the matching page file:
+## Deferred boundary comparison
 
 <Tabs items={['Svelte', 'React', 'Vue']}>
   <Tab value="Svelte">
-    `frontend/src/Pages/Home.svelte`
+    ```svelte title="frontend/src/Pages/Home.svelte"
+    <Deferred data="stats">
+      {#snippet fallback()}<p>Loading stats…</p>{/snippet}
+      <p>{stats.projects} projects · {stats.tasks} tasks</p>
+    </Deferred>
+    ```
   </Tab>
   <Tab value="React">
-    `frontend/src/Pages/Home.jsx`
+    ```tsx title="frontend/src/Pages/Home.tsx"
+    <Deferred data="stats" fallback={<p>Loading stats…</p>}>
+      <p>{stats.projects} projects · {stats.tasks} tasks</p>
+    </Deferred>
+    ```
   </Tab>
   <Tab value="Vue">
-    `frontend/src/Pages/Home.vue`
+    ```vue title="frontend/src/Pages/Home.vue"
+    <Deferred data="stats">
+      <template #fallback><p>Loading stats…</p></template>
+      <p>{{ stats.projects }} projects · {{ stats.tasks }} tasks</p>
+    </Deferred>
+    ```
   </Tab>
 </Tabs>
 
-The adapter-specific pages contain the copyable package installation, Vite configuration, client entry, component, and Rust entry override where needed.
-
-## How it works
-
-The server does not render framework components during an ordinary CSR request. It returns a component name and serialized props. The selected Inertia client resolves the component, mounts it for the first response, and swaps it during later Inertia visits. The Rust routing and page contract remain the same when you change frontend framework.
-
-## Defaults and edge cases
-
-- The built-in root uses the `app` mount id expected by the clients.
-- Component names and filesystem case must match.
-- `@inertiajs/vite` can generate the default resolver for conventional `Pages`/`pages` directories; the Svelte example uses an explicit eager resolver.
-- Client-side prop types do not replace server serialization or validation.
-- SSR is optional. CSR remains usable when no SSR backend is configured or when a configured backend falls back.
-
-## Production guidance
-
-Pin frontend dependencies through `pnpm-lock.yaml`, run a clean client build in CI, and verify the configured manifest entry exists before shipping the Rust binary. When enabling SSR, build both client and SSR outputs and keep framework hydration behavior covered by browser tests.
-
-## Related guides and examples
-
-- [Svelte](/docs/frontend/svelte)
-- [React](/docs/frontend/react)
-- [Vue](/docs/frontend/vue)
-- [SSR frontend build](/docs/ssr/frontend-build)
-- [Examples reference](/docs/reference/examples)
-
+Choose [Svelte](/docs/frontend/svelte), [React](/docs/frontend/react), or [Vue](/docs/frontend/vue) for its complete client setup. All three continue with the same [deferred-data workflow](/docs/guides/deferred-and-lazy-props).

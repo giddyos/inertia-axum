@@ -1,96 +1,103 @@
 ---
 title: Build a deferred dashboard
-description: Render essential dashboard data first, then load independent panels by group.
+description: Load summary and activity panels independently with fallbacks, rescue states, and retries.
 keywords:
   - deferred dashboard
   - rescued props
 ---
 
-This recipe sends the dashboard shell and primary data immediately, then loads slower
-panels in parallel follow-up groups. A nonessential activity failure is rescued so
-the page stays usable.
+Send the dashboard shell immediately, load summary data together, and let a nonessential activity failure recover in place.
 
-## 1. Model the page
+## Server
 
-```rust
-use inertia_axum::prelude::*;
-
-#[derive(InertiaPage)]
-#[inertia(component = "Dashboard")]
-struct DashboardPage {
-    greeting: String,
-    metrics: Prop<Metrics>,
-    activity: Prop<Vec<Activity>>,
-    permissions: Prop<Vec<String>>,
-}
-# #[derive(serde::Serialize)]
-# struct Metrics;
-# #[derive(serde::Serialize)]
-# struct Activity;
-```
-
-## 2. Assign useful groups
-
-```rust
-async fn dashboard() -> DashboardPage {
-    DashboardPage {
-        greeting: "Welcome back".to_owned(),
+```rust title="src/routes/dashboard.rs"
+async fn dashboard() -> DynamicPage {
+    page!("Dashboard", {
+        greeting: "Welcome back",
         metrics: defer(load_metrics).group("summary"),
-        permissions: defer(load_permissions)
-            .group("summary")
-            .once()
-            .key("permissions:v1"),
+        permissions: defer(load_permissions).group("summary"),
         activity: defer(load_activity)
             .group("activity")
             .rescue(),
-    }
+    })
 }
-# async fn load_metrics() -> Result<Metrics, std::io::Error> { Ok(Metrics) }
-# async fn load_permissions() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
-# async fn load_activity() -> Result<Vec<Activity>, std::io::Error> { Ok(vec![]) }
 ```
 
-The first response contains only `greeting` plus `deferredProps`. The client requests
-`metrics` and `permissions` together, while `activity` loads independently. Selected
-resolvers inside each request run concurrently.
+The initial response contains `greeting`. The `summary` request resolves `metrics` and `permissions`; the independent `activity` request may be rescued without hiding the summary.
 
-## 3. Render each boundary
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```svelte title="frontend/src/Pages/Dashboard.svelte"
+    <script>
+      import { Deferred, router } from '@inertiajs/svelte'
+      let { greeting, metrics, permissions, activity } = $props()
+    </script>
 
-This Svelte boundary follows the maintained browser example:
+    <h1>{greeting}</h1>
+    <Deferred data={['metrics', 'permissions']}>
+      {#snippet fallback()}<p>Loading summary…</p>{/snippet}
+      <p>{metrics.open} open · {permissions.length} permissions</p>
+    </Deferred>
+    <Deferred data="activity">
+      {#snippet fallback()}<p>Loading activity…</p>{/snippet}
+      {#snippet rescue({ reloading })}
+        <p>Activity unavailable.</p>
+        <button disabled={reloading} onclick={() => router.reload({ only: ['activity'] })}>Retry activity</button>
+      {/snippet}
+      <ul>{#each activity as item}<li>{item}</li>{/each}</ul>
+    </Deferred>
+    ```
+  </Tab>
+  <Tab value="React">
+    ```tsx title="frontend/src/Pages/Dashboard.tsx"
+    import { Deferred, router } from '@inertiajs/react'
 
-```svelte
-<script>
-  import { Deferred, router } from '@inertiajs/svelte'
-  let { metrics, activity, permissions } = $props()
-</script>
+    export default function Dashboard({ greeting, metrics, permissions, activity }) {
+      return <main>
+        <h1>{greeting}</h1>
+        <Deferred data={['metrics', 'permissions']} fallback={<p>Loading summary…</p>}>
+          <p>{metrics.open} open · {permissions.length} permissions</p>
+        </Deferred>
+        <Deferred
+          data="activity"
+          fallback={<p>Loading activity…</p>}
+          rescue={({ reloading }) => <>
+            <p>Activity unavailable.</p>
+            <button disabled={reloading} onClick={() => router.reload({ only: ['activity'] })}>Retry activity</button>
+          </>}
+        >
+          <ul>{activity.map((item) => <li key={item}>{item}</li>)}</ul>
+        </Deferred>
+      </main>
+    }
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```vue title="frontend/src/Pages/Dashboard.vue"
+    <script setup>
+    import { Deferred, router } from '@inertiajs/vue3'
+    defineProps({ greeting: String, metrics: Object, permissions: Array, activity: Array })
+    </script>
 
-<Deferred data={['metrics', 'permissions']}>
-  {#snippet fallback()}<p>Loading summary…</p>{/snippet}
-  <Summary {metrics} {permissions} />
-</Deferred>
+    <template>
+      <main>
+        <h1>{{ greeting }}</h1>
+        <Deferred :data="['metrics', 'permissions']">
+          <template #fallback><p>Loading summary…</p></template>
+          <p>{{ metrics.open }} open · {{ permissions.length }} permissions</p>
+        </Deferred>
+        <Deferred data="activity">
+          <template #fallback><p>Loading activity…</p></template>
+          <template #rescue="{ reloading }">
+            <p>Activity unavailable.</p>
+            <button :disabled="reloading" @click="router.reload({ only: ['activity'] })">Retry activity</button>
+          </template>
+          <ul><li v-for="item in activity" :key="item">{{ item }}</li></ul>
+        </Deferred>
+      </main>
+    </template>
+    ```
+  </Tab>
+</Tabs>
 
-<Deferred data="activity">
-  {#snippet fallback()}<p>Loading activity…</p>{/snippet}
-  {#snippet rescue({ reloading })}
-    <button disabled={reloading}
-      onclick={() => router.reload({ only: ['activity'] })}>
-      Retry activity
-    </button>
-  {/snippet}
-  <ActivityFeed items={activity} />
-</Deferred>
-```
-
-React and Vue expose the same `Deferred` concepts; use the syntax in the current
-[Inertia deferred-props guide](https://inertiajs.com/docs/v3/data-props/deferred-props).
-
-## 4. Report rescued failures
-
-Install an application `ErrorHandler` to send the prop name and `PropError` to your
-error reporter. Rescuing changes the user-facing response, not the need to observe
-the failure.
-
-Keep groups few and aligned with visible UI boundaries. Do not defer data required to
-choose the component, authorize the request, or render the first meaningful state.
-Test the initial omission, group metadata, follow-up values, and rescue path with
-[inertia-axum-test](/docs/guides/testing).
+Install an application `ErrorHandler` to report rescued prop failures, and test the initial omission, group metadata, follow-up values, and rescue path with [inertia-axum-test](/docs/guides/testing).

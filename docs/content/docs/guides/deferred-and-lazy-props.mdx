@@ -1,92 +1,105 @@
 ---
 title: Deferred and lazy props
-description: Delay expensive data, group follow-up requests, and recover from resolver failures.
+description: Render a dashboard immediately while slow panels load in follow-up requests.
 keywords:
   - deferred props
   - lazy props
   - rescued props
 ---
 
-Use `defer` to return the first page quickly and let the Inertia client request data
-after it renders. Use `lazy` when a value should load on ordinary visits but still
-benefit from selection-before-execution.
+Defer slow dashboard work so the page shell and immediate title reach the browser first.
 
-## Defer expensive data
-
-This is reduced from the tested `todo` example:
-
-```rust
-use inertia_axum::prelude::*;
-use std::convert::Infallible;
-
-#[derive(InertiaPage)]
-#[inertia(component = "Todos/Index")]
-struct TodosPage {
-    todos: Vec<Todo>,
-    stats: Prop<TodoStats>,
+```rust title="src/routes/dashboard.rs"
+async fn dashboard() -> DynamicPage {
+    page!("Dashboard", {
+        title: "Overview",
+        stats: defer(load_stats),
+        activity: defer(load_activity)
+            .group("activity")
+            .rescue(),
+    })
 }
-
-async fn index() -> TodosPage {
-    TodosPage {
-        todos: load_todos().await,
-        stats: defer(|| async {
-            Ok::<_, Infallible>(calculate_stats().await)
-        }),
-    }
-}
-# struct Todo;
-# struct TodoStats;
-# async fn load_todos() -> Vec<Todo> { vec![] }
-# async fn calculate_stats() -> TodoStats { TodoStats }
 ```
 
-The initial page advertises `stats` in `deferredProps.default` but omits its value.
-The v3 client automatically makes the matching partial request. Render the client
-adapter's `<Deferred>` fallback until the prop arrives.
+## Render the boundaries
 
-## Group follow-up requests
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```svelte title="frontend/src/Pages/Dashboard.svelte"
+    <script>
+      import { Deferred, router } from '@inertiajs/svelte'
+      let { stats, activity } = $props()
+    </script>
 
-Props in the same group load together. Change the default group with `.group(...)`:
+    <Deferred data="stats">
+      {#snippet fallback()}<p>Loading stats…</p>{/snippet}
+      <p>{stats.projects} projects</p>
+    </Deferred>
 
-```rust
-let page = page!("Dashboard", {
-    permissions: defer(load_permissions).group("auth"),
-    teams: defer(load_teams).group("auth"),
-    analytics: defer(load_analytics).group("analytics"),
-});
-# async fn load_permissions() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
-# async fn load_teams() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
-# async fn load_analytics() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
-```
+    <Deferred data="activity">
+      {#snippet fallback()}<p>Loading activity…</p>{/snippet}
+      {#snippet rescue({ reloading })}
+        <button disabled={reloading} onclick={() => router.reload({ only: ['activity'] })}>Retry</button>
+      {/snippet}
+      <ul>{#each activity as item}<li>{item}</li>{/each}</ul>
+    </Deferred>
+    ```
+  </Tab>
+  <Tab value="React">
+    ```tsx title="frontend/src/Pages/Dashboard.tsx"
+    import { Deferred, router } from '@inertiajs/react'
 
-Choose groups around UI boundaries that can reveal together. Each group creates a
-follow-up request, so avoid one group per field.
+    <Deferred data="stats" fallback={<p>Loading stats…</p>}>
+      <p>{stats.projects} projects</p>
+    </Deferred>
 
-## Rescue a failure
+    <Deferred
+      data="activity"
+      fallback={<p>Loading activity…</p>}
+      rescue={({ reloading }) => (
+        <button disabled={reloading} onClick={() => router.reload({ only: ['activity'] })}>Retry</button>
+      )}
+    >
+      <ul>{activity.map((item) => <li key={item}>{item}</li>)}</ul>
+    </Deferred>
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```vue title="frontend/src/Pages/Dashboard.vue"
+    <script setup>
+    import { Deferred, router } from '@inertiajs/vue3'
+    defineProps({ stats: Object, activity: Array })
+    </script>
 
-By default, a resolver error becomes a generic `500`. Add `.rescue()` when the page
-can remain useful without the value:
+    <template>
+      <Deferred data="stats">
+        <template #fallback><p>Loading stats…</p></template>
+        <p>{{ stats.projects }} projects</p>
+      </Deferred>
+      <Deferred data="activity">
+        <template #fallback><p>Loading activity…</p></template>
+        <template #rescue="{ reloading }">
+          <button :disabled="reloading" @click="router.reload({ only: ['activity'] })">Retry</button>
+        </template>
+        <ul><li v-for="item in activity" :key="item">{{ item }}</li></ul>
+      </Deferred>
+    </template>
+    ```
+  </Tab>
+</Tabs>
 
-```rust
-let activity = defer(load_activity)
-    .group("sidebar")
-    .rescue();
-# async fn load_activity() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
-```
+## Grouping
 
-A rescued failure omits the prop and adds its key to `rescuedProps`. The client
-`<Deferred>` component can render its rescue state. The application-wide
-`ErrorHandler` receives the identified failure; without one, the adapter logs it
-with `tracing`.
+Deferred props use the `default` group unless `.group("activity")` assigns another one. Each group produces its own follow-up request, so align groups with UI regions that can reveal together.
 
-## Lazy, optional, and deferred
+## Rescue and retry
 
-- `lazy` resolves on an ordinary selection, including the initial visit.
-- `optional` resolves only when a matching partial request explicitly names it.
-- `defer` advertises a follow-up group and is omitted initially.
+`.rescue()` keeps a failed prop from turning the response into a generic 500 and adds its key to `rescuedProps`. Each adapter's rescue slot receives `reloading`; `router.reload({ only: ['activity'] })` retries only that prop.
 
-All three accept an owned `FnOnce` resolver. Unselected resolvers are not called;
-selected asynchronous resolvers run concurrently with a limit of 16.
+| Helper | Use it when |
+| --- | --- |
+| `lazy` | Data belongs on the initial visit but should resolve only when selected. |
+| `optional` | Data should resolve only after an explicit partial reload. |
+| `defer` | Data should load automatically after the initial render. |
 
-Test grouping and rescue metadata with [Testing](/docs/guides/testing), and see
-[Props and policies](/docs/reference/props-and-policies) for every modifier.
+See [Props and policies](/docs/reference/props-and-policies) for exact selection, concurrency, and failure semantics.
