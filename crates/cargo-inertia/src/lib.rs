@@ -15,5 +15,7 @@ pub mod init;
 pub mod output;
 pub mod package_manager;
 pub mod ssr;
+#[cfg(feature = "sync")]
+pub mod sync;
 #[cfg(feature = "templates")]
 pub mod templates;

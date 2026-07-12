@@ -135,7 +135,7 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
     );
     let mut mirror = input.clone();
     mirror.ident = proxy.clone();
-    mirror.vis = syn::Visibility::Inherited;
+    mirror.vis = input.vis.clone();
     mirror.attrs = forwarded_attributes(&input.attrs, true)?;
     mirror.attrs.insert(
         0,

@@ -1,0 +1,10 @@
+[package]
+name = "sync-library-fixture"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+inertia-axum = { path = "../../../../inertia-axum" }
+serde = { version = "1", features = ["derive"] }

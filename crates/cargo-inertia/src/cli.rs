@@ -27,6 +27,9 @@ pub enum Command {
     /// Validates Rust component declarations and Vite files.
     #[cfg(feature = "check")]
     Check(crate::check::args::CheckArgs),
+    /// Generates TypeScript contracts for typed Inertia props.
+    #[cfg(feature = "sync")]
+    Sync(crate::sync::args::SyncArgs),
 }
 
 /// Normalizes both `cargo inertia …` and `cargo-inertia …` invocations, then runs the command.
@@ -45,5 +48,7 @@ pub fn run() -> Result<(), CliError> {
         Command::Dev(args) => crate::dev::run_args(args),
         #[cfg(feature = "check")]
         Command::Check(args) => crate::check::run_args(args).map_err(Into::into),
+        #[cfg(feature = "sync")]
+        Command::Sync(args) => crate::sync::run_args(args).map_err(Into::into),
     }
 }
