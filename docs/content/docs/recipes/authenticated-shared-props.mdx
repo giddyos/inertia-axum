@@ -12,7 +12,7 @@ returns a typed prop object.
 
 ## 1. Define the request value
 
-```rust
+```rust title="src/main.rs"
 use serde::Serialize;
 
 #[derive(Clone, Serialize)]
@@ -30,7 +30,7 @@ Keep the value small and safe to expose to the browser.
 
 ## 2. Define shared props
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 #[derive(InertiaProps)]
@@ -70,8 +70,7 @@ after a profile change or use `.fresh_if(...)` from application state.
 
 ## 3. Install both layers
 
-```rust
-# let routes = axum::Router::<()>::new();
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .share(AppShare)
     .build()?;
@@ -84,19 +83,12 @@ let app = routes
 In a real application, replace the static `Extension` with authentication middleware
 that inserts the user before the Inertia layer prepares shared data.
 
-## How conflicts work
-
-The dotted key becomes nested JSON while `sharedProps` records the root `auth`. If a
-route declares its own top-level `auth` prop, the entire shared `auth` root is blocked,
-even when the route's value is optional and omitted. This prevents shared work from
-overwriting route-owned data.
-
-## Production guidance
+## Security note
 
 Do not serialize session tokens, permissions you do not need in the UI, or private
 profile fields. Authorization still belongs on every server route; shared props are
 display data, not an access-control boundary. Test signed-in, signed-out, refresh,
 and route-root collision behavior.
 
-See [Shared data](/docs/concepts/shared-data) and
-[Request context](/docs/advanced/request-context).
+See [Shared data](/docs/concepts/shared-data), [Props and policies](/docs/reference/props-and-policies)
+for collision rules, and [Request context](/docs/advanced/request-context).

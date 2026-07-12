@@ -18,13 +18,13 @@ that SSR succeeded.
 
 Enable the non-default feature:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
 ```
 
 Route methods also require the trait import:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::SsrRouteExt as _;
 ```
 
@@ -32,7 +32,7 @@ use inertia_axum::SsrRouteExt as _;
 
 Starting SSR requires asynchronous work. Replace:
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .ssr("dist/ssr/app.js")
     .build()?;
@@ -40,7 +40,7 @@ let inertia = InertiaApp::vite("frontend")
 
 with:
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .ssr("dist/ssr/app.js")
     .start()
@@ -137,7 +137,7 @@ Node error.
 
 `POST /render` must return successful JSON with either `null` or:
 
-```json
+```json title="package.json"
 {
   "head": ["<title>Page</title>"],
   "body": "<div id=\"app\" data-server-rendered=\"true\">Page</div>"

@@ -26,7 +26,7 @@ The application should already have:
 
 Add the test dependencies:
 
-```toml
+```toml title="Cargo.toml"
 [dev-dependencies]
 inertia-axum-test = "1.0.0-alpha.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -37,7 +37,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 Put the tests beside the application code so they can reuse its page and state
 types:
 
-```rust
+```rust title="tests/support/mod.rs"
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,7 +62,7 @@ socket.
 First assert that the initial JSON page advertises `stats` but omits its value.
 Then make the typed partial request that the Inertia client makes automatically:
 
-```rust
+```rust title="tests/todos.rs"
 #[tokio::test]
 async fn stats_are_deferred_until_the_follow_up_request() {
     let app = test_app();
@@ -101,7 +101,7 @@ Send an empty URL-encoded form with a referer. The validation extractor should
 redirect before the handler body runs, store the error, and expose it on the
 follow-up page:
 
-```rust
+```rust title="tests/todos.rs"
 #[tokio::test]
 async fn invalid_input_redirects_back_with_errors() {
     let app = test_app();

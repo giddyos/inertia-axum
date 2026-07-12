@@ -5,7 +5,7 @@ description: Constructors, builder methods, lifecycle rules, defaults, precedenc
 
 An `InertiaApp` is immutable application-wide configuration installed around an Axum router. Build it once, then pass it to `.inertia(...)`.
 
-```rust
+```rust title="src/main.rs"
 use axum::Router;
 use inertia_axum::prelude::*;
 
@@ -53,23 +53,17 @@ The asset provider or Vite build determines the final asset version. A preceding
 
 Use synchronous `build()` when SSR is not configured:
 
-```rust
-# use inertia_axum::InertiaApp;
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend").build()?;
-# Ok::<(), inertia_axum::ConfigError>(())
 ```
 
 Use `start().await` after `.ssr(...)`:
 
-```rust
-# use inertia_axum::InertiaApp;
-# async fn example() -> Result<(), inertia_axum::StartError> {
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .ssr("dist/ssr/app.js")
     .start()
     .await?;
-# Ok(())
-# }
 ```
 
 With the `ssr` feature compiled but no `.ssr(...)` call, either lifecycle works. `start()` simply builds assets and returns an app without an SSR runtime. Calling `build()` after configuring SSR returns `ConfigError` rather than silently disabling SSR.

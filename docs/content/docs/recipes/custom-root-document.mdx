@@ -12,7 +12,7 @@ template engine is required.
 
 ## 1. Create the HTML file
 
-```html
+```html title="templates/app.html"
 <!doctype html>
 <html lang="en">
   <head>
@@ -33,7 +33,7 @@ Each of the three markers must appear exactly once.
 
 ## 2. Select it at startup
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::InertiaApp;
 
 let inertia = InertiaApp::vite("frontend")
@@ -47,7 +47,7 @@ parsing. Restart after changing the file.
 
 ## 3. Embed it for a single-file deployment
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .root_template_source(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

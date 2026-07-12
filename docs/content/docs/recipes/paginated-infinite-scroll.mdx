@@ -1,85 +1,88 @@
 ---
 title: Add paginated infinite scroll
-description: Normalize an Axum paginator for Inertia v3 and render it with InfiniteScroll.
+description: Normalize an Axum paginator and render equivalent InfiniteScroll components in all three frontends.
 keywords:
   - infinite scroll
   - pagination
 ---
 
-Return a `ScrollPage` so the Inertia v3 client can load adjacent pages, merge items,
-and keep the query string synchronized with the visible page.
+Return a `ScrollPage` so the Inertia client can load adjacent pages, merge activities, and synchronize the visible page number.
 
-## 1. Read the page query
-
-```rust
+```rust title="src/routes/activity.rs"
 use axum::extract::Query;
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct Pagination {
-    #[serde(default = "first_page")]
-    page: u64,
-}
-
-fn first_page() -> u64 { 1 }
-```
-
-## 2. Return normalized data
-
-```rust
 use inertia_axum::{ScrollPage, prelude::*};
 
 async fn index(Query(query): Query<Pagination>) -> DynamicPage {
     let result = load_page(query.page).await;
-    let mut page = ScrollPage::new(result.items, query.page)
+    let mut activities = ScrollPage::new(result.items, query.page)
         .page_name("page");
 
     if query.page > 1 {
-        page = page.previous(query.page - 1);
+        activities = activities.previous(query.page - 1);
     }
     if result.has_more {
-        page = page.next(query.page + 1);
+        activities = activities.next(query.page + 1);
     }
 
     page!("Activity/Index", {
-        activity: scroll(page).match_on("id"),
+        activity: scroll(activities).match_on("id"),
     })
 }
-# struct ActivityPage { items: Vec<serde_json::Value>, has_more: bool }
-# async fn load_page(_: u64) -> ActivityPage { ActivityPage { items: vec![], has_more: false } }
 ```
 
-The prop value is `{ data: [...] }`. `scrollProps.activity` records the page query
-name, current page, and available previous/next pages. `match_on("id")` lets the
-client replace an existing item with the same identity.
+## Render the scroll region
 
-For two scroll regions, give each a different `.page_name(...)` so their query
-parameters do not collide.
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```svelte title="frontend/src/Pages/Activity/Index.svelte"
+    <script>
+      import { InfiniteScroll } from '@inertiajs/svelte'
+      let { activity } = $props()
+    </script>
 
-## 3. Render with the client component
+    <InfiniteScroll data="activity">
+      {#each activity.data as item (item.id)}
+        <article>{item.title}</article>
+      {/each}
+    </InfiniteScroll>
+    ```
+  </Tab>
+  <Tab value="React">
+    ```tsx title="frontend/src/Pages/Activity/Index.tsx"
+    import { InfiniteScroll } from '@inertiajs/react'
 
-```vue
-<script setup>
-import { InfiniteScroll } from '@inertiajs/vue3'
-defineProps({ activity: Object })
-</script>
+    export default function ActivityIndex({ activity }) {
+      return (
+        <InfiniteScroll data="activity">
+          {activity.data.map((item) => (
+            <article key={item.id}>{item.title}</article>
+          ))}
+        </InfiniteScroll>
+      )
+    }
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```vue title="frontend/src/Pages/Activity/Index.vue"
+    <script setup>
+    import { InfiniteScroll } from '@inertiajs/vue3'
+    defineProps({ activity: Object })
+    </script>
 
-<template>
-  <InfiniteScroll data="activity">
-    <article v-for="item in activity.data" :key="item.id">
-      {{ item.title }}
-    </article>
-  </InfiniteScroll>
-</template>
-```
+    <template>
+      <InfiniteScroll data="activity">
+        <article v-for="item in activity.data" :key="item.id">
+          {{ item.title }}
+        </article>
+      </InfiniteScroll>
+    </template>
+    ```
+  </Tab>
+</Tabs>
 
-Svelte and React export `InfiniteScroll` from their framework package with the same
-`data` key. The component can load in both directions, preserve the original URL,
-use a custom scroll container, or expose manual controls.
+## Reset after filtering
 
-## 4. Reset when filters change
-
-```ts
+```ts title="frontend/src/Pages/Activity/filters.ts"
 router.reload({
   data: { status },
   only: ['activity'],
@@ -87,9 +90,4 @@ router.reload({
 })
 ```
 
-Without `reset`, results for the new filter would merge with the old list. The server
-removes scroll merge metadata for the reset response while still returning the prop.
-
-Full page visits replace values regardless of scroll metadata. Test next/previous
-metadata and reset behavior; the advanced `incident-board` example exercises scroll
-and merge policies. See [Examples](/docs/reference/examples).
+Give independent scroll regions different `.page_name(...)` values. Exact merge, reset, and pagination metadata remains in [Props and policies](/docs/reference/props-and-policies).

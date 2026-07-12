@@ -17,7 +17,7 @@ responses: errors are flashed through transient storage and returned on the next
 The derive needs the default `macros` feature. Redirected errors require a transient
 store:
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::default_root()
     .transient(MemoryTransient::new())
     .build()?;
@@ -30,7 +30,7 @@ store in [Transient storage](/docs/guides/transient-storage).
 
 This form is reduced from the tested `todo` example:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{Errors, prelude::*};
 use serde::Deserialize;
 
@@ -50,21 +50,83 @@ fn validate_todo(input: &CreateTodo) -> Result<(), Errors> {
 }
 
 async fn store(Validated(input): Validated<CreateTodo>) -> Redirect {
-    save(input).await;
+    let _title = input.title.trim();
     Redirect::to("/todos").flash("message", "Todo created")
 }
-# async fn save(_: CreateTodo) {}
 ```
 
 If validation fails, the extractor uses `Referer` as the destination, falling back
 to the current request path, persists errors, and returns `303 See Other`. The handler
 is not called.
 
+## Submit from each frontend
+
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```svelte title="frontend/src/Pages/Todos/Create.svelte"
+    <script>
+      import { router } from '@inertiajs/svelte'
+      let title = $state('')
+      function submit(event) {
+        event.preventDefault()
+        router.post('/todos', { title })
+      }
+    </script>
+
+    <form onsubmit={submit}>
+      <input bind:value={title}>
+      <button>Add todo</button>
+    </form>
+    ```
+  </Tab>
+  <Tab value="React">
+    ```jsx title="frontend/src/Pages/Todos/Create.jsx"
+    import { router } from '@inertiajs/react'
+    import { useState } from 'react'
+
+    export default function CreateTodo() {
+      const [title, setTitle] = useState('')
+
+      function submit(event) {
+        event.preventDefault()
+        router.post('/todos', { title })
+      }
+
+      return (
+        <form onSubmit={submit}>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          <button>Add todo</button>
+        </form>
+      )
+    }
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```vue title="frontend/src/Pages/Todos/Create.vue"
+    <script setup>
+    import { router } from '@inertiajs/vue3'
+    import { ref } from 'vue'
+    const title = ref('')
+    function submit() {
+      router.post('/todos', { title: title.value })
+    }
+    </script>
+
+    <template>
+      <form @submit.prevent="submit">
+        <input v-model="title">
+        <button>Add todo</button>
+      </form>
+    </template>
+    ```
+  </Tab>
+</Tabs>
+
 ## Preserve safe old input
 
 Old input is opt-in. Mark sensitive values so they can never be serialized:
 
-```rust
+```rust title="src/main.rs"
 #[derive(Deserialize, InertiaForm)]
 #[inertia(validate_with = "validate_signup", old_input)]
 struct Signup {
@@ -72,7 +134,6 @@ struct Signup {
     #[inertia(sensitive)]
     password: String,
 }
-# fn validate_signup(_: &Signup) -> Result<(), inertia_axum::Errors> { Ok(()) }
 ```
 
 Use `#[inertia(redact)]` as an equivalent field marker, or
@@ -89,7 +150,7 @@ serve several forms.
 
 The derive can adapt either ecosystem's errors:
 
-```rust
+```rust title="src/main.rs"
 #[derive(serde::Deserialize, garde::Validate, InertiaForm)]
 #[inertia(validator = "garde")]
 struct Signup {

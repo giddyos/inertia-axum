@@ -22,7 +22,7 @@ configuration, not on individual routes.
 
 No extra configuration is required:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::Ssr;
 
 let ssr = Ssr::node("dist/ssr/app.js");
@@ -48,7 +48,7 @@ per-request rendering.
 
 ## Select strict mode
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::Ssr;
 
 let ssr = Ssr::node("dist/ssr/app.js").strict();

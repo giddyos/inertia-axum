@@ -5,7 +5,7 @@ description: Default features, optional integrations, dependency implications, a
 
 `inertia-axum` enables `macros` and `vite` by default. Adding another feature does not disable those defaults.
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = "=1.0.0-alpha.1"
 ```
@@ -28,7 +28,7 @@ inertia-axum = "=1.0.0-alpha.1"
 
 Use direct pages and a custom asset pipeline with no optional dependencies:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "=1.0.0-alpha.1",
   default-features = false
@@ -39,7 +39,7 @@ inertia-axum = {
 
 Add derives without Vite:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "=1.0.0-alpha.1",
   default-features = false,
@@ -49,7 +49,7 @@ inertia-axum = {
 
 Use the default Vite integration with SSR:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "=1.0.0-alpha.1",
   features = ["ssr"]
@@ -58,7 +58,7 @@ inertia-axum = {
 
 Use a typed Askama root:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "=1.0.0-alpha.1",
   features = ["askama"]
@@ -69,7 +69,7 @@ inertia-axum = {
 
 The `InertiaForm` derive emits calls to the validation crate named by its attribute. Add that crate directly. The `garde` and `validator` features on `inertia-axum` are not required to use either derive integration and do not supply those crates.
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = "=1.0.0-alpha.1"
 garde = { version = "0.22", features = ["derive"] }
@@ -81,7 +81,7 @@ The same rule applies to `validator = "0.20"` with its `derive` feature. Custom 
 
 Cookie transient storage can be selected in a minimal, no-Vite build:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "=1.0.0-alpha.1",
   default-features = false,

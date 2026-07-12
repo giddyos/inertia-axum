@@ -35,7 +35,7 @@ process health and lifecycle remain the external supervisor's responsibility.
 Timeouts must be non-zero. Concurrency and response-size limits must be greater
 than zero; invalid values fail startup.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::Ssr;
 use std::time::Duration;
 
@@ -64,7 +64,7 @@ Backend kinds are `Vite`, `ManagedNode`, and `External`. Failure kinds distingui
 unavailable, overloaded, timeout, transport, invalid response, render error,
 oversized response, and process exit.
 
-```rust
+```rust title="src/main.rs"
 use axum::http::StatusCode;
 use inertia_axum::{InertiaApp, SsrHealth};
 

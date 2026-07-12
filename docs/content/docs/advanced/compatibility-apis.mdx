@@ -37,7 +37,7 @@ An unmigrated handler can continue to extract `InertiaRequest` and call
 `render`. The HTML callback is used only for an initial non-Inertia response;
 Inertia visits receive JSON.
 
-```rust
+```rust title="src/main.rs"
 use axum::{response::{Html, Response}, routing::get, Router};
 use inertia_axum::{
     axum::InertiaError,
@@ -57,7 +57,6 @@ async fn dashboard(request: InertiaRequest) -> Result<Response, InertiaError> {
 }
 
 let app = Router::new().route("/dashboard", get(dashboard));
-# let _: Router = app;
 ```
 
 `HtmlResponseContext::data_page()` is already escaped for an HTML script
@@ -65,7 +64,7 @@ context. The callback still owns the complete document, asset tags, and any
 other raw markup. Migrate the route to a direct response to use the application's
 configured root and the common async finalizer:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 async fn dashboard() -> DynamicPage {

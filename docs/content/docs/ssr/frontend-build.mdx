@@ -23,7 +23,7 @@ examples use `@inertiajs/vite` to produce both from one application entry.
 
 Add a production script that runs both builds:
 
-```json
+```json title="package.json"
 {
   "scripts": {
     "build": "vite build && vite build --ssr"
@@ -106,7 +106,7 @@ the Rust paths match the files your Vite configuration actually emits.
 Paths passed to `.entry(...)` and `.build_dir(...)` are relative to the Vite root.
 The public path is the URL prefix served by the Axum router.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 let inertia = InertiaApp::vite("frontend")

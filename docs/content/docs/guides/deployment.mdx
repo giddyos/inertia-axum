@@ -1,78 +1,27 @@
 ---
 title: Deployment
-description: Build client assets, configure runtime services, and operate inertia-axum safely in production.
-keywords:
-  - production
-  - deployment
+description: Build and verify the immutable frontend and Rust artifacts required in production.
+keywords: [production, deployment]
 ---
 
-Deploy `inertia-axum` as an ordinary Axum service, with a client build produced before
-the Rust process starts. Add an SSR runtime and durable transient storage only when
-the application needs them.
+Deploy the application as an Axum service whose frontend manifest exists before Rust starts.
 
-## Build immutable artifacts
-
-1. Install frontend dependencies from the committed lockfile.
-2. Run the client production build with `manifest: true`.
-3. If SSR is enabled, build the SSR bundle as well.
-4. Compile the Rust binary with the exact Cargo features used in production.
-5. Package the binary, client build directory, and managed SSR bundle together.
-
-```bash
-pnpm install --frozen-lockfile
-pnpm build
+```bash title="Terminal"
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend build
 cargo build --release --locked
-```
-
-Do not set `VITE_DEV_SERVER_URL` in production. Its presence switches asset handling
-to development tags and disables the production manifest/static mount.
-
-## Keep the client manifest
-
-`InertiaApp::vite` reads the manifest during startup and fails fast if it is absent
-or invalid. Keep the path aligned with `.entry(...)` and `.build_dir(...)`. The
-manifest is still required with SSR because it drives client asset tags, versioning,
-and static serving even though the SSR protocol itself does not read it.
-
-## Choose production transient state
-
-- Encrypted cookies avoid a server-side service but must stay beneath browser size
-  limits and require HTTPS.
-- Tower Sessions can use a shared production session store.
-- A custom `TransientStore` can use an existing application datastore.
-
-Do not use `MemoryTransient` for ordinary multi-user, multi-process, rolling, or
-autoscaled deployments.
-
-## Operate SSR deliberately
-
-Managed SSR requires Node.js 22 or newer at runtime. External SSR requires a reachable
-health and render endpoint. The default failure mode falls back to usable CSR; choose
-strict mode only when returning an error is preferable to an unrendered page.
-
-Expose application health separately from `InertiaApp::ssr_health()`. That method is
-a local record of the latest SSR state, not a network probe. Monitor render failures,
-timeouts, overload, response limits, process restarts, and fallback rate. See
-[Health and operations](/docs/ssr/health-and-operations).
-
-## Reverse proxy and caching
-
-Preserve request headers used by Inertia and do not cache page JSON as ordinary HTML.
-Responses include `Vary: X-Inertia`; ensure intermediaries honor it. Fingerprinted
-static assets can use long immutable caching, while the root HTML and page JSON should
-follow application-specific private/no-cache rules.
-
-Terminate TLS before using secure transient cookies. Forward the original URI and
-host consistently so generated page URLs match what the browser sees.
-
-## Pre-deploy gates
-
-```bash
-cargo test --locked --workspace --all-features
 cargo inertia check --path . --frontend frontend
 ```
 
-Also run the frontend's typecheck and production build, exercise an initial HTML
-request and an Inertia JSON visit, and test fallback with the SSR backend unavailable.
-The CLI checker is a useful literal-component check, not a substitute for these
-build and runtime gates.
+## Deployment checklist
+
+1. Commit both lockfiles and install from them.
+2. Build the client with `manifest: true`; package `frontend/dist` with the Rust binary.
+3. Build and package the SSR bundle when SSR is enabled.
+4. Leave `VITE_DEV_SERVER_URL` unset so startup reads the production manifest.
+5. Use encrypted cookies, a production Tower Sessions store, or a bounded custom transient store instead of `MemoryTransient`.
+6. Preserve Inertia request headers and honor `Vary: X-Inertia` at the reverse proxy.
+7. Cache fingerprinted assets as immutable; apply application-specific private/no-cache rules to HTML and page JSON.
+8. Exercise an initial HTML request, an Inertia JSON visit, validation state, and SSR fallback before release.
+
+Managed SSR requires its validated Node runtime; external SSR requires reachable health and render endpoints. Continue with [Health and operations](/docs/ssr/health-and-operations) and the complete [deployment-related configuration](/docs/reference/configuration).

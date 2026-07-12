@@ -1,24 +1,11 @@
 ---
 title: Typed pages and props
-description: Derive compiler-checked page contracts and typed prop keys for handlers and tests.
+description: Define one Todo page contract and use its generated keys in a typed test.
 ---
 
-Use `InertiaPage` for a stable page response and `InertiaProps` for reusable typed
-prop collections. Both derives require the default `macros` feature.
+Derive `InertiaPage` when a stable page contract is shared by handlers and tests.
 
-## Prerequisites
-
-```toml
-[dependencies]
-inertia-axum = "1.0.0-alpha.1"
-serde = { version = "1", features = ["derive"] }
-```
-
-## Define a page contract
-
-This pattern is reduced from the tested `todo` example:
-
-```rust
+```rust title="src/pages/todos.rs"
 use inertia_axum::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -26,47 +13,34 @@ use serde::{Deserialize, Serialize};
 pub struct Todo {
     pub id: u64,
     pub title: String,
-    pub completed: bool,
 }
 
 #[derive(InertiaPage)]
 #[inertia(component = "Todos/Index", rename_all = "camelCase")]
 pub struct TodosPage {
     pub todos: Vec<Todo>,
-    pub stats: Prop<usize>,
-    #[inertia(rename = "canCreate")]
+    pub stats: Prop<TodoStats>,
     pub can_create: bool,
 }
 ```
 
-Return the struct directly from an Axum handler. Every field is converted separately,
-so immediate and asynchronous props can share the same page type.
+## Return the page
 
-```rust
+```rust title="src/routes/todos.rs"
 use std::convert::Infallible;
 
 async fn index() -> TodosPage {
     TodosPage {
         todos: load_todos().await,
-        stats: defer(|| async { Ok::<_, Infallible>(42) }),
+        stats: defer(|| async { Ok::<_, Infallible>(load_stats().await) }),
         can_create: true,
     }
 }
-# async fn load_todos() -> Vec<Todo> { vec![] }
 ```
 
-## Use generated keys
+## Test with generated keys
 
-The derive creates:
-
-- `TodosPage::COMPONENT`, a `Component` equal to `Todos/Index`.
-- `TodosPage::TODOS`, a `PropKey<Vec<Todo>>`.
-- `TodosPage::STATS`, a `PropKey<usize>`.
-- `TodosPage::CAN_CREATE`, a `PropKey<bool>` using the serialized name `canCreate`.
-
-These keys keep tests and partial requests aligned with the page definition:
-
-```rust
+```rust title="tests/todos.rs"
 let page = app
     .inertia_get("/todos")
     .only(TodosPage::STATS)
@@ -74,32 +48,8 @@ let page = app
     .await
     .assert_page::<TodosPage>();
 
-let stats: usize = page.prop(TodosPage::STATS);
+let stats: TodoStats = page.prop(TodosPage::STATS);
+page.assert_missing(TodosPage::TODOS);
 ```
 
-## Derive a prop collection
-
-Use `InertiaProps` when a named struct must convert into the same field-by-field
-prop engine without being a page itself. The primary use is a typed `Share` provider.
-
-```rust
-#[derive(InertiaProps)]
-#[inertia(rename_all = "camelCase")]
-struct AppShared {
-    app_name: String,
-    #[inertia(rename = "auth.user")]
-    auth_user: Prop<String>,
-}
-```
-
-## Attributes and limits
-
-- `#[inertia(component = "...")]` is required and cannot be empty.
-- `rename_all` accepts `camelCase`, `snake_case`, `kebab-case`, or `PascalCase`.
-- Fields accept `rename = "..."` or `skip`.
-- `encrypt_history`, `clear_history`, and `preserve_fragment` are page-level flags.
-- Derives support named-field structs, including generics; enums and tuple structs are rejected.
-- `errors` is a reserved serialized page field because the adapter manages validation errors.
-
-See [Macros reference](/docs/reference/macros) for the full grammar and
-[Testing](/docs/guides/testing) for typed assertions.
+The derive generates `TodosPage::COMPONENT` and a typed key for each serialized top-level field. Use `InertiaProps` for reusable typed prop collections such as shared data; the complete attributes, rename rules, supported shapes, and reserved fields remain in the [Macros reference](/docs/reference/macros).

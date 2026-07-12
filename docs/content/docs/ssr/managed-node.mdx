@@ -23,7 +23,7 @@ handle is dropped.
 
 ## Start the process
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{InertiaApp, Ssr};
 
 let inertia = InertiaApp::vite("frontend")
@@ -42,7 +42,7 @@ directory. Absolute bundle paths are preserved.
 
 ## Override the runtime or endpoint
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::Ssr;
 
 let ssr = Ssr::node("dist/ssr/app.js")

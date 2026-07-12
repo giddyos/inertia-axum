@@ -15,7 +15,7 @@ instead of replacing it, or when an expensive value can be reused across visits.
 
 `merge(value)` creates an immediate prop ready for a merge policy:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{merge, page};
 use serde::Serialize;
 
@@ -36,7 +36,7 @@ key beneath a nested merge path.
 
 ## Deep-merge objects
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::merge;
 
 let report = serde_json::json!({"sections": []});
@@ -51,7 +51,7 @@ use while combining nested arrays.
 
 ## Normalize an infinite-scroll page
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{ScrollPage, page, scroll};
 use serde::Serialize;
 
@@ -74,16 +74,15 @@ let page = page!("Activity/Index", {
 `currentPage`, and optional previous/next values to `scrollProps`. Implement
 `IntoScrollPage` to adapt an application paginator.
 
-## Reuse a once prop
+## Reuse or reset client data
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::once;
 use std::time::Duration;
 
 let countries = once(load_countries)
     .key("countries:v1")
     .expires_in(Duration::from_secs(60 * 60));
-# async fn load_countries() -> Result<Vec<String>, std::io::Error> { Ok(vec![]) }
 ```
 
 The stable key can differ from the prop name. Once the client reports that key in
@@ -91,11 +90,11 @@ The stable key can differ from the prop name. Once the client reports that key i
 selection refreshes it. `.fresh_if(true)` also forces refresh, and `.once()` can be
 composed onto a deferred or mergeable prop.
 
-## Reset merge metadata
+### Reset merge metadata
 
 When a filter changes, ask the client to reset a prop before applying new results:
 
-```ts
+```ts title="frontend/src/page.ts"
 router.reload({
   data: { search },
   only: ['activity'],

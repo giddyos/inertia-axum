@@ -24,7 +24,7 @@ variant require `ssr`.
 Add `tracing` directly when the reporter below is used, and install a structured
 logging subscriber in the application:
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 tracing = "0.1"
 ```
@@ -37,7 +37,7 @@ and reporter types on this page are exported from the crate root.
 
 This pattern is reduced from the rescued-failure integration test:
 
-```rust
+```rust title="src/main.rs"
 use axum::{Router, routing::get};
 use inertia_axum::{
     DynamicPage, ErrorHandler, InertiaApp, PropError,
@@ -69,7 +69,6 @@ let app = Router::new().route("/dashboard", get(dashboard)).inertia(
         .error_handler(PropReporter)
         .build()?,
 );
-# Ok::<_, inertia_axum::ConfigError>(app)
 ```
 
 When the selected `activity` resolver fails, the adapter:

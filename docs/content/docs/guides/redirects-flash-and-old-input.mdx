@@ -13,7 +13,7 @@ one-request success message or identifier.
 
 ## Redirect inside the application
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 async fn store() -> Redirect {
@@ -32,9 +32,36 @@ Use `Redirect::back()` to prefer the request `Referer` and fall back to `/`, or
 Flash is emitted as top-level `page.flash`, separate from `props`, and is not kept in
 browser history. It is consumed once.
 
-```ts
-const message = page.flash?.message
-```
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```svelte title="frontend/src/Layouts/App.svelte"
+    <script>
+      import { usePage } from '@inertiajs/svelte'
+      const page = usePage()
+    </script>
+
+    {#if page.flash?.message}<p>{page.flash.message}</p>{/if}
+    ```
+  </Tab>
+  <Tab value="React">
+    ```jsx title="frontend/src/Layouts/App.jsx"
+    import { usePage } from '@inertiajs/react'
+
+    const { flash } = usePage()
+    return flash?.message && <p>{flash.message}</p>
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```vue title="frontend/src/Layouts/App.vue"
+    <script setup>
+    import { usePage } from '@inertiajs/vue3'
+    const page = usePage()
+    </script>
+
+    <template><p v-if="page.flash?.message">{{ page.flash.message }}</p></template>
+    ```
+  </Tab>
+</Tabs>
 
 `DynamicPage::flash(...)` attaches a value only to the current response. It does not
 persist it to the following request.
@@ -56,7 +83,7 @@ Sensitive or redacted fields are omitted before storage. See
 
 ## Leave the Inertia application
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::Location;
 
 async fn billing() -> Location {
@@ -64,14 +91,6 @@ async fn billing() -> Location {
 }
 ```
 
-For an Inertia request, a valid external URL returns `409 Conflict` with
-`X-Inertia-Location`; the client performs a full browser visit. A non-Inertia request
-gets an ordinary `302` or method-aware `303` redirect. Any location URI containing a
-fragment uses `X-Inertia-Redirect`; relative or absolute targets without a fragment
-use `X-Inertia-Location`.
-
-Invalid redirect or location values become a generic `500` without copying the
-invalid target into a response header.
-
-See [Protocol behavior](/docs/advanced/protocol-behavior) for the wire response and
+The Inertia client performs a full browser visit for an external location. See
+[Protocol behavior](/docs/advanced/protocol-behavior) for status and header details, and
 [Transient storage](/docs/guides/transient-storage) for production stores.

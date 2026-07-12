@@ -43,7 +43,7 @@ Merge metadata is emitted only when the value is present in that response. `X-In
 
 Nested merge paths are component prop paths. For example:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::merge;
 
 let users = merge(vec!["Ada", "Grace"])
@@ -57,7 +57,7 @@ Later merge selections replace earlier merge selections. Deep merging can carry 
 
 Normalize application pagination with `ScrollPage<T>` or implement `IntoScrollPage`:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{ScrollPage, scroll};
 
 let activity = scroll(

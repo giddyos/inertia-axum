@@ -12,7 +12,7 @@ client with `only` or omit values with `except`.
 
 ## Define selectable data
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 use std::convert::Infallible;
 
@@ -25,8 +25,6 @@ async fn index() -> DynamicPage {
         request_kind: always("partial-aware"),
     })
 }
-# async fn load_users() -> Vec<String> { vec![] }
-# async fn load_companies() -> Vec<String> { vec![] }
 ```
 
 `companies` is absent from a normal visit. It is resolved only when the client
@@ -35,32 +33,39 @@ when a partial request does not select it.
 
 ## Request selected props
 
-The client adapters share the same router API:
+The call is identical; only the adapter import differs:
 
-```ts
-import { router } from '@inertiajs/svelte' // or @inertiajs/react / @inertiajs/vue3
-
-router.reload({ only: ['companies'] })
-router.reload({ except: ['users'] })
-```
+<Tabs items={['Svelte', 'React', 'Vue']}>
+  <Tab value="Svelte">
+    ```ts title="frontend/src/Pages/Users/Index.svelte"
+    import { router } from '@inertiajs/svelte'
+    router.reload({ only: ['companies'] })
+    ```
+  </Tab>
+  <Tab value="React">
+    ```ts title="frontend/src/Pages/Users/Index.tsx"
+    import { router } from '@inertiajs/react'
+    router.reload({ only: ['companies'] })
+    ```
+  </Tab>
+  <Tab value="Vue">
+    ```ts title="frontend/src/Pages/Users/Index.vue"
+    import { router } from '@inertiajs/vue3'
+    router.reload({ only: ['companies'] })
+    ```
+  </Tab>
+</Tabs>
 
 The client sends `X-Inertia-Partial-Component` and selection headers. No Axum route
 or handler changes are required.
 
-## Selection rules
-
-- Partial filtering applies only to `GET` requests.
-- The requested component must equal the response component. A mismatch returns the
-  normal complete selection so stale data is not combined across pages.
-- `X-Inertia-Partial-Except` wins if both include and exclude lists are present.
-- `always` props survive filtering; `optional` props require explicit selection.
-- `props.errors` remains available for object-valued props.
-- Selection occurs before asynchronous closures are invoked. An unselected closure
-  is not called, so its future is never constructed or polled.
+Filtering applies to matching Inertia `GET` requests. Exact component matching,
+`only`/`except` precedence, always-prop behavior, and selection timing remain in
+[Props and policies](/docs/reference/props-and-policies).
 
 ## Test the request
 
-```rust
+```rust title="src/main.rs"
 let page = app
     .inertia_get("/users")
     .only(UsersPage::COMPANIES)

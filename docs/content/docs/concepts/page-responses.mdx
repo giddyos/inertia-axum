@@ -1,59 +1,27 @@
 ---
 title: Page responses
-description: Return concise dynamic pages or compiler-checked typed pages from Axum handlers.
+description: Return the same Todo domain data through dynamic or compiler-checked page contracts.
 ---
 
-An Inertia handler returns a component name and its props. Use `page!` for small
-or dynamic responses; derive `InertiaPage` when a page has a stable contract used
-by handlers and tests.
+Both page styles select a component and serialize props. Use `page!` for local or conditional shapes and `InertiaPage` when handlers and tests share a stable contract.
 
-## Return a dynamic page
+## Dynamic page
 
-The unconditional `page!` macro accepts ordinary serializable values and composable
-`Prop<T>` values. It does not require the `macros` feature.
-
-```rust
+```rust title="src/routes/todos.rs"
 use inertia_axum::prelude::*;
 
-async fn index() -> DynamicPage {
-    page!("Home", {
-        app_name: "Acme",
-        message: "Rendered by Axum through Inertia.",
+async fn todos() -> DynamicPage {
+    page!("Todos/Index", {
+        todos: load_todos().await,
+        can_create: true,
     })
 }
 ```
 
-Use the builder when keys or page flags are conditional:
+## Typed page
 
-```rust
-use axum::http::StatusCode;
-use inertia_axum::DynamicPage;
-
-let page = DynamicPage::new("Reports/Show")
-    .prop("reportId", 42_u64)
-    .status(StatusCode::CREATED)
-    .encrypt_history()
-    .preserve_fragment();
-```
-
-`clear_history()`, `encrypt_history()`, and `preserve_fragment()` set Inertia v3
-page metadata. `flash(key, value)` writes outside `props` and browser history; it
-requires a configured transient store.
-
-## Derive a typed page
-
-Enable the `macros` feature (enabled by default) and derive `InertiaPage` on a
-named-field struct:
-
-```rust
+```rust title="src/pages/todos.rs"
 use inertia_axum::prelude::*;
-use serde::Serialize;
-
-#[derive(Serialize)]
-struct Todo {
-    id: u64,
-    title: String,
-}
 
 #[derive(InertiaPage)]
 #[inertia(component = "Todos/Index", rename_all = "camelCase")]
@@ -62,21 +30,12 @@ struct TodosPage {
     can_create: bool,
 }
 
-async fn index() -> TodosPage {
+async fn todos() -> TodosPage {
     TodosPage {
-        todos: vec![Todo { id: 1, title: "Ship docs".into() }],
+        todos: load_todos().await,
         can_create: true,
     }
 }
 ```
 
-The derive generates `TodosPage::COMPONENT` and typed top-level keys such as
-`TodosPage::TODOS` and `TodosPage::CAN_CREATE`. `inertia-axum-test` uses those keys
-for compile-checked selection and assertions.
-
-Fields support `#[inertia(rename = "...")]` and `#[inertia(skip)]`. Page and props
-derives support `camelCase`, `snake_case`, `kebab-case`, and `PascalCase` rename
-rules. The serialized top-level key `errors` is reserved for validation.
-
-Continue to [Typed pages and props](/docs/guides/typed-pages-and-props) or see the
-exact [macro reference](/docs/reference/macros).
+The typed derive generates the component constant and top-level prop keys used by `inertia-axum-test`. Continue with [Typed pages and props](/docs/guides/typed-pages-and-props); conditional flags and complete macro grammar remain in the [macro reference](/docs/reference/macros).

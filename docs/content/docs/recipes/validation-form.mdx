@@ -14,7 +14,7 @@ maintained browser examples.
 
 The default `macros` feature supplies `InertiaForm`.
 
-```rust
+```rust title="src/forms/create_todo.rs"
 use inertia_axum::{Errors, prelude::*};
 use serde::Deserialize;
 
@@ -38,12 +38,11 @@ fn validate_todo(input: &CreateTodo) -> Result<(), Errors> {
 
 ## 2. Extract validated input
 
-```rust
+```rust title="src/routes/todos.rs"
 async fn store(Validated(input): Validated<CreateTodo>) -> Redirect {
     create_todo(input.title.trim()).await;
     Redirect::to("/todos").flash("message", "Todo created")
 }
-# async fn create_todo(_: &str) {}
 ```
 
 An invalid request redirects before `create_todo` runs. The next page receives
@@ -51,7 +50,7 @@ An invalid request redirects before `create_todo` runs. The next page receives
 
 ## 3. Configure one-request storage
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .transient(MemoryTransient::new())
     .build()?;
@@ -65,7 +64,7 @@ for production in [Transient storage](/docs/guides/transient-storage).
 <Tabs items={['Svelte', 'React', 'Vue']}>
   <Tab value="Svelte">
 
-```svelte
+```svelte title="frontend/src/Pages/Todos/Create.svelte"
 <script>
   import { router } from '@inertiajs/svelte'
   let { errors = {}, oldInput = {} } = $props()
@@ -87,37 +86,48 @@ for production in [Transient storage](/docs/guides/transient-storage).
   </Tab>
   <Tab value="React">
 
-```jsx
+```jsx title="frontend/src/Pages/Todos/Create.jsx"
 import { router } from '@inertiajs/react'
 import { useState } from 'react'
 
-export default function Form({ errors = {}, oldInput = {} }) {
+export default function CreateTodo({ errors = {}, oldInput = {} }) {
   const [title, setTitle] = useState(oldInput.title ?? '')
-  return <form onSubmit={(event) => {
+
+  function submit(event) {
     event.preventDefault()
+
     router.post('/todos', { title }, { onSuccess: () => setTitle('') })
-  }}>
-    <input value={title} onChange={(event) => setTitle(event.target.value)}
-      aria-invalid={errors.title ? 'true' : undefined} />
-    {errors.title && <p>{errors.title}</p>}
-    <button type="submit">Add todo</button>
-  </form>
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <input
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        aria-invalid={errors.title ? 'true' : undefined}
+      />
+      {errors.title && <p>{errors.title}</p>}
+      <button type="submit">Add todo</button>
+    </form>
+  )
 }
 ```
 
   </Tab>
   <Tab value="Vue">
 
-```vue
+```vue title="frontend/src/Pages/Todos/Create.vue"
 <script setup>
 import { router } from '@inertiajs/vue3'
 import { ref } from 'vue'
 const props = defineProps({ errors: Object, oldInput: Object })
 const title = ref(props.oldInput?.title ?? '')
 function submit() {
-  router.post('/todos', { title: title.value }, {
-    onSuccess: () => { title.value = '' },
-  })
+  router.post(
+    '/todos',
+    { title: title.value },
+    { onSuccess: () => { title.value = '' } },
+  )
 }
 </script>
 

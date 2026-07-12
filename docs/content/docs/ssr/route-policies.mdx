@@ -17,7 +17,7 @@ write requests, and ordinary Axum responses still bypass SSR.
 
 Enable the `ssr` feature and import `SsrRouteExt`.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::SsrRouteExt as _;
 ```
 
@@ -25,7 +25,7 @@ Configured SSR is enabled for eligible routes by default.
 
 ## Opt a route out
 
-```rust
+```rust title="src/main.rs"
 use axum::routing::get;
 use inertia_axum::SsrRouteExt as _;
 
@@ -37,7 +37,7 @@ backend.
 
 Apply the same policy to a router group:
 
-```rust
+```rust title="src/main.rs"
 use axum::{Router, routing::get};
 use inertia_axum::SsrRouteExt as _;
 
@@ -52,7 +52,7 @@ let account_routes = Router::new()
 For applications where most pages should remain CSR, change the application
 default and mark only selected routes:
 
-```rust
+```rust title="src/main.rs"
 use axum::routing::get;
 use inertia_axum::{Ssr, SsrRouteExt as _};
 
@@ -71,7 +71,7 @@ The policy nearest the handler wins:
 2. A nested router's policy wins over an outer router.
 3. An outer policy fills in only when no inner policy already made a decision.
 
-```rust
+```rust title="src/main.rs"
 use axum::{Router, routing::get};
 use inertia_axum::SsrRouteExt as _;
 
@@ -94,7 +94,7 @@ Here `/reports/public` is SSR because the method route enables it.
 `ssr_when` runs synchronously and can inspect the method, URI, headers, and
 request extensions:
 
-```rust
+```rust title="src/main.rs"
 use axum::routing::get;
 use inertia_axum::SsrRouteExt as _;
 
@@ -109,7 +109,7 @@ condition does not consume or modify the request body.
 For database or network decisions, do the asynchronous work in ordinary Axum
 middleware, insert a small result into request extensions, and read it:
 
-```rust
+```rust title="src/main.rs"
 #[derive(Clone)]
 struct CanRender(bool);
 

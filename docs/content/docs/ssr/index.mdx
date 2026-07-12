@@ -18,7 +18,7 @@ connect to an SSR server managed outside the Rust application.
 - Use Node.js 22 or newer for managed Node mode.
 - Build a client manifest and SSR bundle when using Vite in production.
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
 ```
@@ -29,7 +29,7 @@ The string passed to `.ssr(...)` is shorthand for `Ssr::node(...)`. With
 `InertiaApp::vite("frontend")`, a relative bundle path is resolved from that
 Vite root.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 let inertia = InertiaApp::vite("frontend")

@@ -1,71 +1,43 @@
 ---
 title: How Inertia works
-description: Understand initial HTML responses, Inertia visits, page objects, and Axum's role.
-keywords:
-  - Inertia protocol
-  - page object
+description: Understand initial HTML responses, later JSON visits, and Axum's unchanged role.
+keywords: [Inertia protocol, page object]
 ---
 
-Inertia lets Axum remain responsible for routing and data while a client framework
-renders the page. It does not require a separate client-side route table or application
-JSON API.
+Inertia keeps routing and data loading in Axum while Svelte, React, or Vue renders the page. It does not require a separate client router or JSON API.
 
-## The first request returns HTML
+```mermaid
+flowchart LR
+  A[Browser GET] --> B[Axum handler]
+  B --> C{X-Inertia?}
+  C -->|No| D[Root HTML + embedded page]
+  C -->|Yes| E[JSON page object]
+  D --> F[Frontend mounts component]
+  E --> G[Frontend swaps component]
+```
 
-A normal browser `GET` has no `X-Inertia` header. `inertia-axum` resolves the page
-and returns a complete root document. For a client-rendered response, it injects asset
-tags and embeds the serialized page object in a `<script type="application/json">`
-element. The client adapter reads that object and mounts the requested Svelte, React,
-or Vue component.
+## HTML first, JSON later
 
-A custom root template is not required. The built-in root contains the required
-document metadata, asset tags, head output, and application mount.
+The first browser request has no `X-Inertia` header, so the adapter returns a complete root document with assets and an embedded page object. Inertia links and router visits send `X-Inertia: true`; the same handler then returns the page object as JSON.
 
-## Later visits return JSON
+The page object identifies the frontend `component`, its `props`, the displayed `url`, and an optional asset `version`. Deferred, merge, scroll, once, and shared metadata are catalogued in [Protocol behavior](/docs/advanced/protocol-behavior).
 
-Inertia's `<Link>` component and router intercept navigation. They send the same
-Axum route an `X-Inertia: true` request. The route handler still returns the same
-Rust page type, but the adapter responds with page-object JSON instead of rebuilding
-the HTML document.
+## Axum still owns every route
 
-The core page fields are:
-
-| Field | Meaning |
-| --- | --- |
-| `component` | Frontend page component, such as `Todos/Index`. |
-| `props` | Data for that component; direct page responses include an `errors` object. |
-| `url` | The request URI the client should display. |
-| `version` | Optional asset version used to detect stale clients. |
-
-Policy fields such as `deferredProps`, `mergeProps`, `scrollProps`, `onceProps`,
-and `sharedProps` tell the v3 client how to load or retain data. See
-[Protocol behavior](/docs/advanced/protocol-behavior) for the complete shape.
-
-## Axum still owns the application
-
-Handlers use normal Axum extractors, state, middleware, and response composition.
-Only responses that return an Inertia page, redirect, location, or validation failure
-are finalized by the installed Inertia layer. Ordinary health checks, downloads,
-JSON endpoints, and WebSockets continue to work as normal Axum routes.
-
-```rust
-use axum::{routing::get, Router};
+```rust title="src/router.rs"
+use axum::{Router, routing::get};
 use inertia_axum::prelude::*;
 
 async fn home() -> DynamicPage {
     page!("Home", { message: "Rendered through Inertia" })
 }
 
-let app = Router::new()
-    .route("/", get(home))
-    .route("/health", get(|| async { "ok" }))
-    .inertia(InertiaApp::default_root().build()?);
-# Ok::<(), inertia_axum::ConfigError>(())
+pub fn router(inertia: InertiaApp) -> Router {
+    Router::new()
+        .route("/", get(home))
+        .route("/health", get(|| async { "ok" }))
+        .inertia(inertia)
+}
 ```
 
-## Where SSR fits
-
-With SSR configured, eligible initial page `GET` requests are rendered by the configured
-backend before the same root document is returned. Inertia visits still return JSON.
-If rendering fails, the default mode returns usable client-rendered HTML; strict mode
-returns an error instead. Continue to [Server-side rendering](/docs/ssr).
+Normal health, download, JSON, and WebSocket routes remain ordinary Axum responses. With SSR configured, eligible initial visits may include rendered component HTML; Inertia visits still return JSON.

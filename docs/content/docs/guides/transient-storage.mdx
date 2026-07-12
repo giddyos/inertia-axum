@@ -11,9 +11,16 @@ Transient storage carries flash values, validation errors, and opted-in old inpu
 the next request. Install one store with `.transient(store)` before using those
 features.
 
+| Store | Best fit | Security or scaling constraint |
+| --- | --- | --- |
+| `MemoryTransient` | Tests and local examples | Process-local; not isolated for normal multi-user production |
+| `CookieTransient` | Stateless deployments | Requires encryption, HTTPS, and small payloads |
+| `TowerSessionTransient` | Shared server-side sessions | Session layer must wrap the Inertia layer |
+| Custom `TransientStore` | Existing application datastore | Must be bounded, observable, and concurrency-safe |
+
 ## Memory storage
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 let inertia = InertiaApp::default_root()
@@ -30,21 +37,20 @@ production deployments.
 
 Enable `cookies` and use at least 32 random bytes from a secret manager:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "1.0.0-alpha.1",
   features = ["cookies"]
 }
 ```
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{CookieTransient, InertiaApp};
 
 let key = std::env::var("INERTIA_COOKIE_KEY")?;
 let inertia = InertiaApp::default_root()
     .transient(CookieTransient::encrypted(key.as_bytes()))
     .build()?;
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 The adapter writes an encrypted and authenticated `__Host-inertia_transient` cookie
@@ -58,11 +64,9 @@ Enable `tower-sessions` and add `tower-sessions` to the application. Install its
 `SessionManagerLayer` outside the Inertia layer so the session is present in request
 extensions:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{InertiaApp, RouterInertiaExt, TowerSessionTransient};
 
-# let routes = axum::Router::<()>::new();
-# let session_manager = tower_sessions::SessionManagerLayer::new(tower_sessions::MemoryStore::default()).with_secure(false);
 let inertia = InertiaApp::default_root()
     .transient(TowerSessionTransient::new())
     .build()?;

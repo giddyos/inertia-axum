@@ -9,7 +9,7 @@ Use `page!` for a small dynamic response. Use derives when the page, prop, or fo
 
 `page!` is an unconditional declarative macro; it does not require the `macros` Cargo feature. It creates a `DynamicPage` and accepts identifier keys with explicit or shorthand values.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 async fn home() -> DynamicPage {
@@ -42,7 +42,7 @@ The proc-macro crate discovers the actual Cargo name of `inertia-axum`, so deriv
 
 Every typed page needs a non-empty component name.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 use serde::Serialize;
 
@@ -89,7 +89,7 @@ Field attributes:
 
 Use this derive for a typed `Share::Props` object or another field-by-field prop source.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 
 #[derive(InertiaProps)]
@@ -106,7 +106,7 @@ It supports `rename_all`, field `rename`, and field `skip`. It does not accept c
 
 The derive supplies validation metadata to `Validated<T>`. Custom validation is the smallest dependency-free option:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{Errors, prelude::*};
 use serde::Deserialize;
 

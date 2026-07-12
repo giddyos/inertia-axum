@@ -18,7 +18,7 @@ directory.
 Cargo feature. The optional `static_service` method and `StaticAssetService` type are
 available only with `vite`, which is a default feature:
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = "1.0.0-alpha.1"
 ```
@@ -32,7 +32,7 @@ This provider is reduced from the custom provider exercised by the adapter's Vit
 integration tests. It adds a static directory so the URLs in its tags are served by
 the application:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{
     AssetContext, AssetError, AssetProvider, AssetTags, AssetVersion,
     StaticAssetService,
@@ -77,7 +77,7 @@ impl AssetProvider for BuiltAssets {
 
 Install it and make the static mount match the tag URLs:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::InertiaApp;
 
 let inertia = InertiaApp::default_root()

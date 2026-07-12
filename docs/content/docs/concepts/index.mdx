@@ -1,22 +1,25 @@
 ---
 title: Concepts
-description: Learn the small set of ideas behind an Axum and Inertia application.
+description: Learn the request lifecycle, application setup, page contracts, and data policies behind inertia-axum.
 ---
 
-These concepts explain the request lifecycle and the adapter abstractions you will
-use in application code. They are organized around building an application, not
-around crate modules.
+Read these concepts in order, then use the task guides for implementation details.
 
-## Learn in order
+## Recommended order
 
-1. [How Inertia works](/docs/concepts/how-inertia-works) — initial HTML, later JSON,
-   and the page object.
-2. [Application and router](/docs/concepts/application-and-router) — configure one
-   `InertiaApp` and install it on Axum.
-3. [Page responses](/docs/concepts/page-responses) — return dynamic or typed pages.
-4. [Props](/docs/concepts/props) — choose when data is loaded and how it is applied.
-5. [Shared data](/docs/concepts/shared-data) — prepare application-wide props from
-   each request.
+<Cards>
+  <Card title="1. Request lifecycle" href="/docs/concepts/how-inertia-works">
+    See why the first request returns HTML and later visits return JSON.
+  </Card>
+  <Card title="2. Application and router" href="/docs/concepts/application-and-router">
+    Build one application and install it around the complete Axum router.
+  </Card>
+  <Card title="3. Page responses" href="/docs/concepts/page-responses">
+    Choose a dynamic page or a compiler-checked typed page.
+  </Card>
+  <Card title="4. Page data" href="/docs/concepts/props">
+    Select immediate, optional, lazy, deferred, and shared data policies.
+  </Card>
+</Cards>
 
-For copyable procedures, continue to the [guides](/docs/guides/vite-and-assets).
-For exact APIs and defaults, use the [reference](/docs/reference).
+Continue to [Shared data](/docs/concepts/shared-data) for request-wide props. Exact APIs, precedence, and protocol fields remain in the [reference](/docs/reference).

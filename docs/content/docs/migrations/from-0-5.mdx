@@ -18,7 +18,7 @@ compatibility APIs only where an incremental conversion needs them.
 Replace application-specific root, manifest, static service, shared extension, and
 version middleware assembly:
 
-```rust
+```rust title="src/main.rs"
 // Before: app-specific version, assets, root, and shared layers.
 let app = Router::new()
     .route("/todos", get(index))
@@ -40,7 +40,7 @@ Vite defaults to `frontend/src/main.ts`, `frontend/dist/.vite/manifest.json`, an
 
 Remove the request extractor and manual root callback from ordinary handlers:
 
-```rust
+```rust title="src/main.rs"
 // Before:
 async fn index(request: InertiaRequest) -> Result<Response, InertiaError> {
     request.render(Inertia::response("Todos/Index", props), shell)
@@ -55,7 +55,7 @@ async fn index() -> DynamicPage {
 For a stable contract, derive `InertiaPage`. Each non-skipped field becomes a typed
 `PropKey<T>`, and `Prop<T>` fields keep their loading policies.
 
-```rust
+```rust title="src/main.rs"
 #[derive(InertiaPage)]
 #[inertia(component = "Todos/Index", rename_all = "camelCase")]
 struct TodosPage {
@@ -82,7 +82,7 @@ failure redirects back with `303`, and the next page receives `props.errors`.
 The cookie-backed store below requires the non-default `cookies` feature and at least
 32 random bytes of key material.
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .transient(CookieTransient::encrypted(app_key))
     .build()?;
@@ -100,7 +100,7 @@ now appear in top-level `page.flash`, not inside props.
 Enable `ssr`, configure the managed bundle or external endpoint, and replace
 `build()` with `start().await` only on builders that call `.ssr(...)`:
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .ssr("dist/ssr/app.js")
     .start()
@@ -117,7 +117,7 @@ Use `inertia-axum-test` for page, partial, redirect, validation, flash, merge, r
 version, and SSR assertions. Generated page keys make prop selection and prop-policy
 assertions compiler-checked.
 
-```rust
+```rust title="src/main.rs"
 let page = TestApp::new(router)
     .inertia_get("/todos")
     .only(TodosPage::STATS)

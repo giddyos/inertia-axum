@@ -21,7 +21,7 @@ render requests, but it does not start, restart, or stop the external process.
 
 ## Configure the endpoint
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{InertiaApp, Ssr};
 
 let inertia = InertiaApp::vite("frontend")
@@ -45,7 +45,7 @@ choice when Rust and Node use different images or filesystems.
 
 Add a local check when both processes share the build output:
 
-```rust
+```rust title="src/main.rs"
 let ssr = Ssr::external("http://127.0.0.1:13714")
     .bundle("dist/ssr/app.js");
 ```

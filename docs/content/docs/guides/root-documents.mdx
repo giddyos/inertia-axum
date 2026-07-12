@@ -13,7 +13,7 @@ visits bypass it. CSR and SSR use the same selected root.
 
 No template file is required:
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend").build()?;
 ```
 
@@ -25,7 +25,7 @@ document needs no application-specific fields.
 
 Create `templates/app.html`:
 
-```html
+```html title="templates/app.html"
 <!doctype html>
 <html lang="en">
   <head>
@@ -38,7 +38,7 @@ Create `templates/app.html`:
 </html>
 ```
 
-```rust
+```rust title="src/main.rs"
 let inertia = InertiaApp::vite("frontend")
     .root_template("templates/app.html")
     .build()?;
@@ -53,7 +53,7 @@ to embed the same HTML in the binary.
 
 Enable `askama`:
 
-```toml
+```toml title="Cargo.toml"
 inertia-axum = {
   version = "1.0.0-alpha.1",
   features = ["askama"]
@@ -63,7 +63,7 @@ inertia-axum = {
 Implement `AskamaRoot` and expose `AskamaRootContext` to the concrete template. In
 the template, use `safe` only for the adapter's three trusted fragments:
 
-```html
+```html title="templates/app.html"
 {{ inertia.assets|safe }}
 {{ inertia.head|safe }}
 {{ inertia.mount|safe }}

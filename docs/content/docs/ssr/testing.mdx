@@ -16,7 +16,7 @@ render call, and returns documents selected by component name.
 
 Enable SSR in the application dependency and add the test crate:
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = { version = "1.0.0-alpha.1", features = ["ssr"] }
 
@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 This example is reduced from the crate's SSR integration test:
 
-```rust
+```rust title="src/main.rs"
 use axum::{Router, routing::get};
 use inertia_axum::{
     DynamicPage, InertiaApp, RouterInertiaExt as _, SsrRouteExt as _,

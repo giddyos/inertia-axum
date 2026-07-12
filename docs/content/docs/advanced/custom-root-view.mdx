@@ -16,7 +16,7 @@ trusted asset, head, and mount fragments and controls where they appear.
 `RootView` and `RootContext` require no Cargo feature. The example below keeps the
 default `vite` feature because Vite supplies its asset tags:
 
-```toml
+```toml title="Cargo.toml"
 [dependencies]
 inertia-axum = "1.0.0-alpha.1"
 ```
@@ -30,7 +30,7 @@ Askama.
 This implementation is reduced from the built-in root and custom-root tests. It
 copies each trusted fragment once and preallocates the output string:
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::{InertiaApp, RootContext, RootView};
 use std::convert::Infallible;
 

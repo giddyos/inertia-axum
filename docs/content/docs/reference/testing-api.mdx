@@ -5,7 +5,7 @@ description: Complete inertia-axum-test request, response, page, cookie, redirec
 
 `inertia-axum-test` sends real requests through an Axum `Router` without binding an application socket. It retains cookies and followed redirect history between requests.
 
-```toml
+```toml title="Cargo.toml"
 [dev-dependencies]
 inertia-axum-test = "=1.0.0-alpha.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -13,7 +13,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 ## Start a test application
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum::prelude::*;
 use inertia_axum_test::TestApp;
 
@@ -100,10 +100,9 @@ Typed `only`, `except`, and `reset` calls on one request must all belong to the 
 
 `TestSsr` implements Node-compatible `/health`, `/render`, and `/shutdown` endpoints on an ephemeral loopback port.
 
-```rust
+```rust title="src/main.rs"
 use inertia_axum_test::{TestSsr, TestSsrDocument};
 
-# async fn example() {
 let ssr = TestSsr::builder()
     .render(
         "Todos/Index",
@@ -116,8 +115,6 @@ let ssr = TestSsr::builder()
     .await;
 
 let config = ssr.config();
-# let _ = config;
-# }
 ```
 
 Public fake-SSR APIs:

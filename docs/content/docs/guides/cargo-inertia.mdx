@@ -26,13 +26,14 @@ cargo inertia init --frontend vue
 
 The command always creates `<path>/frontend` and refuses to overwrite an existing
 directory. It writes `package.json`, `vite.config.ts`, `src/main.ts`, and one
-`src/Pages/Home` component.
+`src/Pages/Home` component. Svelte also receives the preprocessing configuration
+and TypeScript settings required by the maintained adapter.
 
 The generated project:
 
-- Uses `latest` package ranges and does not create a lockfile. Install dependencies
-  and commit the resulting lockfile before relying on reproducible builds.
-- Uses npm-oriented scripts, a client-only Vite build, and no SSR configuration.
+- Pins the maintained framework versions but does not create a lockfile. Install
+  dependencies and commit the resulting lockfile for reproducible builds.
+- Uses portable Vite scripts, a client-only build, and no SSR configuration.
 - Creates no Rust manifest, router, handler, or root document.
 
 Use it as a starting point, then compare the maintained
