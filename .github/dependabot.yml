@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    allow:
+      # Keep updates scoped to dependencies declared in the root Cargo.toml.
+      - dependency-name: askama
+      - dependency-name: axum
+      - dependency-name: bytes
+      - dependency-name: cargo_metadata
+      - dependency-name: clap
+      - dependency-name: http-body-util
+      - dependency-name: hyper
+      - dependency-name: hyper-util
+      - dependency-name: serde
+      - dependency-name: serde_json
+      - dependency-name: tokio
+      - dependency-name: tower
