@@ -40,10 +40,7 @@ pub fn run() -> Result<(), CliError> {
     }
     match Cli::parse_from(arguments).command {
         #[cfg(feature = "init")]
-        Command::Init(args) => {
-            let framework = args.framework.unwrap_or(crate::framework::Framework::React);
-            crate::init::run(&args.path, framework).map_err(Into::into)
-        }
+        Command::Init(args) => crate::init::run_args(args, &mut std::io::stdout().lock()),
         #[cfg(feature = "dev")]
         Command::Dev(args) => crate::dev::run(&args.frontend, args.port).map_err(Into::into),
         #[cfg(feature = "check")]

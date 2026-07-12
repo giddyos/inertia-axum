@@ -10,6 +10,12 @@ pub enum CliError {
     /// A frontend destination already exists.
     #[error("frontend directory already exists: {0}")]
     FrontendExists(PathBuf),
+    /// The user cancelled initialization before files were generated.
+    #[error("initialization cancelled")]
+    Cancelled,
+    /// Required initialization input is missing or inconsistent.
+    #[error("invalid initialization options: {0}")]
+    InvalidOptions(String),
     /// A destination cannot be used for atomic scaffolding.
     #[error("invalid frontend destination: {0}")]
     InvalidDestination(PathBuf),
