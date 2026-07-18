@@ -126,9 +126,11 @@ pnpm --dir frontend build
 cargo build --release
 ```
 
-The macro validates the Vite manifest and output paths, then generates static
-bytes, tags, content types, ETags, cache policy, and the Inertia deployment
-version. The release executable neither reads the manifest nor opens frontend
-files at runtime. See the
+The macro validates the Vite manifest and output paths, then generates compact
+internal asset storage, tags, content types, ETags, cache policy, and the
+Inertia deployment version. Compressible bytes use maximum-quality Brotli
+inside the executable and are restored before the adapter response, leaving
+HTTP compression under application control. The release executable neither
+reads the manifest nor opens frontend files at runtime. See the
 [`axum-embedded`](https://github.com/giddyos/inertia-axum/tree/main/examples/axum-embedded)
 example for the complete conditional setup.

@@ -137,6 +137,10 @@ cargo check --locked -p inertia-actix --no-default-features
 cargo check --locked -p inertia-actix --no-default-features --features cookies
 cargo check --locked -p inertia-rocket --no-default-features
 cargo check --locked -p inertia-rocket --no-default-features --features cookies
+cargo check --locked -p inertia-test --no-default-features
+cargo check --locked -p inertia-test --no-default-features --features axum
+cargo check --locked -p inertia-test --no-default-features --features actix
+cargo check --locked -p inertia-test --no-default-features --features rocket
 cargo check --locked -p axum-minimal
 cargo check --locked --release -p axum-embedded
 cargo check --locked -p actix-minimal

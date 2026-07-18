@@ -12,22 +12,62 @@ description = "Shared conformance and testing utilities for Inertia Rust adapter
 [lints]
 workspace = true
 
+[features]
+default = ["axum"]
+axum = [
+    "dep:axum",
+    "dep:inertia-axum",
+    "dep:serde",
+    "dep:tokio",
+    "dep:tower",
+    "inertia-core/ssr",
+]
+actix = [
+    "dep:actix-web",
+    "dep:futures-util",
+    "dep:inertia-actix",
+]
+rocket = [
+    "dep:futures-util",
+    "dep:inertia-rocket",
+    "dep:rocket",
+]
+conformance = [
+    "axum",
+    "actix",
+    "rocket",
+    "dep:inertia-embed",
+]
+
 [dependencies]
-actix-web.workspace = true
+actix-web = { workspace = true, optional = true }
 async-trait = "0.1"
-axum = { workspace = true, features = ["http1", "tokio"] }
+axum = { workspace = true, features = ["http1", "tokio"], optional = true }
 bytes.workspace = true
-futures-util = "0.3"
+futures-util = { version = "0.3", optional = true }
 http.workspace = true
-inertia-actix = { workspace = true, features = ["test-support", "ssr"] }
-inertia-axum = { workspace = true, features = ["test-support", "ssr"] }
-inertia-embed.workspace = true
-inertia-rocket = { workspace = true, features = ["test-support", "ssr"] }
-rocket.workspace = true
-serde.workspace = true
+inertia-actix = { workspace = true, features = ["macros", "test-support", "ssr"], optional = true }
+inertia-axum = { workspace = true, features = ["macros", "test-support", "ssr"], optional = true }
+inertia-core.workspace = true
+inertia-embed = { workspace = true, optional = true }
+inertia-rocket = { workspace = true, features = ["macros", "test-support", "ssr"], optional = true }
+rocket = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 serde_json.workspace = true
-tower = { workspace = true, features = ["util"] }
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync"] }
+tower = { workspace = true, features = ["util"], optional = true }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync"], optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "adapter_conformance"
+required-features = ["conformance"]
+
+[[test]]
+name = "ssr"
+required-features = ["axum"]
+
+[[test]]
+name = "state"
+required-features = ["axum"]

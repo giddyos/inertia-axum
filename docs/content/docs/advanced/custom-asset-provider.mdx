@@ -135,6 +135,11 @@ return `None` from `source()` and configure its cache and compression policy
 there. Keep every URL emitted by `render_tags()` consistent with that deployment
 prefix.
 
+`inertia-embed` follows the same contract: its source restores any
+executable-storage Brotli bytes before producing `AssetBody`. Custom framework
+adapters can mount that source directly, while HTTP response compression stays
+outside the provider and under the application's control.
+
 ## Continue
 
 - [Vite and assets](/docs/guides/vite-and-assets)

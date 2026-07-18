@@ -1,8 +1,8 @@
-use crate::build::BuiltFrontend;
+use crate::build::{BuiltAssetBytes, BuiltFrontend, BuiltStorage};
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{Ident, LitBool, LitStr};
+use syn::{Ident, LitBool, LitByteStr, LitStr};
 
 pub(crate) fn expand(frontend: BuiltFrontend) -> syn::Result<TokenStream> {
     let runtime = runtime_path()?;
@@ -13,14 +13,36 @@ pub(crate) fn expand(frontend: BuiltFrontend) -> syn::Result<TokenStream> {
     let manifest = LitStr::new(&frontend.manifest.to_string_lossy(), Span::call_site());
     let assets = frontend.assets.iter().map(|asset| {
         let path = LitStr::new(&asset.path, Span::call_site());
-        let absolute = LitStr::new(&asset.absolute.to_string_lossy(), Span::call_site());
+        let bytes = match &asset.bytes {
+            BuiltAssetBytes::File(absolute) => {
+                let absolute = LitStr::new(&absolute.to_string_lossy(), Span::call_site());
+                quote!(include_bytes!(#absolute))
+            }
+            BuiltAssetBytes::Generated { bytes, source } => {
+                let bytes = LitByteStr::new(bytes, Span::call_site());
+                let source = LitStr::new(&source.to_string_lossy(), Span::call_site());
+                quote!({
+                    const _: &[u8] = include_bytes!(#source);
+                    #bytes
+                })
+            }
+        };
         let content_type = LitStr::new(&asset.content_type, Span::call_site());
         let etag = LitStr::new(&asset.etag, Span::call_site());
         let immutable = LitBool::new(asset.immutable, Span::call_site());
+        let storage = match asset.storage {
+            BuiltStorage::Identity => quote!(#runtime::EmbeddedStorage::Identity),
+            BuiltStorage::Brotli { uncompressed_len } => {
+                quote!(#runtime::EmbeddedStorage::Brotli {
+                    uncompressed_len: #uncompressed_len,
+                })
+            }
+        };
         quote! {
             #runtime::EmbeddedAsset {
                 path: #path,
-                bytes: include_bytes!(#absolute),
+                bytes: #bytes,
+                storage: #storage,
                 content_type: #content_type,
                 etag: #etag,
                 immutable: #immutable,

@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use inertia_axum::Ssr;
+use inertia_core::Ssr;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,

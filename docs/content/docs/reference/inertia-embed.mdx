@@ -12,7 +12,8 @@ when a release binary should own its browser assets.
 | --- | --- |
 | `embed_frontend!` | Validates a Vite build and generates a static provider. |
 | `EmbeddedFrontend` | Implements the shared `AssetProvider` contract. |
-| `EmbeddedAsset` | Describes one sorted static asset and its precomputed metadata. |
+| `EmbeddedAsset` | Describes one sorted asset, its storage, and precomputed metadata. |
+| `EmbeddedStorage` | Distinguishes identity bytes from internal Brotli storage. |
 
 The macro accepts three required fields:
 
@@ -38,11 +39,19 @@ dependency.
 `source()` exposes a static `AssetSource`, and `public_path()` returns the macro
 prefix. Adapters preserve response status and headers from that source.
 
-Each `EmbeddedAsset` contains its normalized path, static bytes, content type,
-ETag, immutable-cache decision, and optional encoding metadata. The current
-macro emits uncompressed assets only; optional encoding metadata is reserved
-for providers that actually supply encoded bytes and must not be read as a
-precompression guarantee.
+Each `EmbeddedAsset` contains its normalized path, compiled storage bytes,
+storage representation, content type, ETag, immutable-cache decision, and
+optional HTTP encoding metadata. The macro tries Brotli quality 11 with the
+maximum standard window, retaining it only when smaller. Common
+already-compressed formats are stored unchanged.
+
+The provider lazily decompresses internal Brotli storage and returns the exact
+emitted bytes as `AssetBody::Bytes`. Its shared runtime cache makes later reads
+a cheap shared-byte clone. Internal storage never sets the optional HTTP
+`encoding` field, negotiates `Accept-Encoding`, or emits `Content-Encoding`.
+All three maintained adapters consume this same neutral response. A custom
+adapter can do the same through `AssetProvider::source()` and decide
+independently whether to apply HTTP response compression.
 
 See [Embedded frontend](/docs/guides/embedded-frontend) for safety limits,
 caching, source maps, SSR, and complete debug/release setup.

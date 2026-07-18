@@ -93,8 +93,15 @@ fi
 
 for asset in "${assets[@]}"; do
   output="$isolated/$(basename "$asset")"
-  curl --fail --silent --show-error "http://$address$asset" >"$output"
+  headers="$output.headers"
+  curl --fail --silent --show-error --dump-header "$headers" \
+    "http://$address$asset" >"$output"
   [[ -s "$output" ]]
+  if grep -qi '^content-encoding:' "$headers"; then
+    echo "$example exposed executable storage as HTTP content encoding" >&2
+    exit 1
+  fi
+  cmp "$output" "$hidden_dist/${asset#/build/}"
 done
 
 [[ ! -e "$dist" ]]

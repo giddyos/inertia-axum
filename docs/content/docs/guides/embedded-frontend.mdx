@@ -53,11 +53,22 @@ them. Disable production source maps in Vite if they must not be publicly
 served.
 
 Asset paths are sorted at compile time and use allocation-free binary search
-after the public prefix is stripped. Bytes remain static, and deployment
-versions plus ETags are generated during compilation. GET, HEAD, conditional
-GET, and explicit 405 behavior are shared by all adapters. Fingerprinted files
-receive immutable caching; other names revalidate. There is no compile-time
-precompression or `Accept-Encoding` negotiation.
+after the public prefix is stripped. Deployment versions plus ETags are
+generated from the original emitted bytes during compilation. GET, HEAD,
+conditional GET, and explicit 405 behavior are shared by all adapters.
+Fingerprinted files receive immutable caching; other names revalidate.
+
+To reduce executable size, the macro tries Brotli's maximum quality and window
+settings for assets that are not already in a compressed format. It stores the
+Brotli result only when it is smaller. On the first GET, the neutral embedded
+source decompresses that asset into a shared runtime cache; later responses reuse
+the expanded bytes. HEAD and 304 responses use metadata without decompressing.
+
+This is executable storage compression, not HTTP content encoding. Axum, Actix
+Web, Rocket, and custom adapters receive the original identity bytes. The
+embedded source does not negotiate `Accept-Encoding` or add
+`Content-Encoding`; applications remain free to use their framework's
+compression middleware, a reverse proxy, or a CDN.
 
 ## Compile-time safety limits
 
@@ -67,9 +78,10 @@ paths, invalid public paths, and missing referenced outputs. Current limits are
 16 MiB for the manifest, 100,000 assets, 512 MiB per asset, and 2 GiB total.
 These are compile-time validation limits, not runtime allocation promises.
 
-Embedding increases the executable by roughly the emitted asset bytes plus
-metadata and linker alignment. Release LTO can affect the final number, so use
-the executable reported by `cargo inertia build` for measurement.
+Embedding increases the executable by the compressed asset payloads, runtime
+decompressor, metadata, and linker alignment. Already-compressed and
+incompressible files remain unchanged. Release LTO can affect the final number,
+so use the executable reported by `cargo inertia build` for measurement.
 
 ## SSR compatibility
 

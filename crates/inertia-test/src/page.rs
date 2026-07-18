@@ -1,4 +1,4 @@
-use inertia_axum::PropKey;
+use inertia_core::PropKey;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;

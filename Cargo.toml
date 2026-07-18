@@ -52,6 +52,8 @@ askama = { version = "0.16", default-features = false, features = ["config", "de
 axum = { version = "0.8.9", default-features = false }
 rocket = { version = "0.5.1", default-features = false }
 bytes = { version = "1", default-features = false }
+brotli = "8.0.4"
+brotli-decompressor = "5.0.3"
 http = { version = "1", default-features = false, features = ["std"] }
 mime_guess = "2"
 proc-macro2 = "1"

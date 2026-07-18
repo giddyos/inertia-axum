@@ -49,7 +49,8 @@ Copy only the printed executable into an empty directory and start it there.
 Request `/`, extract each generated stylesheet and script URL, then request
 those URLs. Finally hide or delete the original `frontend/dist` and repeat the
 requests. The maintained Axum, Actix Web, and Rocket embedded examples perform
-this proof in CI with isolated ports and process cleanup.
+this proof in CI with isolated ports and process cleanup. They also compare
+each served asset with the original build output.
 
 No Node runtime, package manager, manifest, or frontend directory is needed for
 browser assets after compilation. Managed SSR is a separate concern and still
@@ -57,11 +58,16 @@ requires its renderer runtime; external SSR still requires its service.
 
 ## Operational implications
 
-- The executable grows by approximately the uncompressed frontend output.
+- Compressible assets are stored with maximum-quality Brotli when that result
+  is smaller; already-compressed or incompressible assets remain unchanged.
+- Stored assets are lazily decompressed once into a runtime cache before an
+  adapter receives them.
 - Source maps are public embedded assets when Vite emits them.
 - ETags, deployment versions, HEAD, 304, and cache policy are deterministic.
-- Compression and content negotiation must be provided by the application,
-  reverse proxy, or CDN; the embedding crate does not precompress.
+- HTTP response compression and content negotiation remain the application's
+  choice. Use framework middleware, a reverse proxy, a CDN, or a custom
+  `AssetSource`; executable storage compression never sets
+  `Content-Encoding`.
 - A reverse proxy must preserve Inertia headers and route the configured
   `public-path` without an inconsistent prefix rewrite.
 - Changing frontend bytes requires rebuilding and redeploying the executable.

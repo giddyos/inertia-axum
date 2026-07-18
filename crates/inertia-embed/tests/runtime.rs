@@ -2,10 +2,13 @@
 
 use http::{
     HeaderMap, Method, StatusCode,
-    header::{CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH},
+    header::{
+        ACCEPT_ENCODING, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, ETAG,
+        IF_NONE_MATCH, VARY,
+    },
 };
 use inertia_core::{AssetBody, AssetProvider as _, AssetRequest, AssetSource as _};
-use inertia_embed::{EmbeddedFrontend, embed_frontend};
+use inertia_embed::{EmbeddedAsset, EmbeddedFrontend, EmbeddedStorage, embed_frontend};
 use sha2::{Digest as _, Sha256};
 
 static FRONTEND: EmbeddedFrontend = embed_frontend! {
@@ -30,6 +33,44 @@ static COMPLETE_FRONTEND: EmbeddedFrontend = embed_frontend! {
     max_total_size: 0,
 };
 
+static ENCODED_ASSETS: &[EmbeddedAsset] = &[EmbeddedAsset {
+    path: "assets/precompressed.js",
+    bytes: b"encoded",
+    storage: EmbeddedStorage::Identity,
+    content_type: "text/javascript; charset=utf-8",
+    etag: "\"encoded-etag\"",
+    immutable: false,
+    encoding: Some("br"),
+}];
+
+static ENCODED_FRONTEND: EmbeddedFrontend = EmbeddedFrontend::new(
+    "/build",
+    "src/main.ts",
+    "encoded-version",
+    "",
+    ENCODED_ASSETS,
+);
+
+static CORRUPT_ASSETS: &[EmbeddedAsset] = &[EmbeddedAsset {
+    path: "assets/corrupt.txt",
+    bytes: b"not-brotli",
+    storage: EmbeddedStorage::Brotli {
+        uncompressed_len: 128,
+    },
+    content_type: "text/plain; charset=utf-8",
+    etag: "\"corrupt-etag\"",
+    immutable: false,
+    encoding: None,
+}];
+
+static CORRUPT_FRONTEND: EmbeddedFrontend = EmbeddedFrontend::new(
+    "/build",
+    "src/main.ts",
+    "corrupt-version",
+    "",
+    CORRUPT_ASSETS,
+);
+
 fn request<'a>(method: &'a Method, path: &'a str, headers: &'a HeaderMap) -> AssetRequest<'a> {
     AssetRequest {
         method,
@@ -48,8 +89,19 @@ fn hex(bytes: &[u8]) -> String {
     output
 }
 
+fn body_bytes(body: &AssetBody) -> &[u8] {
+    match body {
+        AssetBody::Empty => &[],
+        AssetBody::Static(bytes) => bytes,
+        AssetBody::Bytes(bytes) => bytes.as_ref(),
+    }
+}
+
 #[test]
 fn generated_metadata_is_sorted_complete_and_deterministic() {
+    fn assert_clone_copy<T: Clone + Copy>() {}
+
+    assert_clone_copy::<EmbeddedFrontend>();
     assert_eq!(FRONTEND.public_path, "/build");
     assert_eq!(FRONTEND.entry, "src/main.ts");
     assert!(FRONTEND.version.starts_with("frontend-sha256-"));
@@ -66,6 +118,7 @@ fn generated_metadata_is_sorted_complete_and_deterministic() {
         "assets/main-C6R2N8QK.js",
         "assets/shared.91a0f52c.js",
         "assets/nested-1234abcd.js",
+        "assets/prebuilt.js.br",
         "assets/dynamic-abcdef12.js",
         "assets/main-30f2a8d9.css",
         "assets/shared.css",
@@ -73,6 +126,7 @@ fn generated_metadata_is_sorted_complete_and_deterministic() {
         "assets/windows-ABCDEF12.js",
         "assets/file%20name.txt",
         "assets/remaining.txt",
+        "assets/repetitive-data.txt",
         "images/pixel.bin",
     ] {
         assert!(FRONTEND.find(path).is_some(), "{path} must be embedded");
@@ -92,7 +146,9 @@ fn deployment_version_and_etags_match_the_documented_byte_stream() {
         "assets/main-30f2a8d9.css",
         "assets/main-C6R2N8QK.js",
         "assets/nested-1234abcd.js",
+        "assets/prebuilt.js.br",
         "assets/remaining.txt",
+        "assets/repetitive-data.txt",
         "assets/shared.91a0f52c.js",
         "assets/shared.css",
         "assets/theme&print.css",
@@ -118,10 +174,117 @@ fn deployment_version_and_etags_match_the_documented_byte_stream() {
     );
 
     let asset = FRONTEND.find("assets/main-C6R2N8QK.js").unwrap();
+    let emitted = std::fs::read(root.join("assets/main-C6R2N8QK.js")).unwrap();
     assert_eq!(
         asset.etag,
-        format!("\"sha256-{}\"", hex(&Sha256::digest(asset.bytes)))
+        format!("\"sha256-{}\"", hex(&Sha256::digest(emitted)))
     );
+
+    let prebuilt = FRONTEND.find("assets/prebuilt.js.br").unwrap();
+    assert_eq!(
+        prebuilt.bytes,
+        include_bytes!("fixtures/valid/dist/assets/prebuilt.js.br")
+    );
+    assert_eq!(prebuilt.storage, EmbeddedStorage::Identity);
+    assert_eq!(prebuilt.encoding, None);
+    assert!(!prebuilt.immutable);
+    assert!(!FRONTEND.find("assets/remaining.txt").unwrap().immutable);
+}
+
+#[test]
+fn executable_storage_is_aggressively_compressed_but_http_bytes_are_original() {
+    let path = "assets/repetitive-data.txt";
+    let emitted = include_bytes!("fixtures/valid/dist/assets/repetitive-data.txt");
+    let asset = FRONTEND.find(path).unwrap();
+    assert!(asset.is_storage_compressed());
+    assert!(asset.bytes.len() < emitted.len());
+    assert_eq!(asset.uncompressed_len(), emitted.len());
+
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT_ENCODING, "br, gzip".parse().unwrap());
+    let first = (&FRONTEND)
+        .get(request(&Method::GET, path, &headers))
+        .unwrap();
+    assert_eq!(first.status, StatusCode::OK);
+    assert_eq!(first.headers[CONTENT_LENGTH], emitted.len().to_string());
+    assert!(!first.headers.contains_key(CONTENT_ENCODING));
+    assert!(!first.headers.contains_key(VARY));
+    assert_eq!(body_bytes(&first.body), emitted);
+
+    let second = (&FRONTEND)
+        .get(request(&Method::GET, path, &HeaderMap::new()))
+        .unwrap();
+    assert_eq!(body_bytes(&second.body), emitted);
+}
+
+#[test]
+fn head_and_not_modified_do_not_expand_executable_storage() {
+    let source = &CORRUPT_FRONTEND;
+    let head = source
+        .get(request(
+            &Method::HEAD,
+            "assets/corrupt.txt",
+            &HeaderMap::new(),
+        ))
+        .unwrap();
+    assert_eq!(head.status, StatusCode::OK);
+    assert_eq!(head.headers[CONTENT_LENGTH], "128");
+
+    let mut conditional = HeaderMap::new();
+    conditional.insert(IF_NONE_MATCH, CORRUPT_ASSETS[0].etag.parse().unwrap());
+    let not_modified = source
+        .get(request(&Method::GET, "assets/corrupt.txt", &conditional))
+        .unwrap();
+    assert_eq!(not_modified.status, StatusCode::NOT_MODIFIED);
+
+    let get = source
+        .get(request(
+            &Method::GET,
+            "assets/corrupt.txt",
+            &HeaderMap::new(),
+        ))
+        .unwrap();
+    assert_eq!(get.status, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[test]
+fn explicit_content_encoding_preserves_vary_on_get_head_and_304() {
+    let source = &ENCODED_FRONTEND;
+    let get = source
+        .get(request(
+            &Method::GET,
+            "assets/precompressed.js",
+            &HeaderMap::new(),
+        ))
+        .unwrap();
+    assert_eq!(get.headers[CONTENT_ENCODING], "br");
+    assert_eq!(get.headers[VARY], "Accept-Encoding");
+    assert!(matches!(get.body, AssetBody::Static(b"encoded")));
+
+    let head = source
+        .get(request(
+            &Method::HEAD,
+            "assets/precompressed.js",
+            &HeaderMap::new(),
+        ))
+        .unwrap();
+    assert_eq!(head.headers[CONTENT_ENCODING], "br");
+    assert_eq!(head.headers[VARY], "Accept-Encoding");
+    assert!(matches!(head.body, AssetBody::Empty));
+
+    let mut conditional = HeaderMap::new();
+    conditional.insert(IF_NONE_MATCH, get.headers[ETAG].clone());
+    let not_modified = source
+        .get(request(
+            &Method::GET,
+            "assets/precompressed.js",
+            &conditional,
+        ))
+        .unwrap();
+    assert_eq!(not_modified.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(not_modified.headers[CONTENT_ENCODING], "br");
+    assert_eq!(not_modified.headers[VARY], "Accept-Encoding");
+    assert!(matches!(not_modified.body, AssetBody::Empty));
 }
 
 #[test]
@@ -181,11 +344,13 @@ fn source_serves_get_head_etag_cache_and_method_responses() {
         FRONTEND
             .find("assets/main-C6R2N8QK.js")
             .unwrap()
-            .bytes
-            .len()
+            .uncompressed_len()
             .to_string()
     );
-    assert!(matches!(get.body, AssetBody::Static(bytes) if !bytes.is_empty()));
+    assert_eq!(
+        body_bytes(&get.body),
+        include_bytes!("fixtures/valid/dist/assets/main-C6R2N8QK.js")
+    );
 
     let head = source
         .get(request(

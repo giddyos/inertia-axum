@@ -12,7 +12,7 @@ use axum::{
     routing::{get, post},
 };
 use bytes::Bytes;
-use inertia_embed::{EmbeddedAsset, EmbeddedFrontend};
+use inertia_embed::{EmbeddedAsset, EmbeddedFrontend, EmbeddedStorage};
 use inertia_test::{
     ActixHarness, AdapterRequest, AdapterResponse, AxumHarness, RocketHarness, TestSsr,
     TestSsrDocument, run_adapter_conformance,
@@ -24,6 +24,7 @@ static ASSETS: &[EmbeddedAsset] = &[
     EmbeddedAsset {
         path: "assets/app.css",
         bytes: b"body{color:#123}",
+        storage: EmbeddedStorage::Identity,
         content_type: "text/css; charset=utf-8",
         etag: "\"css-adapter\"",
         immutable: false,
@@ -32,6 +33,7 @@ static ASSETS: &[EmbeddedAsset] = &[
     EmbeddedAsset {
         path: "assets/app.js",
         bytes: b"console.log('adapter')",
+        storage: EmbeddedStorage::Identity,
         content_type: "text/javascript; charset=utf-8",
         etag: "\"js-adapter\"",
         immutable: false,

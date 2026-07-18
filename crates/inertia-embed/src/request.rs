@@ -1,5 +1,5 @@
 use crate::{
-    EmbeddedFrontend,
+    EmbeddedFrontend, EmbeddedStorage,
     cache::{IMMUTABLE, REVALIDATE, etag_matches},
 };
 use http::{
@@ -50,12 +50,24 @@ pub(crate) fn respond(
     }
     headers.insert(
         CONTENT_LENGTH,
-        HeaderValue::from_str(&asset.bytes.len().to_string()).ok()?,
+        HeaderValue::from_str(&asset.uncompressed_len().to_string()).ok()?,
     );
     let body = if request.method == Method::HEAD {
         AssetBody::Empty
     } else {
-        AssetBody::Static(asset.bytes)
+        match asset.storage {
+            EmbeddedStorage::Identity => AssetBody::Static(asset.bytes),
+            EmbeddedStorage::Brotli { .. } => match EmbeddedFrontend::response_bytes(asset) {
+                Ok(bytes) => AssetBody::Bytes(bytes),
+                Err(_) => {
+                    return Some(AssetResponse {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        headers: HeaderMap::new(),
+                        body: AssetBody::Empty,
+                    });
+                }
+            },
+        }
     };
     Some(AssetResponse {
         status: StatusCode::OK,

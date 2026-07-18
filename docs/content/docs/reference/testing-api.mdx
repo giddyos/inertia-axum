@@ -11,6 +11,13 @@ inertia-test = "=1.0.0-alpha.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
+The default `axum` feature provides `TestApp`, typed page assertions, and the
+fake SSR server. With default features disabled, the framework-neutral
+`AdapterRequest`, `AdapterResponse`, `AdapterHarness`, and shared conformance
+runner remain available. The optional `actix` and `rocket` features expose
+their harness drivers; the repository enables `conformance` to exercise all
+three adapters against one assertion suite.
+
 ## Start a test application
 
 ```rust title="src/main.rs"

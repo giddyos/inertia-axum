@@ -95,6 +95,22 @@ garde = { version = "0.22", features = ["derive"] }
 
 The same rule applies to `validator = "0.20"` with its `derive` feature. Custom validation through `validate_with` also needs neither marker.
 
+## Testing package features
+
+`inertia-test` enables `axum` by default to preserve its existing in-process
+router and typed assertion API. Its adapter dependencies are optional:
+
+| Feature | Effect |
+| --- | --- |
+| `axum` | Enables `TestApp`, `TestPage`, `TestRequest`, `TestResponse`, `TestSsr`, and `AxumHarness`. |
+| `actix` | Enables `ActixHarness`. |
+| `rocket` | Enables `RocketHarness`. |
+| `conformance` | Enables all three drivers and the embedded frontend fixture used by the shared suite. |
+
+With `default-features = false`, the neutral request, response, harness trait,
+and conformance assertions remain available without pulling in a web
+framework.
+
 ## Encrypted cookies without Vite
 
 Cookie transient storage can be selected in a minimal, no-Vite build:

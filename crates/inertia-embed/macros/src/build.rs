@@ -1,4 +1,5 @@
 use crate::input::EmbedInput;
+use brotli::enc::{BrotliCompress, BrotliEncoderParams, backward_references::BrotliEncoderMode};
 use proc_macro2::Span;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -26,10 +27,23 @@ pub(crate) struct BuiltFrontend {
 #[derive(Debug)]
 pub(crate) struct BuiltAsset {
     pub(crate) path: String,
-    pub(crate) absolute: PathBuf,
+    pub(crate) bytes: BuiltAssetBytes,
+    pub(crate) storage: BuiltStorage,
     pub(crate) content_type: String,
     pub(crate) etag: String,
     pub(crate) immutable: bool,
+}
+
+#[derive(Debug)]
+pub(crate) enum BuiltAssetBytes {
+    File(PathBuf),
+    Generated { bytes: Vec<u8>, source: PathBuf },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum BuiltStorage {
+    Identity,
+    Brotli { uncompressed_len: usize },
 }
 
 #[derive(Debug, Deserialize)]
@@ -173,12 +187,38 @@ pub(crate) fn build(input: &EmbedInput) -> syn::Result<BuiltFrontend> {
         version_hasher.update([0]);
         let (etag, content_type) = hash_asset(file, &mut version_hasher)?;
         version_hasher.update([0]);
+        let immutable = is_content_addressed(&file.logical);
+        let (bytes, storage) = if is_brotli_candidate(&file.logical) {
+            compress_brotli(file, &content_type)?.map_or_else(
+                || {
+                    (
+                        BuiltAssetBytes::File(file.absolute.clone()),
+                        BuiltStorage::Identity,
+                    )
+                },
+                |(bytes, uncompressed_len)| {
+                    (
+                        BuiltAssetBytes::Generated {
+                            bytes,
+                            source: file.absolute.clone(),
+                        },
+                        BuiltStorage::Brotli { uncompressed_len },
+                    )
+                },
+            )
+        } else {
+            (
+                BuiltAssetBytes::File(file.absolute.clone()),
+                BuiltStorage::Identity,
+            )
+        };
         assets.push(BuiltAsset {
             path: encode_url_path(&file.logical),
-            absolute: file.absolute.clone(),
+            bytes,
+            storage,
             content_type,
             etag,
-            immutable: is_content_addressed(&file.logical),
+            immutable,
         });
     }
     assets.sort_by(|left, right| left.path.cmp(&right.path));
@@ -524,6 +564,86 @@ fn hash_asset(file: &SelectedFile, version: &mut Sha256) -> syn::Result<(String,
     Ok((etag, content_type))
 }
 
+fn is_brotli_candidate(logical: &str) -> bool {
+    let extension = Path::new(logical)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or_default();
+    ![
+        "7z", "avif", "br", "bz2", "gif", "gz", "jpeg", "jpg", "mp3", "mp4", "ogg", "pdf", "png",
+        "rar", "webm", "webp", "woff", "woff2", "xz", "zip", "zst",
+    ]
+    .iter()
+    .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+}
+
+fn compress_brotli(
+    file: &SelectedFile,
+    content_type: &str,
+) -> syn::Result<Option<(Vec<u8>, usize)>> {
+    let mut input = fs::File::open(&file.absolute).map_err(|error| {
+        Error::new(
+            Span::call_site(),
+            format!(
+                "could not open emitted file `{}` for Brotli compression: {error}",
+                file.logical
+            ),
+        )
+    })?;
+    let source_size = input
+        .metadata()
+        .map_err(|error| {
+            Error::new(
+                Span::call_site(),
+                format!(
+                    "could not inspect emitted file `{}` for Brotli compression: {error}",
+                    file.logical
+                ),
+            )
+        })?
+        .len();
+    let mut output = Vec::new();
+    let mut params = BrotliEncoderParams {
+        quality: 11,
+        lgwin: 24,
+        size_hint: usize::try_from(source_size).unwrap_or(usize::MAX),
+        ..BrotliEncoderParams::default()
+    };
+    if is_textual_content(content_type) {
+        params.mode = BrotliEncoderMode::BROTLI_MODE_TEXT;
+    }
+    BrotliCompress(&mut input, &mut output, &params).map_err(|error| {
+        Error::new(
+            Span::call_site(),
+            format!(
+                "could not Brotli-compress emitted file `{}`: {error}",
+                file.logical
+            ),
+        )
+    })?;
+    let uncompressed_len = usize::try_from(source_size).map_err(|_| {
+        Error::new(
+            Span::call_site(),
+            format!(
+                "emitted file `{}` cannot fit in this target's address space",
+                file.logical
+            ),
+        )
+    })?;
+    Ok((output.len() < uncompressed_len).then_some((output, uncompressed_len)))
+}
+
+fn is_textual_content(content_type: &str) -> bool {
+    let essence = content_type.split(';').next().unwrap_or(content_type);
+    essence.starts_with("text/")
+        || essence.ends_with("+json")
+        || essence.ends_with("+xml")
+        || matches!(
+            essence,
+            "application/javascript" | "application/json" | "application/xml" | "image/svg+xml"
+        )
+}
+
 fn build_tags(
     public_path: &str,
     graph: &Graph,
@@ -567,7 +687,8 @@ pub(crate) fn encode_url_path(path: &str) -> String {
 
 fn is_content_addressed(path: &str) -> bool {
     let file = path.rsplit('/').next().unwrap_or(path);
-    file.split(['.', '-', '_']).any(|segment| {
+    let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
+    stem.split(['.', '-', '_']).skip(1).any(|segment| {
         segment.len() >= 8 && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
     })
 }
@@ -579,4 +700,23 @@ fn hex(hash: impl AsRef<[u8]>) -> String {
         write!(output, "{byte:02x}").expect("writing to String cannot fail");
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_content_addressed;
+
+    #[test]
+    fn content_hash_requires_a_distinct_hash_like_segment() {
+        for path in [
+            "assets/app-C6R2N8QK.js",
+            "assets/app.30f2a8d9.js",
+            "assets/chunk_91a0f52c.css",
+        ] {
+            assert!(is_content_addressed(path), "{path}");
+        }
+        for path in ["remaining.txt", "assets/stylesheet.css", "images/pixel.bin"] {
+            assert!(!is_content_addressed(path), "{path}");
+        }
+    }
 }

@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use http::{HeaderMap, HeaderValue, StatusCode as CoreStatus};
-use inertia_embed::{EmbeddedAsset, EmbeddedFrontend};
+use inertia_embed::{EmbeddedAsset, EmbeddedFrontend, EmbeddedStorage};
 use inertia_rocket::{
     AssetContext, AssetError, AssetProvider, AssetSource, AssetTags, AssetVersion, CoreBody,
     CoreResponse, DirectoryAssetSource, DynamicPage, Inertia, InertiaApp, InertiaFairing, Response,
@@ -25,6 +25,7 @@ use std::{
 static ASSETS: &[EmbeddedAsset] = &[EmbeddedAsset {
     path: "assets/app.js",
     bytes: b"console.log('rocket')",
+    storage: EmbeddedStorage::Identity,
     content_type: "text/javascript; charset=utf-8",
     etag: "\"rocket-etag\"",
     immutable: false,

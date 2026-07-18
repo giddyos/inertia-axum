@@ -3,7 +3,7 @@ use axum::http::{
     HeaderMap, StatusCode,
     header::{CONTENT_TYPE, LOCATION},
 };
-use inertia_axum::{InertiaPage, X_INERTIA_LOCATION};
+use inertia_core::{InertiaPage, X_INERTIA_LOCATION};
 
 /// A buffered in-process response with fluent Inertia assertions.
 pub struct TestResponse<'a> {

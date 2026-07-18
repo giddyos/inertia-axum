@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
   fairing installation, runtime-path assets, forms, and asynchronous rendering.
 - `inertia-embed` and `embed_frontend!` for deterministic compile-time Vite
   manifests and self-contained release binaries.
+- Maximum-quality Brotli storage for compressible embedded assets, with lazy
+  cached decompression before framework adapters receive the original bytes.
 - Shared Axum/Actix/Rocket adapter conformance coverage and minimal and embedded
   Actix and Rocket examples.
 - `cargo inertia build` for ordered frontend and Cargo release builds with
@@ -29,6 +31,9 @@ All notable changes to this project will be documented in this file.
 - Renamed the shared testing package from `inertia-axum-test` to
   `inertia-test`; its Axum application assertions remain available alongside
   the cross-adapter conformance harness.
+- Made `inertia-test` depend directly on the neutral core, keep its Axum
+  utilities behind the default `axum` feature, and make all three adapter
+  dependencies optional.
 
 ### Fixed
 

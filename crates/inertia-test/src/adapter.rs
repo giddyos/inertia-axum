@@ -1,6 +1,7 @@
 //! Framework-neutral in-process adapter conformance contract.
 
 use async_trait::async_trait;
+#[cfg(feature = "axum")]
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -8,9 +9,12 @@ use axum::{
     response::Response,
 };
 use bytes::Bytes;
+#[cfg(any(feature = "actix", feature = "rocket"))]
 use futures_util::future::LocalBoxFuture;
 use http::{HeaderMap, Method, StatusCode, Uri};
+#[cfg(any(feature = "actix", feature = "rocket"))]
 use std::{future::Future, rc::Rc};
+#[cfg(feature = "axum")]
 use tower::ServiceExt as _;
 
 /// Framework-neutral request passed to an adapter test driver.
@@ -83,11 +87,13 @@ pub trait AdapterHarness {
 }
 
 /// Axum implementation of the shared adapter harness.
+#[cfg(feature = "axum")]
 pub struct AxumHarness {
     installed: Router,
     uninstalled: Router,
 }
 
+#[cfg(feature = "axum")]
 impl AxumHarness {
     /// Creates a harness with installed and deliberately uninstalled routers.
     pub fn new(installed: Router, uninstalled: Router) -> Self {
@@ -98,6 +104,7 @@ impl AxumHarness {
     }
 }
 
+#[cfg(feature = "axum")]
 #[async_trait(?Send)]
 impl AdapterHarness for AxumHarness {
     async fn request(&self, request: AdapterRequest) -> AdapterResponse {
@@ -137,14 +144,17 @@ impl AdapterHarness for AxumHarness {
     }
 }
 
+#[cfg(feature = "actix")]
 type ActixRequest =
     Rc<dyn Fn(AdapterRequest) -> LocalBoxFuture<'static, AdapterResponse> + 'static>;
 
 /// Actix Web implementation of the shared adapter harness.
+#[cfg(feature = "actix")]
 pub struct ActixHarness {
     request: ActixRequest,
 }
 
+#[cfg(feature = "actix")]
 impl ActixHarness {
     /// Creates a harness from an Actix in-process request driver.
     pub fn new<F, Fut>(request: F) -> Self
@@ -158,6 +168,7 @@ impl ActixHarness {
     }
 }
 
+#[cfg(feature = "actix")]
 #[async_trait(?Send)]
 impl AdapterHarness for ActixHarness {
     async fn request(&self, request: AdapterRequest) -> AdapterResponse {
@@ -165,14 +176,17 @@ impl AdapterHarness for ActixHarness {
     }
 }
 
+#[cfg(feature = "rocket")]
 type RocketRequest =
     Rc<dyn Fn(AdapterRequest) -> LocalBoxFuture<'static, AdapterResponse> + 'static>;
 
 /// Rocket implementation of the shared adapter harness.
+#[cfg(feature = "rocket")]
 pub struct RocketHarness {
     request: RocketRequest,
 }
 
+#[cfg(feature = "rocket")]
 impl RocketHarness {
     /// Creates a harness from a Rocket in-process request driver.
     pub fn new<F, Fut>(request: F) -> Self
@@ -186,6 +200,7 @@ impl RocketHarness {
     }
 }
 
+#[cfg(feature = "rocket")]
 #[async_trait(?Send)]
 impl AdapterHarness for RocketHarness {
     async fn request(&self, request: AdapterRequest) -> AdapterResponse {

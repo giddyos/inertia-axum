@@ -163,7 +163,7 @@ fn is_content_addressed(path: &str) -> bool {
     let stem = file_name
         .rsplit_once('.')
         .map_or(file_name, |(stem, _)| stem);
-    stem.rsplit(['-', '.']).next().is_some_and(|segment| {
+    stem.split(['.', '-', '_']).skip(1).any(|segment| {
         segment.len() >= 8 && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
     })
 }
@@ -187,6 +187,7 @@ mod tests {
             fs::create_dir_all(path.join("nested")).unwrap();
             fs::write(path.join("nested/app-12345678.js"), b"export default 1").unwrap();
             fs::write(path.join("plain.css"), b"body{}").unwrap();
+            fs::write(path.join("remaining.txt"), b"ordinary").unwrap();
             Self(path)
         }
 
@@ -244,6 +245,20 @@ mod tests {
         assert_eq!(head.headers[ETAG], get.headers[ETAG]);
         assert_eq!(head.headers[CACHE_CONTROL], REVALIDATE_CACHE);
         assert!(matches!(head.body, AssetBody::Empty));
+    }
+
+    #[test]
+    fn ordinary_long_names_are_not_mistaken_for_content_hashes() {
+        let fixture = Fixture::new();
+        let response = fixture
+            .source()
+            .get(request(&Method::GET, "remaining.txt", &HeaderMap::new()))
+            .unwrap();
+        assert_eq!(response.headers[CACHE_CONTROL], REVALIDATE_CACHE);
+        assert!(!is_content_addressed("remaining.txt"));
+        for path in ["app-C6R2N8QK.js", "app.30f2a8d9.js", "chunk_91a0f52c.css"] {
+            assert!(is_content_addressed(path), "{path}");
+        }
     }
 
     #[test]

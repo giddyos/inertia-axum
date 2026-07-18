@@ -32,8 +32,10 @@ cargo inertia build --release
 7. Cache fingerprinted assets as immutable; apply application-specific private/no-cache rules to HTML and page JSON.
 8. Exercise an initial HTML request, an Inertia JSON visit, validation state, and SSR fallback before release.
 
-Embedded mode needs no frontend runtime files, but it increases binary size and
-publishes emitted source maps. It does not provide precompression. See
-[Self-contained binary](/docs/guides/self-contained-binary).
+Embedded mode needs no frontend runtime files and stores compressible assets
+inside the executable with maximum-quality Brotli. It lazily restores the
+original bytes before the selected adapter serves them, so HTTP compression
+remains an application, proxy, or CDN decision. Emitted source maps are still
+public. See [Self-contained binary](/docs/guides/self-contained-binary).
 
 Managed SSR requires its validated Node runtime; external SSR requires reachable health and render endpoints. Continue with [Health and operations](/docs/ssr/health-and-operations) and the complete [deployment-related configuration](/docs/reference/configuration).

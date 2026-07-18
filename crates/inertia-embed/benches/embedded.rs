@@ -5,13 +5,14 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use http::{HeaderMap, Method, header::IF_NONE_MATCH};
 use inertia_axum::{InertiaApp, RouterInertiaExt, X_INERTIA, X_INERTIA_VERSION, page};
 use inertia_core::{AssetRequest, AssetSource};
-use inertia_embed::{EmbeddedAsset, EmbeddedFrontend};
+use inertia_embed::{EmbeddedAsset, EmbeddedFrontend, EmbeddedStorage, embed_frontend};
 use tower::ServiceExt as _;
 
 static BYTES: &[u8] = b"export default 1";
 static ASSETS: &[EmbeddedAsset] = &[EmbeddedAsset {
     path: "assets/app-12345678.js",
     bytes: BYTES,
+    storage: EmbeddedStorage::Identity,
     content_type: "text/javascript; charset=utf-8",
     etag: "\"sha256-benchmark\"",
     immutable: true,
@@ -24,6 +25,10 @@ static FRONTEND: EmbeddedFrontend = EmbeddedFrontend::new(
     "<script type=\"module\" src=\"/build/assets/app-12345678.js\"></script>",
     ASSETS,
 );
+static COMPRESSED_FRONTEND: EmbeddedFrontend = embed_frontend! {
+    root: "tests/fixtures/valid/dist",
+    entry: "src/main.ts",
+};
 
 fn asset_request<'a>(method: &'a Method, headers: &'a HeaderMap) -> AssetRequest<'a> {
     AssetRequest {
@@ -47,6 +52,16 @@ fn benchmark(criterion: &mut Criterion) {
         let mut headers = HeaderMap::new();
         headers.insert(IF_NONE_MATCH, ASSETS[0].etag.parse().unwrap());
         bencher.iter(|| (&FRONTEND).get(asset_request(&Method::GET, &headers)));
+    });
+    let compressed_headers = HeaderMap::new();
+    criterion.bench_function("embedded_asset_cached_decompression", |bencher| {
+        bencher.iter(|| {
+            (&COMPRESSED_FRONTEND).get(AssetRequest {
+                method: &Method::GET,
+                path: "assets/repetitive-data.txt",
+                headers: &compressed_headers,
+            })
+        });
     });
 
     let app = Router::new()

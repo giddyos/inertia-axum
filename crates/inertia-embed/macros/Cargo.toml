@@ -16,6 +16,7 @@ proc-macro = true
 workspace = true
 
 [dependencies]
+brotli.workspace = true
 mime_guess.workspace = true
 proc-macro-crate = "3"
 proc-macro2.workspace = true
