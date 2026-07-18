@@ -1,0 +1,10 @@
+[package]
+name = "inertia-macros-core-only"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+inertia-core = { path = "../../../../inertia-core", default-features = false, features = ["macros"] }
+
+[workspace]

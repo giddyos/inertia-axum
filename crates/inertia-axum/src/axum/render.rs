@@ -7,11 +7,10 @@ pub use super::version::{InertiaVersion, VersionLayer, VersionService};
 pub use crate::HtmlResponseContext;
 
 use super::response_headers::{conflict_response, is_write_method, redirect_response};
-use crate::{
-    Inertia, IntoPageProps, Location, Redirect, RequestContext, engine::finalize_page_object,
-};
+use crate::{IntoPageProps, RequestContext};
 use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
+use inertia_core::{Inertia, Location, Redirect};
 
 impl InertiaRequest {
     /// Returns `true` when the request includes the `X-Inertia` header.
@@ -101,4 +100,29 @@ impl InertiaRequest {
             redirect_response(StatusCode::FOUND, redirect.resolve(self.referer.as_deref()))
         }
     }
+}
+
+fn finalize_page_object<T, F>(
+    page: T,
+    is_inertia: bool,
+    status: StatusCode,
+    html: F,
+) -> Result<Response, InertiaError>
+where
+    T: serde::Serialize,
+    F: FnOnce(crate::HtmlResponseContext) -> Result<Response, InertiaError>,
+{
+    let mut response = if is_inertia {
+        let mut response = axum::Json(page).into_response();
+        response.headers_mut().insert(
+            crate::X_INERTIA_HEADER,
+            axum::http::HeaderValue::from_static("true"),
+        );
+        response
+    } else {
+        html(inertia_core::__private::html_response_context(&page)?)?
+    };
+    *response.status_mut() = status;
+    super::response_headers::add_vary_header(&mut response);
+    Ok(response)
 }

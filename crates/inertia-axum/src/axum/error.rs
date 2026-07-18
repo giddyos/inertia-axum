@@ -29,7 +29,7 @@ pub enum InertiaError {
     Transient(Box<dyn Error + Send + Sync>),
     /// Server-side rendering failed in strict mode.
     #[cfg(feature = "ssr")]
-    Ssr(crate::ssr::SsrFailure),
+    Ssr(crate::SsrFailure),
 }
 
 impl InertiaError {
@@ -39,23 +39,6 @@ impl InertiaError {
 
     pub(crate) fn invalid_uri(error: ParseError) -> Self {
         Self::InvalidUri(error)
-    }
-
-    pub(crate) fn root(error: Box<dyn Error + Send + Sync>) -> Self {
-        Self::Root(error)
-    }
-    pub(crate) fn prop(error: crate::PropError) -> Self {
-        Self::Prop(error)
-    }
-    pub(crate) fn shared(error: Box<dyn Error + Send + Sync>) -> Self {
-        Self::Shared(error)
-    }
-    pub(crate) fn transient(error: Box<dyn Error + Send + Sync>) -> Self {
-        Self::Transient(error)
-    }
-    #[cfg(feature = "ssr")]
-    pub(crate) fn ssr(error: crate::ssr::SsrFailure) -> Self {
-        Self::Ssr(error)
     }
 }
 

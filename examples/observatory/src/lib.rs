@@ -43,11 +43,11 @@ pub struct AppState {
     pub fail_telemetry: bool,
 }
 
-async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> AnomalyShowPage {
+async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> PendingPage {
     let raw_calls = state.raw_calls;
     let fail_telemetry = state.fail_telemetry;
 
-    AnomalyShowPage {
+    PendingPage::typed(AnomalyShowPage {
         anomaly: datum(id, "Transit drift"),
         timeline: scroll(
             ScrollPage::new(vec![datum(2, "Observed")], 2)
@@ -73,7 +73,7 @@ async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> AnomalyShow
         calibration_profiles: once(|| async { Ok::<_, Infallible>(vec![datum(6, "Baseline")]) })
             .key("calibration-profiles:v3"),
         collaborators: merge(vec![datum(7, "Grace")]).deep().match_on("id"),
-    }
+    })
 }
 
 #[derive(Deserialize, InertiaForm)]
@@ -129,7 +129,7 @@ fn datum(id: u64, name: &str) -> Datum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inertia_axum_test::TestApp;
+    use inertia_test::TestApp;
     use serde_json::json;
 
     fn test_app(fail_telemetry: bool) -> (TestApp, Arc<AtomicUsize>) {

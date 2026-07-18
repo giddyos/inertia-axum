@@ -135,9 +135,9 @@ async fn typed_shared_data_uses_borrowed_context_and_dotted_deduplicated_roots()
         .route(
             "/",
             get(|| async {
-                Home {
+                PendingPage::typed(Home {
                     title: "Hi".to_owned(),
-                }
+                })
             }),
         )
         .inertia(inertia)
@@ -173,10 +173,10 @@ async fn declared_route_root_blocks_shared_future_even_when_route_value_is_omitt
         .route(
             "/",
             get(|| async {
-                RouteOwnsAuth {
+                PendingPage::typed(RouteOwnsAuth {
                     title: "Owned".to_owned(),
                     auth: optional(|| async { Ok::<_, io::Error>("route".to_owned()) }),
-                }
+                })
             }),
         )
         .inertia(InertiaApp::default_root().share(share).build().unwrap());
@@ -210,9 +210,9 @@ async fn optional_and_once_shared_props_use_common_selection_engine() {
         .route(
             "/",
             get(|| async {
-                Home {
+                PendingPage::typed(Home {
                     title: "Hi".to_owned(),
-                }
+                })
             }),
         )
         .inertia(InertiaApp::default_root().share(share).build().unwrap());

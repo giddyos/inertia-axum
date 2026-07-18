@@ -27,8 +27,8 @@ pub struct AppState {
     pub fail_telemetry: bool,
 }
 
-async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> IncidentShowPage {
-    IncidentShowPage {
+async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> PendingPage {
+    PendingPage::typed(IncidentShowPage {
         incident: item(id, "Compressor trip"),
         timeline: scroll(
             ScrollPage::new(vec![item(1, "Detected")], 1)
@@ -48,7 +48,7 @@ async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> IncidentSho
         .group("telemetry")
         .rescue(),
         participants: merge(vec![item(6, "Ada")]).append().match_on("id"),
-    }
+    })
 }
 
 #[derive(Deserialize, InertiaForm)]
@@ -100,7 +100,7 @@ fn item(id: u64, label: &str) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inertia_axum_test::TestApp;
+    use inertia_test::TestApp;
 
     fn test_app(fail_telemetry: bool) -> TestApp {
         TestApp::new(app(AppState { fail_telemetry }))

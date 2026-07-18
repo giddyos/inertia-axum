@@ -1,0 +1,78 @@
+[package]
+name = "inertia-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Framework-neutral Inertia.js protocol and application runtime for Rust"
+keywords = ["inertia", "web", "framework"]
+categories = ["web-programming"]
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+askama = { workspace = true, optional = true }
+bytes.workspace = true
+fluent-uri = "0.4.1"
+futures-util = "0.3"
+http.workspace = true
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
+serde_urlencoded = "0.7"
+sha2 = { workspace = true, optional = true }
+tracing = "0.1"
+
+cookie = { version = "0.18", default-features = false, features = ["secure"], optional = true }
+tower-sessions = { version = "0.14", default-features = false, optional = true }
+
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, features = ["client", "http1"], optional = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"], optional = true }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"], optional = true }
+tower = { workspace = true, features = ["limit", "load-shed", "timeout", "util"], optional = true }
+
+inertia-macros = { workspace = true, optional = true }
+inertia-typegen = { workspace = true, optional = true }
+
+[features]
+default = ["macros", "typegen"]
+askama = ["dep:askama"]
+macros = ["dep:inertia-macros"]
+vite = ["dep:sha2"]
+cookies = ["dep:cookie", "dep:sha2"]
+tower-sessions = ["dep:tower-sessions"]
+garde = []
+validator = []
+test-support = []
+typegen = [
+    "macros",
+    "dep:inertia-typegen",
+    "inertia-macros/typegen",
+]
+typegen-serde-json = ["typegen", "inertia-typegen/serde-json"]
+typegen-uuid = ["typegen", "inertia-typegen/uuid"]
+typegen-chrono = ["typegen", "inertia-typegen/chrono"]
+typegen-jiff = ["typegen", "inertia-typegen/jiff"]
+typegen-url = ["typegen", "inertia-typegen/url"]
+typegen-bytes = ["typegen", "inertia-typegen/bytes"]
+typegen-indexmap = ["typegen", "inertia-typegen/indexmap"]
+typegen-semver = ["typegen", "inertia-typegen/semver"]
+typegen-bigdecimal = ["typegen", "inertia-typegen/bigdecimal"]
+typegen-smol-str = ["typegen", "inertia-typegen/smol-str"]
+typegen-tokio = ["typegen", "inertia-typegen/tokio"]
+ssr = [
+    "dep:http-body-util",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:tokio",
+    "dep:tower",
+]
+
+[dev-dependencies]
+insta = { version = "1.48.0", features = ["json"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread"] }

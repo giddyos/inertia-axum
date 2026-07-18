@@ -28,10 +28,10 @@ struct TodosPage {
     stats: Prop<TodoStats>,
 }
 
-async fn index(State(state): State<AppState>) -> TodosPage {
+async fn index(State(state): State<AppState>) -> PendingPage {
     let todos = state.todos.read().await.clone();
     let stats_state = state.clone();
-    TodosPage {
+    PendingPage::typed(TodosPage {
         todos,
         stats: defer(move || async move {
             let todos = stats_state.todos.read().await;
@@ -40,14 +40,14 @@ async fn index(State(state): State<AppState>) -> TodosPage {
                 remaining: todos.len(),
             })
         }),
-    }
+    })
 }
 
-async fn private_todos(State(state): State<AppState>) -> TodosPage {
+async fn private_todos(State(state): State<AppState>) -> PendingPage {
     index(State(state)).await
 }
 
-async fn preview(State(state): State<AppState>) -> TodosPage {
+async fn preview(State(state): State<AppState>) -> PendingPage {
     index(State(state)).await
 }
 

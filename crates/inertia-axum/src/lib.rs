@@ -1,93 +1,86 @@
-//! An Axum adapter for the Inertia.js protocol.
-//!
-//! This crate provides request parsing, Inertia page construction, partial
-//! reload handling, shared props, asset versioning, redirects, and Axum
-//! response integration.
+//! Axum adapter for the framework-neutral Inertia.js Rust runtime.
 
 #![forbid(unsafe_code)]
 
-pub mod axum;
-pub mod prelude;
-#[cfg(feature = "ssr")]
-pub mod ssr;
-
-mod app;
 pub mod assets;
-mod engine;
+pub mod axum;
+mod extract;
 pub mod form;
-mod headers;
-mod html;
 mod layer;
-mod page;
-mod props;
-mod redirect;
-mod request;
+pub mod prelude;
 mod response;
-mod root;
-mod share;
-mod shared;
-pub mod transient;
-mod typed;
-mod visit;
+mod router;
+
+#[cfg(feature = "ssr")]
+mod ssr;
+
+pub use extract::{Inertia, Visit};
+pub use form::{FormError, InertiaForm as Form, Validated};
+pub use layer::{InertiaLayer, InertiaService};
+pub use response::{
+    AxumResponse, DynamicPage, Location, PendingPage, PendingResponseHandle, Redirect,
+};
+pub use router::RouterInertiaExt;
+
+pub use inertia_core::{
+    ACCEPT, CACHE_CONTROL, PURPOSE, VARY, X_INERTIA, X_INERTIA_ERROR_BAG,
+    X_INERTIA_EXCEPT_ONCE_PROPS, X_INERTIA_HEADER, X_INERTIA_INFINITE_SCROLL_MERGE_INTENT,
+    X_INERTIA_LOCATION, X_INERTIA_LOCATION_HEADER, X_INERTIA_PARTIAL_COMPONENT,
+    X_INERTIA_PARTIAL_DATA, X_INERTIA_PARTIAL_EXCEPT, X_INERTIA_REDIRECT,
+    X_INERTIA_REDIRECT_HEADER, X_INERTIA_RESET, X_INERTIA_VERSION, X_INERTIA_VERSION_HEADER,
+    X_REQUESTED_WITH,
+};
+pub use inertia_core::{
+    AssetContext, AssetError, AssetProvider, AssetVersion, Component, ConfigError, CoreBody,
+    CoreError, CoreResponse, ErrorHandler, Errors, HeadMarkup, HtmlResponseContext, InertiaApp,
+    InertiaAppBuilder, InertiaPage, InertiaPageBuilder, InertiaProps, InertiaResult,
+    IntoInertiaProps, IntoPageProps, IntoScrollPage, LoadPolicy, MemoryTransient, MergePolicy,
+    MountMarkup, OncePolicy, OnceProp, Page, PageMetadata, PageOptions, Prop, PropError, PropKey,
+    PropOptions, Props, RequestContext, RootAssetTags as AssetTags, RootContext, RootView,
+    ScopedInertiaProps, ScrollPage, ScrollPolicy, ScrollProps, Share, ShareContext, TransientData,
+    TransientRequest, TransientStore, Validate, VersionCheck, always, defer, lazy, merge, once,
+    optional, scroll,
+};
 
 #[cfg(feature = "askama")]
-pub use ::askama;
-pub use app::{ErrorHandler, InertiaApp, InertiaAppBuilder, RouterInertiaExt};
+pub use inertia_core::{AskamaRoot, AskamaRootContext, askama};
+
+#[cfg(feature = "cookies")]
+pub use inertia_core::CookieTransient;
+
+#[cfg(feature = "tower-sessions")]
+pub use inertia_core::TowerSessionTransient;
+
+#[cfg(feature = "typegen")]
+pub use inertia_core::InertiaType;
+
+#[cfg(feature = "macros")]
+pub use inertia_core::InertiaForm;
+
 #[cfg(feature = "vite")]
 pub use assets::StaticAssetService;
-pub use assets::{AssetContext, AssetError, AssetProvider, AssetVersion, ConfigError};
-pub use form::{Errors, FormError, InertiaForm as Form, Validate, Validated};
-pub use headers::*;
-pub use html::HtmlResponseContext;
-pub use layer::{InertiaLayer, InertiaService};
-pub use page::{Inertia, InertiaPageBuilder, OnceProp, Page, PageMetadata, ScrollProps};
-pub use props::{
-    InertiaProps, InertiaResult, IntoPageProps, IntoScrollPage, LoadPolicy, MergePolicy,
-    OncePolicy, Prop, PropError, PropOptions, ScopedInertiaProps, ScrollPage, ScrollPolicy, always,
-    defer, lazy, merge, once, optional, scroll,
-};
-pub use redirect::{Location, Redirect};
-pub use request::RequestContext;
-pub use response::{DynamicPage, PendingPage, PendingResponse, PendingResponseHandle};
-#[cfg(feature = "askama")]
-pub use root::{AskamaRoot, AskamaRootContext};
-pub use root::{AssetTags, HeadMarkup, MountMarkup, RootContext, RootView};
-pub use share::{Share, ShareContext};
-#[cfg(feature = "ssr")]
-pub use ssr::{
-    Ssr, SsrBackendKind, SsrContext, SsrFailure, SsrFailureKind, SsrHealth, SsrOverride,
-    SsrRouteExt, SsrStartError, StartError,
-};
-#[cfg(feature = "cookies")]
-pub use transient::CookieTransient;
-#[cfg(feature = "tower-sessions")]
-pub use transient::TowerSessionTransient;
-pub use transient::{MemoryTransient, TransientData, TransientRequest, TransientStore};
-pub use typed::{Component, InertiaPage, IntoInertiaProps, PageOptions, PropKey, Props};
-pub use visit::Visit;
 
-/// Implementation details referenced by exported declarative macros.
+#[cfg(feature = "ssr")]
+pub use inertia_core::ssr::{
+    Ssr, SsrBackendKind, SsrFailure, SsrFailureKind, SsrHealth, SsrStartError, StartError,
+};
+
+#[cfg(feature = "ssr")]
+pub use ssr::{SsrContext, SsrOverride, SsrRouteExt};
+
+/// Implementation details referenced by framework-neutral derives.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::props::prop::{DynamicPropAdapter, IntoPendingProp};
-    pub use axum::response::{IntoResponse, Response};
-    pub use serde_json::{Value, to_value};
-
-    #[cfg(feature = "typegen")]
-    pub use inertia_axum_typegen as typegen;
+    pub use inertia_core as core;
+    pub use inertia_core::__private::*;
 }
 
-/// Internal type-generation adapter used only by generated exporter tests.
+/// Internal type-generation adapter used by generated exporter tests.
 #[doc(hidden)]
 #[cfg(feature = "typegen")]
 pub mod __typegen {
-    pub use inertia_axum_typegen::*;
+    pub use inertia_core::__typegen::*;
 }
-
-#[cfg(feature = "typegen")]
-pub use inertia_axum_macros::InertiaType;
-#[cfg(feature = "macros")]
-pub use inertia_axum_macros::{InertiaForm, InertiaPage, InertiaProps};
 
 /// Advanced protocol-aware application APIs.
 pub mod advanced {
@@ -95,8 +88,7 @@ pub mod advanced {
     pub use crate::{AskamaRoot, AskamaRootContext};
     pub use crate::{
         AssetContext, AssetProvider, AssetTags, AssetVersion, ErrorHandler, MountMarkup,
-        RequestContext as InertiaRequestContext, RootContext, RootView, ShareContext,
-        TransientStore, Visit,
+        RootContext, RootView, ShareContext, TransientStore, Visit,
     };
 }
 
@@ -104,4 +96,5 @@ pub mod advanced {
 pub mod compat {
     pub use crate::axum::{InertiaRequest, SharedProps, VersionLayer};
     pub use crate::{Inertia, InertiaPageBuilder, InertiaProps, ScopedInertiaProps};
+    pub use inertia_core::Inertia as LegacyInertia;
 }

@@ -1,0 +1,7 @@
+use inertia_macros::InertiaPage;
+
+#[derive(InertiaPage)]
+#[inertia(component = "Home", shared)]
+struct Home { title: String }
+
+fn main() {}

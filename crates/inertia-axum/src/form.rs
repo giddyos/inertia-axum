@@ -1,147 +1,77 @@
-//! Redirect-based Inertia form extraction and validation.
+//! Axum form extraction and validation backed by the core form model.
 
-use crate::{PendingResponse, RequestContext};
+use crate::response::pending_response;
 use axum::{
     body::to_bytes,
-    extract::{FromRequest, Request},
-    http::{
-        StatusCode,
-        header::{CONTENT_TYPE, REFERER},
-    },
+    extract::{FromRequest, OriginalUri, Request},
     response::{IntoResponse, Response},
 };
 use serde::de::DeserializeOwned;
-use serde_json::{Map, Value};
-use std::{
-    fmt,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
-/// Standard field-to-message validation errors.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Errors(Map<String, Value>);
-impl Errors {
-    /// Creates an empty error map.
-    pub fn new() -> Self {
-        Self::default()
-    }
-    /// Inserts or replaces a field error.
-    pub fn add(&mut self, field: impl Into<String>, message: impl Into<String>) {
-        self.0.insert(field.into(), Value::String(message.into()));
-    }
-    /// Creates an error map containing one field error.
-    pub fn field(field: impl Into<String>, message: impl Into<String>) -> Self {
-        let mut errors = Self::new();
-        errors.add(field, message);
-        errors
-    }
-    /// Returns whether no field errors are present.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-    /// Converts this map to its JSON representation.
-    pub fn into_value(self) -> Value {
-        Value::Object(self.0)
-    }
-}
+pub use inertia_core::form::serialize_old_input;
 
-/// Local validation contract implemented by derives or application code.
-pub trait Validate {
-    /// Validates this form value.
-    fn validate(&self) -> Result<(), Errors>;
-    /// Returns the derive-level fallback error bag.
-    fn error_bag() -> Option<&'static str> {
-        None
-    }
-    /// Returns explicitly enabled, redacted old input.
-    fn old_input(&self) -> Option<Value> {
-        None
-    }
-}
+/// Parsed Inertia form plus redirect metadata.
+pub struct InertiaForm<T>(inertia_core::Form<T>);
 
-/// Parsed form plus request metadata for lower-level custom validation.
-pub struct InertiaForm<T> {
-    input: T,
-    bag: Option<Box<str>>,
-    back: Box<str>,
-}
 impl<T> InertiaForm<T> {
-    /// Returns the parsed value without performing validation.
+    /// Returns the parsed value without validating it.
     pub fn into_inner(self) -> T {
-        self.input
+        self.0.into_inner()
     }
-    /// Applies application-defined validation to the parsed value.
+
+    /// Applies application-defined validation.
     pub fn validate_with<F>(self, validate: F) -> Result<T, FormError>
     where
-        F: FnOnce(&T) -> Result<(), Errors>,
+        F: FnOnce(&T) -> Result<(), inertia_core::Errors>,
     {
-        match validate(&self.input) {
-            Ok(()) => Ok(self.input),
-            Err(errors) => Err(FormError::validation(errors, self.bag, self.back, None)),
-        }
+        self.0.validate_with(validate).map_err(FormError)
     }
 }
+
 impl<T> Deref for InertiaForm<T> {
     type Target = T;
-    fn deref(&self) -> &T {
-        &self.input
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
+
 impl<T> DerefMut for InertiaForm<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.input
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
 /// A typed form value that passed validation.
 pub struct Validated<T>(pub T);
 
+/// Axum rejection for form decoding or semantic validation.
 #[derive(Debug)]
-/// Form extraction or redirect-based validation failure.
-pub enum FormError {
-    /// The supported request body could not be decoded.
-    BadRequest(String),
-    /// The request content type requires a separate extractor.
-    UnsupportedMediaType,
-    /// Semantic validation failed and must be transported through a redirect.
-    Validation(crate::response::PendingValidation),
-}
-impl FormError {
-    fn validation(
-        errors: Errors,
-        bag: Option<Box<str>>,
-        back: Box<str>,
-        old_input: Option<Value>,
-    ) -> Self {
-        let errors = if let Some(bag) = bag {
-            let mut scoped = Map::new();
-            scoped.insert(bag.into(), errors.into_value());
-            Value::Object(scoped)
-        } else {
-            errors.into_value()
-        };
-        Self::Validation(crate::response::PendingValidation {
-            errors,
-            old_input,
-            back,
-        })
+pub struct FormError(pub inertia_core::FormError);
+
+impl std::fmt::Display for FormError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
     }
 }
-impl fmt::Display for FormError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::BadRequest(error) => write!(f, "invalid Inertia form body: {error}"),
-            Self::UnsupportedMediaType => f.write_str("InertiaForm supports application/json and application/x-www-form-urlencoded; use a separate multipart extractor for file uploads"),
-            Self::Validation(_) => f.write_str("Inertia form validation failed"),
-        }
-    }
-}
+
+impl std::error::Error for FormError {}
+
 impl IntoResponse for FormError {
     fn into_response(self) -> Response {
-        match self {
-            Self::BadRequest(error) => (StatusCode::BAD_REQUEST, error).into_response(),
-            Self::UnsupportedMediaType => (StatusCode::UNSUPPORTED_MEDIA_TYPE, "InertiaForm supports JSON and URL-encoded bodies; multipart requires a separate extractor").into_response(),
-            Self::Validation(validation) => crate::response::pending_response(PendingResponse::InvalidForm(validation)),
+        match self.0 {
+            inertia_core::FormError::BadRequest(error) => {
+                (http::StatusCode::BAD_REQUEST, error).into_response()
+            }
+            inertia_core::FormError::UnsupportedMediaType => (
+                http::StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "InertiaForm supports JSON and URL-encoded bodies; multipart requires a separate extractor",
+            )
+                .into_response(),
+            inertia_core::FormError::Validation(validation) => pending_response(
+                inertia_core::PendingResponse::InvalidForm(validation),
+            ),
         }
     }
 }
@@ -152,70 +82,35 @@ where
     T: DeserializeOwned + Send + 'static,
 {
     type Rejection = FormError;
+
     async fn from_request(request: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        let headers = request.headers();
-        let context = RequestContext::from_header_fn(|name| {
-            headers.get(name).and_then(|value| value.to_str().ok())
-        });
-        let bag = context.error_bag().map(Into::into);
-        let back = headers
-            .get(REFERER)
-            .and_then(|value| value.to_str().ok())
-            .map_or_else(
-                || request.uri().path().to_owned().into_boxed_str(),
-                Into::into,
-            );
-        let content_type = headers
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("")
-            .split(';')
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_owned();
-        let bytes = to_bytes(request.into_body(), 2 * 1024 * 1024)
+        let (parts, body) = request.into_parts();
+        let uri = parts
+            .extensions
+            .get::<OriginalUri>()
+            .map(|original| original.0.clone())
+            .unwrap_or(parts.uri);
+        let request = inertia_core::RequestParts::new(parts.method, uri, parts.headers);
+        let bytes = to_bytes(body, 2 * 1024 * 1024)
             .await
-            .map_err(|error| FormError::BadRequest(error.to_string()))?;
-        let input: T = match content_type.as_str() {
-            "application/json" => serde_json::from_slice(&bytes)
-                .map_err(|error| FormError::BadRequest(error.to_string()))?,
-            "application/x-www-form-urlencoded" => serde_urlencoded::from_bytes(&bytes)
-                .map_err(|error| FormError::BadRequest(error.to_string()))?,
-            _ => return Err(FormError::UnsupportedMediaType),
-        };
-        Ok(Self { input, bag, back })
+            .map_err(|error| FormError(inertia_core::FormError::BadRequest(error.to_string())))?;
+        inertia_core::Form::from_bytes(&request, &bytes)
+            .map(Self)
+            .map_err(FormError)
     }
 }
 
 impl<S, T> FromRequest<S> for Validated<T>
 where
     S: Send + Sync,
-    T: DeserializeOwned + Validate + Send + 'static,
+    T: DeserializeOwned + inertia_core::Validate + Send + 'static,
 {
     type Rejection = FormError;
+
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
         let form = InertiaForm::<T>::from_request(request, state).await?;
-        match form.input.validate() {
-            Ok(()) => Ok(Self(form.input)),
-            Err(errors) => {
-                let old_input = form.input.old_input();
-                let bag = form.bag.or_else(|| T::error_bag().map(Into::into));
-                Err(FormError::validation(errors, bag, form.back, old_input))
-            }
-        }
+        inertia_core::Validated::from_form(form.0)
+            .map(|validated| Self(validated.0))
+            .map_err(FormError)
     }
-}
-
-#[doc(hidden)]
-pub fn serialize_old_input(
-    fields: impl IntoIterator<Item = (&'static str, Result<Value, serde_json::Error>)>,
-) -> Value {
-    let mut values = Map::new();
-    for (name, value) in fields {
-        if let Ok(value) = value {
-            values.insert(name.to_owned(), value);
-        }
-    }
-    Value::Object(values)
 }

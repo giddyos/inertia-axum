@@ -180,7 +180,7 @@ impl TransientStore for CountingStore {
     }
     async fn commit(
         &self,
-        _response: &mut axum::response::Response,
+        _response: &mut inertia_axum::CoreResponse,
         _data: TransientData,
     ) -> Result<(), Self::Error> {
         self.commits.fetch_add(1, Ordering::SeqCst);

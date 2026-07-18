@@ -559,7 +559,7 @@ dependencies = [
  "dprint-plugin-typescript",
  "fs2",
  "include_dir",
- "inertia-axum-typegen",
+ "inertia-typegen",
  "insta",
  "minijinja",
  "predicates",
@@ -1847,25 +1847,17 @@ dependencies = [
 name = "inertia-axum"
 version = "1.0.0-alpha.1"
 dependencies = [
- "askama",
  "axum",
  "bytes",
- "cookie",
  "criterion",
  "fluent-uri",
- "futures-util",
  "garde",
- "http-body-util",
- "hyper",
- "hyper-util",
- "inertia-axum-macros",
- "inertia-axum-typegen",
+ "http",
+ "inertia-core",
  "insta",
  "pin-project-lite",
  "serde",
  "serde_json",
- "serde_urlencoded",
- "sha2 0.11.0",
  "tokio",
  "tower",
  "tower-http",
@@ -1882,7 +1874,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "axum",
  "inertia-axum",
- "inertia-axum-test",
+ "inertia-test",
  "serde",
  "serde_json",
  "tokio",
@@ -1894,7 +1886,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "axum",
  "inertia-axum",
- "inertia-axum-test",
+ "inertia-test",
  "serde",
  "serde_json",
  "tokio",
@@ -1906,18 +1898,53 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "axum",
  "inertia-axum",
- "inertia-axum-test",
+ "inertia-test",
  "serde",
  "tokio",
 ]
 
 [[package]]
-name = "inertia-axum-macros"
+name = "inertia-axum-typegen-spike"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "inertia-axum",
+ "serde",
+]
+
+[[package]]
+name = "inertia-core"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "askama",
+ "bytes",
+ "cookie",
+ "fluent-uri",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "inertia-macros",
+ "inertia-typegen",
+ "insta",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "sha2 0.11.0",
+ "tokio",
+ "tower",
+ "tower-sessions",
+ "tracing",
+]
+
+[[package]]
+name = "inertia-macros"
 version = "1.0.0-alpha.1"
 dependencies = [
  "axum",
  "garde",
  "inertia-axum",
+ "inertia-core",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -1928,7 +1955,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "inertia-axum-test"
+name = "inertia-test"
 version = "1.0.0-alpha.1"
 dependencies = [
  "axum",
@@ -1940,7 +1967,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "inertia-axum-typegen"
+name = "inertia-typegen"
 version = "1.0.0-alpha.1"
 dependencies = [
  "serde",
@@ -1948,14 +1975,6 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror",
  "ts-rs",
-]
-
-[[package]]
-name = "inertia-axum-typegen-spike"
-version = "1.0.0-alpha.1"
-dependencies = [
- "inertia-axum",
- "serde",
 ]
 
 [[package]]
@@ -3446,7 +3465,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tower-sessions-core",
- "tower-sessions-memory-store",
  "tracing",
 ]
 
@@ -3457,7 +3475,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce8cce604865576b7751b7a6bc3058f754569a60d689328bb74c52b1d87e355b"
 dependencies = [
  "async-trait",
- "axum-core",
  "base64",
  "futures",
  "http",
@@ -3469,18 +3486,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "tower-sessions-memory-store"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb05909f2e1420135a831dd5df9f5596d69196d0a64c3499ca474c4bd3d33242"
-dependencies = [
- "async-trait",
- "time",
- "tokio",
- "tower-sessions-core",
 ]
 
 [[package]]

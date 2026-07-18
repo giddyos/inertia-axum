@@ -52,13 +52,13 @@ async fn derived_page_is_a_direct_typed_response_with_keys_and_options() {
     }
     .into_inertia_props();
 
-    async fn handler() -> TodosPage {
-        TodosPage {
+    async fn handler() -> PendingPage {
+        PendingPage::typed(TodosPage {
             todos: vec!["Ship derives".to_owned()],
             stats: defer(|| async { Ok::<_, Infallible>(7) }),
             can_create: true,
             internal: PhantomData,
-        }
+        })
     }
     let app = Router::new()
         .route("/", get(handler))

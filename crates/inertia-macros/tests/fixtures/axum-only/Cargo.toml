@@ -1,0 +1,10 @@
+[package]
+name = "inertia-macros-axum-only"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+inertia-axum = { path = "../../../../inertia-axum", default-features = false, features = ["macros"] }
+
+[workspace]

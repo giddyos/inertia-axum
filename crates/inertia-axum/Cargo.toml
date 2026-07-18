@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
-description = "An Inertia.js server adapter for Axum"
+description = "Axum adapter for the Inertia.js Rust runtime"
 keywords = ["inertia", "web", "framework", "axum"]
 categories = ["web-programming"]
 readme = "../../README.md"
@@ -16,59 +16,43 @@ readme = "../../README.md"
 workspace = true
 
 [dependencies]
-askama = { workspace = true, optional = true }
 axum = { workspace = true, features = ["json", "original-uri"] }
 bytes.workspace = true
 fluent-uri = "0.4.1"
-futures-util = "0.3"
+http.workspace = true
+inertia-core.workspace = true
 pin-project-lite = "0.2"
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
-serde_urlencoded = "0.7"
 tower-layer = "0.3"
 tower-service = "0.3"
 tracing = "0.1"
-sha2 = { version = "0.11", optional = true }
 tower-http = { version = "0.7", features = ["fs"], optional = true }
-inertia-axum-macros = { workspace = true, optional = true }
-inertia-axum-typegen = { workspace = true, optional = true }
-cookie = { version = "0.18", features = ["secure"], optional = true }
-tower-sessions = { version = "0.14", optional = true }
-http-body-util = { workspace = true, optional = true }
-hyper = { workspace = true, features = ["client", "http1"], optional = true }
-hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"], optional = true }
-tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"], optional = true }
-tower = { workspace = true, features = ["limit", "load-shed", "timeout", "util"], optional = true }
+tower-sessions = { version = "0.14", default-features = false, optional = true }
 
 [features]
 default = ["macros", "vite", "typegen"]
-askama = ["dep:askama"]
-macros = ["dep:inertia-axum-macros"]
-vite = ["dep:sha2", "dep:tower-http"]
-cookies = ["dep:cookie", "dep:sha2"]
-tower-sessions = ["dep:tower-sessions"]
-garde = []
-validator = []
-test-support = []
-typegen = ["macros", "dep:inertia-axum-typegen", "inertia-axum-macros/typegen"]
-typegen-serde-json = ["typegen", "inertia-axum-typegen/serde-json"]
-typegen-uuid = ["typegen", "inertia-axum-typegen/uuid"]
-typegen-chrono = ["typegen", "inertia-axum-typegen/chrono"]
-typegen-jiff = ["typegen", "inertia-axum-typegen/jiff"]
-typegen-url = ["typegen", "inertia-axum-typegen/url"]
-typegen-bytes = ["typegen", "inertia-axum-typegen/bytes"]
-typegen-indexmap = ["typegen", "inertia-axum-typegen/indexmap"]
-typegen-semver = ["typegen", "inertia-axum-typegen/semver"]
-typegen-bigdecimal = ["typegen", "inertia-axum-typegen/bigdecimal"]
-typegen-smol-str = ["typegen", "inertia-axum-typegen/smol-str"]
-typegen-tokio = ["typegen", "inertia-axum-typegen/tokio"]
-ssr = [
-    "dep:http-body-util",
-    "dep:hyper",
-    "dep:hyper-util",
-    "dep:tokio",
-    "dep:tower",
-]
+askama = ["inertia-core/askama"]
+macros = ["inertia-core/macros"]
+vite = ["inertia-core/vite", "dep:tower-http"]
+cookies = ["inertia-core/cookies"]
+tower-sessions = ["inertia-core/tower-sessions", "dep:tower-sessions"]
+garde = ["inertia-core/garde"]
+validator = ["inertia-core/validator"]
+test-support = ["inertia-core/test-support"]
+typegen = ["inertia-core/typegen"]
+typegen-serde-json = ["inertia-core/typegen-serde-json"]
+typegen-uuid = ["inertia-core/typegen-uuid"]
+typegen-chrono = ["inertia-core/typegen-chrono"]
+typegen-jiff = ["inertia-core/typegen-jiff"]
+typegen-url = ["inertia-core/typegen-url"]
+typegen-bytes = ["inertia-core/typegen-bytes"]
+typegen-indexmap = ["inertia-core/typegen-indexmap"]
+typegen-semver = ["inertia-core/typegen-semver"]
+typegen-bigdecimal = ["inertia-core/typegen-bigdecimal"]
+typegen-smol-str = ["inertia-core/typegen-smol-str"]
+typegen-tokio = ["inertia-core/typegen-tokio"]
+ssr = ["inertia-core/ssr"]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio"] }

@@ -42,11 +42,11 @@ pub struct TodosPage {
     pub stats: Prop<TodoStats>,
 }
 
-async fn index(State(state): State<AppState>) -> TodosPage {
+async fn index(State(state): State<AppState>) -> PendingPage {
     let todos = state.todos.read().await.clone();
     let stats_state = state.clone();
 
-    TodosPage {
+    PendingPage::typed(TodosPage {
         todos,
 
         // Inertia loads this prop after the initial page has rendered.
@@ -60,7 +60,7 @@ async fn index(State(state): State<AppState>) -> TodosPage {
                 remaining: todos.len() - completed,
             })
         }),
-    }
+    })
 }
 
 #[derive(Deserialize, InertiaForm)]
@@ -113,7 +113,7 @@ pub fn app(state: AppState, inertia: InertiaApp) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inertia_axum_test::TestApp;
+    use inertia_test::TestApp;
 
     fn test_app() -> TestApp {
         let inertia = InertiaApp::default_root()

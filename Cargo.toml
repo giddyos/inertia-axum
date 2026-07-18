@@ -1,10 +1,11 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/inertia-core",
     "crates/inertia-axum",
-    "crates/inertia-axum-macros",
-    "crates/inertia-axum-test",
-    "crates/inertia-axum-typegen",
+    "crates/inertia-macros",
+    "crates/inertia-test",
+    "crates/inertia-typegen",
     "crates/cargo-inertia",
     "crates/inertia-axum-typegen-spike",
     "examples/axum-minimal",
@@ -17,10 +18,11 @@ members = [
     "examples/observatory",
 ]
 default-members = [
+    "crates/inertia-core",
     "crates/inertia-axum",
-    "crates/inertia-axum-macros",
-    "crates/inertia-axum-test",
-    "crates/inertia-axum-typegen",
+    "crates/inertia-macros",
+    "crates/inertia-test",
+    "crates/inertia-typegen",
 ]
 
 [workspace.package]
@@ -30,23 +32,26 @@ rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/giddyos/inertia-axum"
 homepage = "https://github.com/giddyos/inertia-axum"
-authors = ["inertia-axum contributors"]
+authors = ["inertia-rs contributors"]
 
 [workspace.dependencies]
 askama = { version = "0.16", default-features = false, features = ["config", "derive", "std"] }
 axum = { version = "0.8.9", default-features = false }
-bytes = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-http-body-util = "0.1"
+bytes = { version = "1", default-features = false }
+http = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1", default-features = false }
 hyper-util = { version = "0.1", default-features = false }
-tokio = "1"
-tower = "0.5.3"
+sha2 = { version = "0.11", default-features = false }
+tokio = { version = "1", default-features = false }
+tower = { version = "0.5.3", default-features = false }
+inertia-core = { path = "crates/inertia-core", version = "1.0.0-alpha.1" }
 inertia-axum = { path = "crates/inertia-axum", version = "1.0.0-alpha.1" }
-inertia-axum-macros = { path = "crates/inertia-axum-macros", version = "1.0.0-alpha.1" }
-inertia-axum-test = { path = "crates/inertia-axum-test", version = "1.0.0-alpha.1" }
-inertia-axum-typegen = { path = "crates/inertia-axum-typegen", version = "1.0.0-alpha.1" }
+inertia-macros = { path = "crates/inertia-macros", version = "1.0.0-alpha.1" }
+inertia-test = { path = "crates/inertia-test", version = "1.0.0-alpha.1" }
+inertia-typegen = { path = "crates/inertia-typegen", version = "1.0.0-alpha.1" }
 ts-rs = { version = "=12.0.1", default-features = false, features = ["serde-compat"] }
 
 [workspace.lints.rust]

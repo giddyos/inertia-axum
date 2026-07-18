@@ -114,11 +114,12 @@ cargo check --locked --workspace --all-targets --all-features
 cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 cargo test --locked --workspace --doc
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps
-cargo package --locked --allow-dirty -p inertia-axum-macros
-cargo package --locked --allow-dirty -p inertia-axum-typegen
-cargo --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"' --config 'patch.crates-io.inertia-axum-typegen.path="crates/inertia-axum-typegen"' package --locked --allow-dirty -p inertia-axum
-cargo --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-axum-macros.path="crates/inertia-axum-macros"' package --locked --allow-dirty -p inertia-axum-test
-cargo --config 'patch.crates-io.inertia-axum-typegen.path="crates/inertia-axum-typegen"' package --locked --allow-dirty -p cargo-inertia
+cargo package --locked --allow-dirty -p inertia-macros
+cargo package --locked --allow-dirty -p inertia-typegen
+cargo --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-core
+cargo --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-axum
+cargo --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-test
+cargo --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p cargo-inertia
 cargo bench --locked --workspace --no-run
 cargo check --locked --workspace --all-targets --no-default-features
 cargo check --locked -p inertia-axum --no-default-features --features cookies

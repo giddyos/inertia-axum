@@ -5,7 +5,7 @@ pub mod args;
 use args::{DynamicPagePolicy, LargeIntegerPolicy, OutputLayout, SyncArgs};
 use cargo_metadata::{Metadata, MetadataCommand, Package, Target, TargetKind};
 use fs2::FileExt;
-use inertia_axum_typegen::{ExportBundle, RootKind, TYPEGEN_SCHEMA_VERSION, TypeDefinition};
+use inertia_typegen::{ExportBundle, RootKind, TYPEGEN_SCHEMA_VERSION, TypeDefinition};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -459,7 +459,7 @@ fn run_exporters(
         .env("INERTIA_TYPEGEN_TARGET", target.name.as_str())
         .env(
             "INERTIA_TYPEGEN_LARGE_INT",
-            inertia_axum_typegen::LARGE_INTEGER_SENTINEL,
+            inertia_typegen::LARGE_INTEGER_SENTINEL,
         )
         .env(
             "INERTIA_TYPEGEN_ARRAY_TUPLE_LIMIT",
@@ -564,7 +564,7 @@ fn reconcile_and_render(
     let contains_large = definitions.values().any(|definition| {
         definition
             .declaration
-            .contains(inertia_axum_typegen::LARGE_INTEGER_SENTINEL)
+            .contains(inertia_typegen::LARGE_INTEGER_SENTINEL)
     });
     if contains_large && policy == LargeIntegerPolicy::Error {
         return Err("error[INERTIA-TYPEGEN-002]: large integer is not losslessly representable; serialize as string and declare ts(type = string)".into());
@@ -589,7 +589,7 @@ fn reconcile_and_render(
         output.push_str(
             &definition
                 .declaration
-                .replace(inertia_axum_typegen::LARGE_INTEGER_SENTINEL, replacement),
+                .replace(inertia_typegen::LARGE_INTEGER_SENTINEL, replacement),
         );
         output.push_str("\n\n");
     }
@@ -736,7 +736,7 @@ fn render_modules(
     let contains_large = definitions.values().any(|definition| {
         definition
             .declaration
-            .contains(inertia_axum_typegen::LARGE_INTEGER_SENTINEL)
+            .contains(inertia_typegen::LARGE_INTEGER_SENTINEL)
     });
     if contains_large && policy == LargeIntegerPolicy::Error {
         return Err(
@@ -793,7 +793,7 @@ fn render_modules(
         text.push_str(
             &definition
                 .declaration
-                .replace(inertia_axum_typegen::LARGE_INTEGER_SENTINEL, replacement),
+                .replace(inertia_typegen::LARGE_INTEGER_SENTINEL, replacement),
         );
         text.push('\n');
         files.insert(path.clone(), format_typescript(text, path)?.into_bytes());

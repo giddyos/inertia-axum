@@ -5,8 +5,8 @@
 //! unchanged.
 
 use crate::RequestContext;
-use crate::page::PageDraft;
 use axum::http::Method;
+use inertia_core::__private::PageDraft;
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;

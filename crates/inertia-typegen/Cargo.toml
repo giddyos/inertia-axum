@@ -1,0 +1,37 @@
+[package]
+name = "inertia-typegen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Framework-neutral type-generation support for Inertia Rust adapters"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+serde-json = ["ts-rs/serde-json-impl"]
+uuid = ["ts-rs/uuid-impl"]
+chrono = ["ts-rs/chrono-impl"]
+jiff = ["ts-rs/jiff-impl"]
+url = ["ts-rs/url-impl"]
+bytes = ["ts-rs/bytes-impl"]
+indexmap = ["ts-rs/indexmap-impl"]
+semver = ["ts-rs/semver-impl"]
+bigdecimal = ["ts-rs/bigdecimal-impl"]
+smol-str = ["ts-rs/smol_str-impl"]
+tokio = ["ts-rs/tokio-impl"]
+ordered-float = ["ts-rs/ordered-float-impl"]
+heapless = ["ts-rs/heapless-impl"]
+arrayvec = ["ts-rs/arrayvec-impl"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.11"
+thiserror = "2"
+ts-rs.workspace = true
