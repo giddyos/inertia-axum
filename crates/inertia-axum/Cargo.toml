@@ -27,7 +27,7 @@ serde_json.workspace = true
 tower-layer = "0.3"
 tower-service = "0.3"
 tracing = "0.1"
-tower-sessions = { version = "0.14", default-features = false, optional = true }
+tower-sessions = { version = "0.15", default-features = false, optional = true }
 
 [features]
 default = ["macros", "vite", "typegen"]
