@@ -29,7 +29,7 @@ sha2 = { workspace = true, optional = true }
 tracing = "0.1"
 
 cookie = { version = "0.18", default-features = false, features = ["secure"], optional = true }
-tower-sessions = { version = "0.14", default-features = false, optional = true }
+tower-sessions = { version = "0.15", default-features = false, optional = true }
 
 http-body-util = { workspace = true, optional = true }
 hyper = { workspace = true, features = ["client", "http1"], optional = true }
