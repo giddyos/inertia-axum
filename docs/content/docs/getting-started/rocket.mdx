@@ -1,0 +1,71 @@
+---
+title: Rocket
+description: Install the Rocket adapter, render through an async request guard, and mount framework-neutral assets.
+keywords:
+  - Rocket
+  - inertia-rocket
+  - fairing
+---
+
+## Attach the fairing
+
+`inertia-rocket` exposes Rocket-owned guards, responders, data guards, and an
+installation fairing over the same protocol runtime used by the other
+first-party adapters.
+
+```rust title="src/main.rs"
+use inertia_rocket::{
+    Inertia, InertiaApp, InertiaFairing, Result as InertiaResult,
+};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct HomeProps {
+    message: &'static str,
+}
+
+#[rocket::get("/")]
+async fn index(inertia: Inertia<'_>) -> InertiaResult {
+    inertia
+        .render(
+            "Home",
+            HomeProps {
+                message: "Hello from Rocket",
+            },
+        )
+        .await
+}
+
+#[rocket::launch]
+fn rocket() -> _ {
+    let inertia = InertiaApp::vite("frontend")
+        .build()
+        .expect("valid Inertia configuration");
+
+    rocket::build()
+        .attach(InertiaFairing::new(inertia))
+        .mount("/", rocket::routes![index])
+}
+```
+
+`InertiaFairing` manages `InertiaApp`, finalizes direct pending responders, and
+mounts the configured asset source during ignition. The mount uses the
+runtime-configured public path, so both Vite filesystem assets and
+compile-time embedded assets use the same route.
+
+The `Inertia<'_>` guard performs request preparation before the handler. Its
+`render`, `render_typed`, `to`, and `external` methods are asynchronous so
+pending props and transient commits are awaited instead of blocked inside
+Rocket's synchronous responder callback.
+
+Direct `DynamicPage`, `Redirect`, `Location`, and validated-form responders
+also work. The response fairing recognizes their request-local pending value
+and awaits core finalization without changing ordinary Rocket responses.
+
+Attaching the fairing twice, or attaching it when `InertiaApp` is already
+managed, aborts ignition with an installation error.
+
+For a release binary that contains its Vite frontend, copy
+[`rocket-embedded`](https://github.com/giddyos/inertia-axum/tree/main/examples/rocket-embedded).
+The debug build uses a Vite development server; the release build serves
+`/build/<path..>` directly from the executable.

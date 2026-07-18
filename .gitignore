@@ -19,3 +19,7 @@ examples/actix-*/**/node_modules/
 examples/actix-*/**/dist/
 !examples/actix-embedded/frontend/dist/
 !examples/actix-embedded/frontend/dist/**
+examples/rocket-*/**/node_modules/
+examples/rocket-*/**/dist/
+!examples/rocket-embedded/frontend/dist/
+!examples/rocket-embedded/frontend/dist/**

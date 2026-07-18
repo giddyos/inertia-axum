@@ -29,3 +29,8 @@ fn derives_compile_with_axum_adapter_only() {
 fn derives_compile_with_actix_adapter_only() {
     check_fixture("actix-only");
 }
+
+#[test]
+fn derives_compile_with_rocket_adapter_only() {
+    check_fixture("rocket-only");
+}

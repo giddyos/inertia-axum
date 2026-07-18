@@ -1,0 +1,10 @@
+[package]
+name = "inertia-macros-rocket-only"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+inertia-rocket = { path = "../../../../inertia-rocket", default-features = false, features = ["macros"] }
+
+[workspace]

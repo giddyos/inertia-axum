@@ -1,0 +1,13 @@
+[package]
+name = "rocket-minimal"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+inertia-rocket.workspace = true
+rocket.workspace = true

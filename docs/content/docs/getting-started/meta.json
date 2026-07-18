@@ -4,6 +4,7 @@
     "index",
     "installation",
     "actix-web",
+    "rocket",
     "quick-start",
     "frontend-setup",
     "project-structure"

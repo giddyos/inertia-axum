@@ -10,7 +10,8 @@ keywords:
 `inertia-axum` is an Inertia.js v3 server adapter for Axum. Keep routing, data loading, validation, and redirects in Rust while Svelte, React, or Vue renders the pages—without a separate JSON API.
 
 The framework-neutral runtime also powers the first-party
-[`inertia-actix` adapter](/docs/getting-started/actix-web), with the same page,
+[`inertia-actix` adapter](/docs/getting-started/actix-web) and
+[`inertia-rocket` adapter](/docs/getting-started/rocket), with the same page,
 prop, form, asset, transient, and SSR behavior.
 
 <Cards>
@@ -19,6 +20,9 @@ prop, form, asset, transient, and SSR behavior.
   </Card>
   <Card title="Use Actix Web" href="/docs/getting-started/actix-web">
     Install explicit app data, middleware, and asset routes.
+  </Card>
+  <Card title="Use Rocket" href="/docs/getting-started/rocket">
+    Attach managed state, responders, and dynamic asset routes through one fairing.
   </Card>
   <Card title="Pass and defer data" href="/docs/guides/deferred-and-lazy-props">
     Keep the initial response fast while expensive props load.

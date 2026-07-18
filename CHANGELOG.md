@@ -10,10 +10,12 @@ All notable changes to this project will be documented in this file.
   and SSR runtime used by every adapter.
 - `inertia-actix`, with safe HTTP-version boundary conversion, asynchronous
   rendering, middleware finalization, forms, redirects, and generic assets.
+- `inertia-rocket`, with managed state, request guards, responders, ignition
+  fairing installation, runtime-path assets, forms, and asynchronous rendering.
 - `inertia-embed` and `embed_frontend!` for deterministic compile-time Vite
   manifests and self-contained release binaries.
-- Shared Axum/Actix adapter conformance coverage and minimal and embedded Actix
-  examples.
+- Shared Axum/Actix/Rocket adapter conformance coverage and minimal and embedded
+  Actix and Rocket examples.
 
 ## 1.0.0-alpha.1 - 2026-07-10
 

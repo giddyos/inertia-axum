@@ -1,0 +1,15 @@
+[package]
+name = "rocket-embedded"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+inertia-embed.workspace = true
+inertia-rocket.workspace = true
+rocket.workspace = true
+serde.workspace = true

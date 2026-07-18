@@ -27,6 +27,7 @@ run = [
   "pnpm --dir examples/axum-vue/vue-app install --frozen-lockfile --prefer-offline",
   "pnpm --dir examples/axum-embedded/frontend install --frozen-lockfile --prefer-offline",
   "pnpm --dir examples/actix-embedded/frontend install --frozen-lockfile --prefer-offline",
+  "pnpm --dir examples/rocket-embedded/frontend install --frozen-lockfile --prefer-offline",
 ]
 
 [tasks.fmt]
@@ -123,15 +124,20 @@ cargo package --locked --allow-dirty -p inertia-embed-macros
 cargo --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-embed-macros.path="crates/inertia-embed/macros"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-embed
 cargo --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-axum
 cargo --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-embed.path="crates/inertia-embed"' --config 'patch.crates-io.inertia-embed-macros.path="crates/inertia-embed/macros"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-actix
-cargo --config 'patch.crates-io.inertia-actix.path="crates/inertia-actix"' --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-embed.path="crates/inertia-embed"' --config 'patch.crates-io.inertia-embed-macros.path="crates/inertia-embed/macros"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-test
+cargo --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-embed.path="crates/inertia-embed"' --config 'patch.crates-io.inertia-embed-macros.path="crates/inertia-embed/macros"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-rocket
+cargo --config 'patch.crates-io.inertia-actix.path="crates/inertia-actix"' --config 'patch.crates-io.inertia-axum.path="crates/inertia-axum"' --config 'patch.crates-io.inertia-core.path="crates/inertia-core"' --config 'patch.crates-io.inertia-embed.path="crates/inertia-embed"' --config 'patch.crates-io.inertia-embed-macros.path="crates/inertia-embed/macros"' --config 'patch.crates-io.inertia-macros.path="crates/inertia-macros"' --config 'patch.crates-io.inertia-rocket.path="crates/inertia-rocket"' --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p inertia-test
 cargo --config 'patch.crates-io.inertia-typegen.path="crates/inertia-typegen"' package --locked --allow-dirty -p cargo-inertia
 cargo bench --locked --workspace --no-run
 cargo check --locked --workspace --all-targets --no-default-features
 cargo check --locked -p inertia-axum --no-default-features --features cookies
 cargo check --locked -p inertia-actix --no-default-features
 cargo check --locked -p inertia-actix --no-default-features --features cookies
+cargo check --locked -p inertia-rocket --no-default-features
+cargo check --locked -p inertia-rocket --no-default-features --features cookies
 cargo check --locked -p actix-minimal
 cargo check --locked --release -p actix-embedded
+cargo check --locked -p rocket-minimal
+cargo check --locked --release -p rocket-embedded
 '''
 
 [tasks."ci:typegen"]

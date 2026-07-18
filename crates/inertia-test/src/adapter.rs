@@ -165,6 +165,34 @@ impl AdapterHarness for ActixHarness {
     }
 }
 
+type RocketRequest =
+    Rc<dyn Fn(AdapterRequest) -> LocalBoxFuture<'static, AdapterResponse> + 'static>;
+
+/// Rocket implementation of the shared adapter harness.
+pub struct RocketHarness {
+    request: RocketRequest,
+}
+
+impl RocketHarness {
+    /// Creates a harness from a Rocket in-process request driver.
+    pub fn new<F, Fut>(request: F) -> Self
+    where
+        F: Fn(AdapterRequest) -> Fut + 'static,
+        Fut: Future<Output = AdapterResponse> + 'static,
+    {
+        Self {
+            request: Rc::new(move |adapter_request| Box::pin(request(adapter_request))),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl AdapterHarness for RocketHarness {
+    async fn request(&self, request: AdapterRequest) -> AdapterResponse {
+        (self.request)(request).await
+    }
+}
+
 fn inertia(method: Method, uri: &str) -> AdapterRequest {
     AdapterRequest::new(method, uri)
         .header("x-inertia", "true")

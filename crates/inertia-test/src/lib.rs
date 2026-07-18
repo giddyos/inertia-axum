@@ -8,7 +8,7 @@ mod response;
 mod ssr;
 
 pub use adapter::{
-    ActixHarness, AdapterHarness, AdapterRequest, AdapterResponse, AxumHarness,
+    ActixHarness, AdapterHarness, AdapterRequest, AdapterResponse, AxumHarness, RocketHarness,
     run_adapter_conformance,
 };
 pub use app::TestApp;

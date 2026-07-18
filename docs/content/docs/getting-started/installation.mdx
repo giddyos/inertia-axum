@@ -38,9 +38,20 @@ serde_json = "1"
 Continue with [Actix Web setup](/docs/getting-started/actix-web), or use the
 Axum quick start below.
 
+For Rocket, attach the adapter fairing:
+
+```toml title="Cargo.toml"
+[dependencies]
+inertia-rocket = "=1.0.0-alpha.1"
+rocket = "0.5.1"
+serde = { version = "1", features = ["derive"] }
+```
+
+Continue with [Rocket setup](/docs/getting-started/rocket).
+
 | Default feature | Purpose |
 | --- | --- |
 | `macros` | Re-exports the typed page, prop, and form derives. |
 | `vite` | Reads the Vite manifest and serves built frontend assets. |
 
-See [Cargo features](/docs/reference/cargo-features) for SSR, validation, transient storage, templates, testing integrations, and no-default-feature setups. Then build the [Axum quick-start application](/docs/getting-started/quick-start) or its [Actix Web equivalent](/docs/getting-started/actix-web).
+See [Cargo features](/docs/reference/cargo-features) for SSR, validation, transient storage, templates, testing integrations, and no-default-feature setups. Then build the [Axum quick-start application](/docs/getting-started/quick-start), its [Actix Web equivalent](/docs/getting-started/actix-web), or the [Rocket setup](/docs/getting-started/rocket).

@@ -22,6 +22,8 @@ http.workspace = true
 inertia-actix = { workspace = true, features = ["test-support", "ssr"] }
 inertia-axum = { workspace = true, features = ["test-support", "ssr"] }
 inertia-embed.workspace = true
+inertia-rocket = { workspace = true, features = ["test-support", "ssr"] }
+rocket.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tower = { workspace = true, features = ["util"] }

@@ -14,8 +14,8 @@ use axum::{
 use bytes::Bytes;
 use inertia_embed::{EmbeddedAsset, EmbeddedFrontend};
 use inertia_test::{
-    ActixHarness, AdapterRequest, AdapterResponse, AxumHarness, TestSsr, TestSsrDocument,
-    run_adapter_conformance,
+    ActixHarness, AdapterRequest, AdapterResponse, AxumHarness, RocketHarness, TestSsr,
+    TestSsrDocument, run_adapter_conformance,
 };
 use serde::Deserialize;
 use std::{convert::Infallible, io};
@@ -286,6 +286,156 @@ async fn request_actix(
     actix_response(actix_test::call_service(&app, request).await).await
 }
 
+#[rocket::get("/page")]
+fn rocket_page() -> inertia_rocket::DynamicPage {
+    inertia_rocket::DynamicPage::new("Conformance")
+        .prop("ordinary", "route")
+        .async_prop(
+            "deferred",
+            inertia_rocket::defer(|| async { Ok::<_, io::Error>(1_u32) }),
+        )
+        .async_prop(
+            "optional",
+            inertia_rocket::optional(|| async { Ok::<_, io::Error>(2_u32) }),
+        )
+        .async_prop("merged", inertia_rocket::merge(vec![1_u32]).append())
+        .async_prop(
+            "once",
+            inertia_rocket::once(|| async { Ok::<_, io::Error>("cached") }),
+        )
+        .async_prop(
+            "scroll",
+            inertia_rocket::scroll(inertia_rocket::ScrollPage::new(vec![1_u32, 2], 1).next(2)),
+        )
+}
+
+#[rocket::post("/redirect")]
+fn rocket_redirect() -> inertia_rocket::Redirect {
+    inertia_rocket::Redirect::to("/page")
+}
+
+#[rocket::get("/external")]
+fn rocket_external() -> inertia_rocket::Location {
+    inertia_rocket::Location::external("https://example.com/outside")
+}
+
+#[rocket::post("/form", data = "<form>")]
+fn rocket_form(
+    form: inertia_rocket::InertiaForm<FormInput>,
+) -> Result<inertia_rocket::Redirect, inertia_rocket::FormError> {
+    form.validate_with(|input| {
+        if input.title.trim().is_empty() {
+            Err(inertia_rocket::Errors::field("title", "required"))
+        } else {
+            Ok(())
+        }
+    })?;
+    Ok(inertia_rocket::Redirect::to("/page"))
+}
+
+#[rocket::post("/flash")]
+fn rocket_flash() -> inertia_rocket::Redirect {
+    inertia_rocket::Redirect::to("/page").flash("notice", "saved")
+}
+
+#[rocket::get("/ssr")]
+fn rocket_ssr() -> inertia_rocket::DynamicPage {
+    inertia_rocket::DynamicPage::new("Ssr")
+}
+
+#[rocket::get("/ssr-fallback")]
+fn rocket_ssr_fallback() -> inertia_rocket::DynamicPage {
+    inertia_rocket::DynamicPage::new("SsrFallback")
+}
+
+#[rocket::get("/health")]
+fn rocket_health() -> &'static str {
+    "healthy"
+}
+
+#[rocket::get("/missing")]
+fn rocket_missing() -> inertia_rocket::DynamicPage {
+    inertia_rocket::DynamicPage::new("Missing")
+}
+
+async fn rocket_harness(inertia: inertia_rocket::InertiaApp) -> RocketHarness {
+    use rocket::local::asynchronous::Client;
+    use std::rc::Rc;
+
+    let installed = Client::untracked(
+        rocket::build()
+            .attach(inertia_rocket::InertiaFairing::new(inertia))
+            .mount(
+                "/",
+                rocket::routes![
+                    rocket_page,
+                    rocket_redirect,
+                    rocket_external,
+                    rocket_form,
+                    rocket_flash,
+                    rocket_ssr,
+                    rocket_ssr_fallback,
+                    rocket_health,
+                ],
+            ),
+    )
+    .await
+    .expect("Rocket conformance app must ignite");
+    let uninstalled =
+        Client::untracked(rocket::build().mount("/", rocket::routes![rocket_missing]))
+            .await
+            .expect("uninstalled Rocket conformance app must ignite");
+    let installed = Rc::new(installed);
+    let uninstalled = Rc::new(uninstalled);
+    RocketHarness::new(move |request| {
+        let installed = Rc::clone(&installed);
+        let uninstalled = Rc::clone(&uninstalled);
+        async move {
+            let client = if request.uri.path() == "/missing" {
+                uninstalled
+            } else {
+                installed
+            };
+            let method = request
+                .method
+                .as_str()
+                .parse::<rocket::http::Method>()
+                .expect("core test method must convert to Rocket");
+            let mut native = client.req(method, request.uri.to_string());
+            for (name, value) in &request.headers {
+                native.add_header(rocket::http::Header::new(
+                    name.as_str().to_owned(),
+                    value
+                        .to_str()
+                        .expect("conformance request header must be UTF-8")
+                        .to_owned(),
+                ));
+            }
+            native.set_body(request.body);
+            let response = native.dispatch().await;
+            let status = http::StatusCode::from_u16(response.status().code)
+                .expect("Rocket status must convert");
+            let mut headers = http::HeaderMap::new();
+            for header in response.headers().iter() {
+                let name = http::HeaderName::from_bytes(header.name().as_str().as_bytes())
+                    .expect("Rocket response header name must convert");
+                let value = http::HeaderValue::from_bytes(header.value().as_bytes())
+                    .expect("Rocket response header value must convert");
+                headers.append(name, value);
+            }
+            let body = response
+                .into_bytes()
+                .await
+                .map_or_else(Bytes::new, Bytes::from);
+            AdapterResponse {
+                status,
+                headers,
+                body,
+            }
+        }
+    })
+}
+
 #[tokio::test]
 async fn axum_passes_shared_adapter_conformance() {
     let (inertia, _ssr) = app_and_ssr().await;
@@ -297,4 +447,10 @@ async fn actix_passes_shared_adapter_conformance() {
     let (inertia, _ssr) = app_and_ssr().await;
     let harness = ActixHarness::new(move |request| request_actix(inertia.clone(), request));
     run_adapter_conformance(&harness).await;
+}
+
+#[tokio::test]
+async fn rocket_passes_shared_adapter_conformance() {
+    let (inertia, _ssr) = app_and_ssr().await;
+    run_adapter_conformance(&rocket_harness(inertia).await).await;
 }

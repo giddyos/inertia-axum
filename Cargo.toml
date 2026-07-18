@@ -4,6 +4,7 @@ members = [
     "crates/inertia-core",
     "crates/inertia-axum",
     "crates/inertia-actix",
+    "crates/inertia-rocket",
     "crates/inertia-embed",
     "crates/inertia-embed/macros",
     "crates/inertia-macros",
@@ -15,6 +16,8 @@ members = [
     "examples/axum-embedded",
     "examples/actix-minimal",
     "examples/actix-embedded",
+    "examples/rocket-minimal",
+    "examples/rocket-embedded",
     "examples/axum-askama",
     "examples/axum-svelte",
     "examples/axum-react",
@@ -27,6 +30,7 @@ default-members = [
     "crates/inertia-core",
     "crates/inertia-axum",
     "crates/inertia-actix",
+    "crates/inertia-rocket",
     "crates/inertia-embed",
     "crates/inertia-macros",
     "crates/inertia-test",
@@ -46,6 +50,7 @@ authors = ["inertia-rs contributors"]
 actix-web = { version = "4.14.0", default-features = false, features = ["macros"] }
 askama = { version = "0.16", default-features = false, features = ["config", "derive", "std"] }
 axum = { version = "0.8.9", default-features = false }
+rocket = { version = "0.5.1", default-features = false }
 bytes = { version = "1", default-features = false }
 http = { version = "1", default-features = false, features = ["std"] }
 mime_guess = "2"
@@ -63,6 +68,7 @@ syn = { version = "2", features = ["full", "extra-traits"] }
 inertia-core = { path = "crates/inertia-core", version = "1.0.0-alpha.1" }
 inertia-axum = { path = "crates/inertia-axum", version = "1.0.0-alpha.1" }
 inertia-actix = { path = "crates/inertia-actix", version = "1.0.0-alpha.1" }
+inertia-rocket = { path = "crates/inertia-rocket", version = "1.0.0-alpha.1" }
 inertia-embed = { path = "crates/inertia-embed", version = "1.0.0-alpha.1" }
 inertia-macros = { path = "crates/inertia-macros", version = "1.0.0-alpha.1" }
 inertia-test = { path = "crates/inertia-test", version = "1.0.0-alpha.1" }

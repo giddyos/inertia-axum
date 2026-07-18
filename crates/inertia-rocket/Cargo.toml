@@ -1,0 +1,50 @@
+[package]
+name = "inertia-rocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Rocket adapter for the Inertia.js Rust runtime"
+keywords = ["inertia", "web", "framework", "rocket"]
+categories = ["web-programming"]
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes.workspace = true
+http.workspace = true
+inertia-core.workspace = true
+rocket.workspace = true
+
+[features]
+default = ["macros", "vite", "typegen"]
+askama = ["inertia-core/askama"]
+macros = ["inertia-core/macros"]
+vite = ["inertia-core/vite", "inertia-core/filesystem-assets"]
+cookies = ["inertia-core/cookies"]
+garde = ["inertia-core/garde"]
+validator = ["inertia-core/validator"]
+test-support = ["inertia-core/test-support"]
+typegen = ["inertia-core/typegen"]
+typegen-serde-json = ["inertia-core/typegen-serde-json"]
+typegen-uuid = ["inertia-core/typegen-uuid"]
+typegen-chrono = ["inertia-core/typegen-chrono"]
+typegen-jiff = ["inertia-core/typegen-jiff"]
+typegen-url = ["inertia-core/typegen-url"]
+typegen-bytes = ["inertia-core/typegen-bytes"]
+typegen-indexmap = ["inertia-core/typegen-indexmap"]
+typegen-semver = ["inertia-core/typegen-semver"]
+typegen-bigdecimal = ["inertia-core/typegen-bigdecimal"]
+typegen-smol-str = ["inertia-core/typegen-smol-str"]
+typegen-tokio = ["inertia-core/typegen-tokio"]
+ssr = ["inertia-core/ssr"]
+
+[dev-dependencies]
+inertia-embed.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

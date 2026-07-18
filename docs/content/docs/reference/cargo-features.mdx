@@ -3,8 +3,9 @@ title: Cargo features
 description: Default features, optional integrations, dependency implications, and supported feature combinations.
 ---
 
-`inertia-axum` and `inertia-actix` enable `macros`, `vite`, and `typegen` by
-default. Adding another feature does not disable those defaults.
+`inertia-axum`, `inertia-actix`, and `inertia-rocket` enable `macros`, `vite`,
+and `typegen` by default. Adding another feature does not disable those
+defaults.
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -17,9 +18,15 @@ The Actix adapter forwards the shared feature names:
 inertia-actix = { version = "=1.0.0-alpha.1", features = ["ssr"] }
 ```
 
-Actix does not expose the Axum-only `tower-sessions` integration or route-local
-SSR override extensions. All other shared runtime and type-generation features
-forward to `inertia-core`.
+Rocket uses the same feature names:
+
+```toml title="Cargo.toml"
+inertia-rocket = { version = "=1.0.0-alpha.1", features = ["ssr"] }
+```
+
+Actix and Rocket do not expose the Axum-only `tower-sessions` integration or
+route-local SSR override extensions. All other shared runtime and
+type-generation features forward to `inertia-core`.
 
 ## Feature table
 
